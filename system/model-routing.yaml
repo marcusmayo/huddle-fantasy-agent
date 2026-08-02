@@ -1,0 +1,24 @@
+tiers:
+  triage:
+    model_name: glm-5.2
+    openrouter_slug: openrouter/z-ai/glm-5.2
+    use_for: [pick-event reconciliation, quick status]
+  routine:
+    model_name: deepseek-v4-pro
+    openrouter_slug: openrouter/deepseek/deepseek-v4-pro
+    use_for: [decision-card explanations, weekly summaries]
+  complex:
+    model_name: kimi-k3
+    openrouter_slug: openrouter/moonshotai/kimi-k3
+    use_for: [multi-source reconciliation, scenario analysis]
+
+default_tier: routine
+
+vision:
+  model: claude-sonnet-4-6
+  api_url: https://api.anthropic.com/v1/messages
+
+rules:
+  - Draft rankings are deterministic; models may explain but never change the computed order.
+  - Huddle is recommendation-only and never submits a Yahoo draft pick.
+  - Log model and tier on every model-assisted explanation.

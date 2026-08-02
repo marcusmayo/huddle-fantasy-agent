@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Huddle Draft Room</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="shell topbar">
+    <div>
+      <p class="eyebrow">HUDDLE / DRAFT ROOM</p>
+      <h1>Make the next pick count.</h1>
+    </div>
+    <div class="top-actions">
+      <label class="league-picker">League
+        <select id="league-select" aria-label="Active league"></select>
+      </label>
+      <div class="status"><span class="pulse"></span><span id="sync-label">Manual mode</span></div>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section id="portfolio-summary" class="portfolio-summary">
+      <div class="section-head"><div><p class="eyebrow">PORTFOLIO</p><h2>Yahoo league fleet</h2></div><span id="fleet-mode" class="muted"></span></div>
+      <div id="league-grid" class="league-grid"></div>
+    </section>
+
+    <section id="setup" class="panel setup-grid">
+      <div>
+        <p class="eyebrow">NEW SESSION</p>
+        <h2 id="league-name">Loading league…</h2>
+        <p class="muted">Choose your confirmed Yahoo draft slot. Huddle recommends; you make every pick in Yahoo.</p>
+      </div>
+      <form id="session-form">
+        <label>Draft slot <input id="draft-slot" type="number" min="1" value="3" required></label>
+        <label>Sync source
+          <select id="source-mode">
+            <option value="manual">Manual now</option>
+            <option value="yahoo">Yahoo when OAuth is ready</option>
+            <option value="screenshot">Screenshot-assisted</option>
+          </select>
+        </label>
+        <button type="submit">Open draft room</button>
+      </form>
+    </section>
+
+    <section id="draft-room" class="hidden">
+      <div class="draft-meta">
+        <div><span class="eyebrow">CURRENT PICK</span><strong id="current-pick">—</strong></div>
+        <div><span class="eyebrow">YOUR NEXT TURN</span><strong id="next-turn">—</strong></div>
+        <div><span class="eyebrow">PLAYER DATA</span><strong id="coverage">—</strong></div>
+        <button id="new-session" class="ghost">New session</button>
+      </div>
+
+      <div id="evidence-warning" class="warning hidden"></div>
+
+      <section class="hero-card">
+        <div class="clock-state" id="clock-state">Watching the room</div>
+        <p class="eyebrow">PREFERRED PICK</p>
+        <div class="player-line">
+          <div>
+            <h2 id="preferred-name">Waiting for a player pool…</h2>
+            <p id="preferred-meta" class="muted"></p>
+          </div>
+          <div class="score-ring"><span id="preferred-score">—</span><small>score</small></div>
+        </div>
+        <ul id="preferred-why"></ul>
+        <p id="explanation" class="explanation"></p>
+      </section>
+
+      <div class="choice-grid">
+        <article class="choice safe"><p class="eyebrow">SAFER BUILD</p><h3 id="safe-name">—</h3><p id="safe-meta"></p></article>
+        <article class="choice upside"><p class="eyebrow">UPSIDE SWING</p><h3 id="upside-name">—</h3><p id="upside-meta"></p></article>
+      </div>
+
+      <div class="content-grid">
+        <section class="panel">
+          <div class="section-head"><div><p class="eyebrow">LIVE BOARD</p><h2>Best available</h2></div><span id="updated-at" class="muted"></span></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>#</th><th>Player</th><th>Pos</th><th>Score</th><th>Next-turn chance</th><th>Flag</th></tr></thead>
+              <tbody id="board-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <aside class="panel pick-panel">
+          <p class="eyebrow">RECORD A PICK</p>
+          <h2>Reconcile the room</h2>
+          <p class="muted">Until Yahoo OAuth is connected, record each selection here. The board refreshes immediately.</p>
+          <form id="pick-form">
+            <label>Drafted player <select id="player-select" required></select></label>
+            <label class="check"><input id="is-mine" type="checkbox"> This was my pick</label>
+            <button type="submit">Record completed pick</button>
+          </form>
+          <p id="pick-message" class="message"></p>
+          <div class="recent"><p class="eyebrow">RECENT PICKS</p><ol id="recent-picks"></ol></div>
+        </aside>
+      </div>
+    </section>
+  </main>
+  <script src="/app.js" defer></script>
+</body>
+</html>

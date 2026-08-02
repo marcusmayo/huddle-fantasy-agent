@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "defaultLeagueId": "example-primary",
+  "leagues": [
+    {
+      "id": "example-primary",
+      "enabled": true,
+      "config": "./yahoo-example.json",
+      "stateFile": "../../data/leagues/example-primary/state.json",
+      "yahooLeagueKey": null,
+      "yahooTeamKey": null,
+      "credentialRef": "yahoo-primary"
+    },
+    {
+      "id": "REPLACE_SECONDARY_LEAGUE_ID",
+      "enabled": false,
+      "config": "./yahoo-REPLACE_SECONDARY_LEAGUE_ID.json",
+      "stateFile": "../../data/leagues/REPLACE_SECONDARY_LEAGUE_ID/state.json",
+      "yahooLeagueKey": null,
+      "yahooTeamKey": null,
+      "credentialRef": "yahoo-primary"
+    }
+  ]
+}

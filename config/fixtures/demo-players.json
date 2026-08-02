@@ -1,0 +1,26 @@
+{
+  "source": "synthetic-demo-data",
+  "season": 2026,
+  "complete": true,
+  "players": [
+    {"id":"demo-qb-1","name":"Quarterback Alpha","position":"QB","team":"AFC","projectedPoints":385,"floor":330,"ceiling":430,"adp":3,"expertRank":3,"tier":1,"risk":0.12,"byeWeek":8},
+    {"id":"demo-qb-2","name":"Quarterback Bravo","position":"QB","team":"NFC","projectedPoints":372,"floor":315,"ceiling":425,"adp":7,"expertRank":5,"tier":1,"risk":0.18,"byeWeek":10},
+    {"id":"demo-qb-3","name":"Quarterback Charlie","position":"QB","team":"AFC","projectedPoints":348,"floor":305,"ceiling":390,"adp":15,"expertRank":14,"tier":2,"risk":0.14,"byeWeek":6},
+    {"id":"demo-qb-4","name":"Quarterback Delta","position":"QB","team":"NFC","projectedPoints":326,"floor":278,"ceiling":382,"adp":29,"expertRank":22,"tier":3,"risk":0.25,"byeWeek":11},
+    {"id":"demo-rb-1","name":"Running Back Alpha","position":"RB","team":"AFC","projectedPoints":315,"floor":255,"ceiling":370,"adp":1,"expertRank":1,"tier":1,"risk":0.17,"byeWeek":9},
+    {"id":"demo-rb-2","name":"Running Back Bravo","position":"RB","team":"NFC","projectedPoints":301,"floor":246,"ceiling":358,"adp":4,"expertRank":4,"tier":1,"risk":0.16,"byeWeek":7},
+    {"id":"demo-rb-3","name":"Running Back Charlie","position":"RB","team":"AFC","projectedPoints":277,"floor":215,"ceiling":340,"adp":10,"expertRank":8,"tier":2,"risk":0.23,"byeWeek":12},
+    {"id":"demo-rb-4","name":"Running Back Delta","position":"RB","team":"NFC","projectedPoints":253,"floor":195,"ceiling":329,"adp":23,"expertRank":16,"tier":3,"risk":0.28,"byeWeek":5},
+    {"id":"demo-rb-5","name":"Running Back Echo","position":"RB","team":"AFC","projectedPoints":229,"floor":181,"ceiling":304,"adp":38,"expertRank":25,"tier":4,"risk":0.31,"byeWeek":10},
+    {"id":"demo-wr-1","name":"Wide Receiver Alpha","position":"WR","team":"NFC","projectedPoints":322,"floor":270,"ceiling":375,"adp":2,"expertRank":2,"tier":1,"risk":0.10,"byeWeek":8},
+    {"id":"demo-wr-2","name":"Wide Receiver Bravo","position":"WR","team":"AFC","projectedPoints":296,"floor":238,"ceiling":355,"adp":6,"expertRank":6,"tier":1,"risk":0.15,"byeWeek":6},
+    {"id":"demo-wr-3","name":"Wide Receiver Charlie","position":"WR","team":"NFC","projectedPoints":281,"floor":225,"ceiling":350,"adp":12,"expertRank":10,"tier":2,"risk":0.19,"byeWeek":11},
+    {"id":"demo-wr-4","name":"Wide Receiver Delta","position":"WR","team":"AFC","projectedPoints":264,"floor":208,"ceiling":338,"adp":20,"expertRank":15,"tier":2,"risk":0.22,"byeWeek":9},
+    {"id":"demo-wr-5","name":"Wide Receiver Echo","position":"WR","team":"NFC","projectedPoints":246,"floor":184,"ceiling":332,"adp":35,"expertRank":21,"tier":3,"risk":0.29,"byeWeek":7},
+    {"id":"demo-wr-6","name":"Wide Receiver Foxtrot","position":"WR","team":"AFC","projectedPoints":227,"floor":176,"ceiling":305,"adp":48,"expertRank":32,"tier":4,"risk":0.27,"byeWeek":12},
+    {"id":"demo-te-1","name":"Tight End Alpha","position":"TE","team":"NFC","projectedPoints":268,"floor":218,"ceiling":316,"adp":8,"expertRank":7,"tier":1,"risk":0.13,"byeWeek":10},
+    {"id":"demo-te-2","name":"Tight End Bravo","position":"TE","team":"AFC","projectedPoints":225,"floor":172,"ceiling":294,"adp":26,"expertRank":20,"tier":2,"risk":0.24,"byeWeek":5},
+    {"id":"demo-k-1","name":"Kicker Alpha","position":"K","team":"NFC","projectedPoints":145,"floor":119,"ceiling":165,"adp":104,"expertRank":95,"tier":1,"risk":0.10,"byeWeek":8},
+    {"id":"demo-def-1","name":"Defense Alpha","position":"DEF","team":"AFC","projectedPoints":156,"floor":116,"ceiling":192,"adp":92,"expertRank":85,"tier":1,"risk":0.20,"byeWeek":6}
+  ]
+}

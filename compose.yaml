@@ -1,0 +1,16 @@
+services:
+  huddle:
+    build: .
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      FANTASYPROS_API_KEY: ${FANTASYPROS_API_KEY:-}
+      YAHOO_CLIENT_ID: ${YAHOO_CLIENT_ID:-}
+      YAHOO_CLIENT_SECRET: ${YAHOO_CLIENT_SECRET:-}
+      HUDDLE_SEASON: ${HUDDLE_SEASON:-2026}
+    volumes:
+      - huddle-state:/app/data
+    restart: unless-stopped
+
+volumes:
+  huddle-state:
