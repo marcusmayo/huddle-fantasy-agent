@@ -1,0 +1,13 @@
+node_modules/
+.env
+.env.*
+!.env.example
+data/*.json
+data/**/*.json
+data/secrets/
+!data/.gitkeep
+deploy/fleet/generated/
+deploy/fleet/*.local.json
+coverage/
+.DS_Store
+npm-debug.log*

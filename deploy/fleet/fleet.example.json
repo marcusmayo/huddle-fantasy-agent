@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "name": "huddle-fleet",
+  "image": "huddle-fantasy-agent:latest",
+  "aegis": {
+    "enabled": true,
+    "sourceDir": "../../../aegis-reference",
+    "localPort": 7070
+  },
+  "leagues": [
+    {
+      "slug": "primary",
+      "enabled": true,
+      "leagueId": "example-primary",
+      "config": "../../config/leagues/yahoo-example.json",
+      "envFile": "../../data/secrets/primary.env",
+      "localPort": 8787,
+      "publicHost": "huddle-primary.example.com",
+      "evidenceLeader": true,
+      "registerInAegis": false
+    },
+    {
+      "slug": "secondary",
+      "enabled": false,
+      "leagueId": "REPLACE_SECONDARY_LEAGUE_ID",
+      "config": "../../config/leagues/yahoo-REPLACE_SECONDARY_LEAGUE_ID.json",
+      "envFile": "../../data/secrets/secondary.env",
+      "localPort": 8788,
+      "publicHost": "huddle-secondary.example.com",
+      "evidenceLeader": false,
+      "registerInAegis": false
+    }
+  ]
+}
