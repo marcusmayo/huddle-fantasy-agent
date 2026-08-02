@@ -18,6 +18,8 @@
 ## During the draft
 
 - In manual mode, record a pick only after Yahoo shows it as completed.
+- In screenshot mode, select the evidence purpose before analysis. Only **Completed draft picks** may create pick events; **Available players**, **Team roster**, and **Waiver / free agents** save review-only visible-row evidence.
+- Review every extracted row. Correct or exclude uncertain matches, and remember that a player missing from a partial or paginated screenshot remains unknown.
 - Check **This was my pick** for selections made by the configured target team.
 - The large card is the balanced recommendation. The smaller cards expose safer and higher-upside roster constructions.
 - “Next-turn chance” estimates whether the player will remain available at the target team's next snake turn. It is not a guarantee.
@@ -42,6 +44,7 @@ Do not enable the poller until all items pass:
 | Yahoo sync is delayed | Switch to manual pick entry; do not double-enter observed picks. |
 | FantasyPros says incomplete | Treat the board as partial and verify candidates in Yahoo. |
 | Player cannot be resolved | Pause automated reconciliation and record the player manually after confirming identity. |
+| Screenshot type does not match the selected purpose | Change the purpose or choose the correct Yahoo page; do not repurpose a player list as draft-pick evidence. |
 | Recommendation contradicts roster rules | Stop using the board and compare `/api/league` with Yahoo settings. |
 | Browser refreshes | Reopen the saved session; state is persisted to `HUDDLE_STATE_FILE`. |
 

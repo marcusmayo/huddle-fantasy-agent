@@ -41,7 +41,7 @@ function replacementBaselines(players, league) {
 function countMineByPosition(picks, playerById) {
   const counts = {};
   for (const pick of picks.filter((item) => item.isMine)) {
-    const position = playerById.get(pick.playerId)?.position;
+    const position = playerById.get(pick.playerId)?.position || pick.position;
     if (position) counts[position] = (counts[position] || 0) + 1;
   }
   return counts;

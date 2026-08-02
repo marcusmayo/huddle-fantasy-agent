@@ -12,10 +12,19 @@
       "credentialRef": "yahoo-primary"
     },
     {
-      "id": "REPLACE_SECONDARY_LEAGUE_ID",
-      "enabled": false,
-      "config": "./yahoo-REPLACE_SECONDARY_LEAGUE_ID.json",
-      "stateFile": "../../data/leagues/REPLACE_SECONDARY_LEAGUE_ID/state.json",
+      "id": "example-half-ppr",
+      "enabled": true,
+      "config": "./yahoo-example-half-ppr.json",
+      "stateFile": "../../data/leagues/example-half-ppr/state.json",
+      "yahooLeagueKey": null,
+      "yahooTeamKey": null,
+      "credentialRef": "yahoo-primary"
+    },
+    {
+      "id": "example-standard",
+      "enabled": true,
+      "config": "./yahoo-example-standard.json",
+      "stateFile": "../../data/leagues/example-standard/state.json",
       "yahooLeagueKey": null,
       "yahooTeamKey": null,
       "credentialRef": "yahoo-primary"

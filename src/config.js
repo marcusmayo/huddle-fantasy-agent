@@ -112,6 +112,8 @@ function loadRuntimeConfig() {
     instanceName: process.env.HUDDLE_INSTANCE_NAME || 'huddle-local',
     auditFile: path.resolve(process.env.HUDDLE_AUDIT_FILE || './data/audit/fleet-commands.jsonl'),
     fantasyProsSyncEnabled: parseBoolean(process.env.HUDDLE_FANTASYPROS_SYNC_ENABLED, true),
+    fantasyProsAutoRefreshEnabled: parseBoolean(process.env.HUDDLE_FANTASYPROS_AUTO_REFRESH_ENABLED, true),
+    fantasyProsRefreshIntervalMs: Math.max(6, Number(process.env.HUDDLE_FANTASYPROS_REFRESH_INTERVAL_HOURS || 24)) * 60 * 60 * 1000,
     fantasyProsCacheDir: path.resolve(process.env.FANTASYPROS_CACHE_DIR || './data/fantasypros-cache'),
     playerSnapshotFile: snapshotPath,
     season: Number(process.env.HUDDLE_SEASON || new Date().getFullYear()),

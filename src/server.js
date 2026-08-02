@@ -9,7 +9,9 @@ const { attachReadOnlyCommandRelay } = require('./fleet/read-only-command-relay'
 const { colorContract, fleetManifest, fleetStatus } = require('./fleet/status');
 const { headshotPolicy, sanitizePlayerPool } = require('./media/player-headshots');
 const { FantasyProsClient } = require('./providers/fantasypros');
+const { OpenRouterVisionClient } = require('./providers/openrouter-vision');
 const { DraftService } = require('./services/draft-service');
+const { FantasyProsRefreshController } = require('./services/fantasypros-refresh');
 const { JsonStateStore } = require('./storage/json-state-store');
 
 const PUBLIC_DIR = path.resolve(__dirname, '../public');
@@ -30,13 +32,13 @@ function json(response, status, value) {
   response.end(body);
 }
 
-async function readBody(request) {
+async function readBody(request, maxBytes = 1_000_000) {
   const chunks = [];
   let size = 0;
   for await (const chunk of request) {
     size += chunk.length;
-    if (size > 1_000_000) {
-      const error = new Error('Request body exceeds 1 MB');
+    if (size > maxBytes) {
+      const error = new Error(`Request body exceeds ${Math.round(maxBytes / 1_000_000)} MB`);
       error.code = 'BODY_TOO_LARGE';
       throw error;
     }
@@ -92,7 +94,7 @@ function availablePlayers(runtime, service, sessionId) {
   };
 }
 
-async function handleDraftRoutes(request, response, service, parts) {
+async function handleDraftRoutes(request, response, service, parts, { visionClient, league } = {}) {
   if (parts[0] !== 'sessions') return false;
   if (parts.length === 1 && request.method === 'GET') {
     json(response, 200, { sessions: service.listSessions() });
@@ -108,8 +110,24 @@ async function handleDraftRoutes(request, response, service, parts) {
     json(response, 200, service.getSession(sessionId));
     return true;
   }
+  if (parts[2] === 'analyze-screenshot' && request.method === 'POST') {
+    const body = await readBody(request, 7_500_000);
+    const analysis = await visionClient.analyzeDraftScreenshot({
+      dataUrl: body.dataUrl,
+      purpose: body.purpose,
+      players: service.playerPool.players,
+      session: service.getSession(sessionId),
+      league: league || service.league
+    });
+    json(response, 200, analysis);
+    return true;
+  }
   if (parts[2] === 'picks' && request.method === 'POST') {
     json(response, 200, service.recordPick(sessionId, await readBody(request)));
+    return true;
+  }
+  if (parts[2] === 'evidence-reviews' && request.method === 'POST') {
+    json(response, 200, service.recordEvidenceReview(sessionId, await readBody(request)));
     return true;
   }
   if (parts[2] === 'import-picks' && request.method === 'POST') {
@@ -127,7 +145,25 @@ async function handleDraftRoutes(request, response, service, parts) {
   return false;
 }
 
-function createHandler({ runtime, draftServices, fantasyProsClient }) {
+async function syncFantasyPros(runtime, fantasyProsClient, input = {}) {
+  const rawPool = await fantasyProsClient.loadDraftPool({
+    season: input.season || runtime.season,
+    scoring: input.scoring || 'PPR',
+    force: Boolean(input.force)
+  });
+  const pool = sanitizePlayerPool(rawPool, runtime.playerHeadshots);
+  if (!pool.players.length) throw Object.assign(new Error('FantasyPros returned no usable projected players'), { code: 'EMPTY_PLAYER_POOL' });
+  Object.assign(runtime.playerPool, pool);
+  if (runtime.playerSnapshotFile) {
+    fs.mkdirSync(path.dirname(runtime.playerSnapshotFile), { recursive: true });
+    const tempPath = `${runtime.playerSnapshotFile}.tmp`;
+    fs.writeFileSync(tempPath, `${JSON.stringify(pool, null, 2)}\n`, { mode: 0o600 });
+    fs.renameSync(tempPath, runtime.playerSnapshotFile);
+  }
+  return { source: pool.source, complete: pool.complete, players: pool.players.length, fetchedAt: pool.fetchedAt };
+}
+
+function createHandler({ runtime, draftServices, fantasyProsClient, fantasyProsRefresh, visionClient }) {
   return async function handler(request, response) {
     const url = new URL(request.url, 'http://huddle.local');
     const segments = url.pathname.split('/').filter(Boolean).map(decodeURIComponent);
@@ -167,7 +203,7 @@ function createHandler({ runtime, draftServices, fantasyProsClient }) {
         if (tail[0] === 'players' && request.method === 'GET') {
           return json(response, 200, availablePlayers(runtime, service, url.searchParams.get('sessionId')));
         }
-        if (tail[0] === 'draft' && await handleDraftRoutes(request, response, service, tail.slice(1))) return;
+        if (tail[0] === 'draft' && await handleDraftRoutes(request, response, service, tail.slice(1), { visionClient, league: entry.config })) return;
       }
 
       // Backward-compatible single-league routes resolve to the configured default.
@@ -177,14 +213,23 @@ function createHandler({ runtime, draftServices, fantasyProsClient }) {
         return json(response, 200, availablePlayers(runtime, defaultContext.service, url.searchParams.get('sessionId')));
       }
       if (segments[0] === 'api' && segments[1] === 'draft'
-        && await handleDraftRoutes(request, response, defaultContext.service, segments.slice(2))) return;
+        && await handleDraftRoutes(request, response, defaultContext.service, segments.slice(2), { visionClient, league: defaultContext.entry.config })) return;
 
       if (request.method === 'GET' && url.pathname === '/api/provider-status') {
         return json(response, 200, {
           fantasyPros: {
-            configured: Boolean(process.env.FANTASYPROS_API_KEY),
+            configured: fantasyProsClient.configured,
             cacheTtlHours: 6,
-            syncEnabled: runtime.fantasyProsSyncEnabled
+            syncEnabled: runtime.fantasyProsSyncEnabled,
+            autoRefresh: fantasyProsRefresh.status()
+          },
+          vision: {
+            provider: 'openrouter',
+            configured: visionClient.configured,
+            model: visionClient.model,
+            operatorConfirmationRequired: true,
+            imagePersistence: false,
+            screenshotPurposes: ['draft_picks', 'available_players', 'team_roster', 'waiver_players']
           },
           yahoo: {
             credentialsConfigured: Boolean(process.env.YAHOO_CLIENT_ID && process.env.YAHOO_CLIENT_SECRET),
@@ -209,28 +254,17 @@ function createHandler({ runtime, draftServices, fantasyProsClient }) {
           return json(response, 403, { error: 'SYNC_DISABLED', message: 'This fleet member is not the FantasyPros evidence leader.' });
         }
         const body = await readBody(request);
-        const rawPool = await fantasyProsClient.loadDraftPool({
-          season: body.season || runtime.season,
-          scoring: body.scoring || 'PPR',
-          force: Boolean(body.force)
-        });
-        const pool = sanitizePlayerPool(rawPool, runtime.playerHeadshots);
-        if (!pool.players.length) throw Object.assign(new Error('FantasyPros returned no usable projected players'), { code: 'EMPTY_PLAYER_POOL' });
-        Object.assign(runtime.playerPool, pool);
-        if (runtime.playerSnapshotFile) {
-          fs.mkdirSync(path.dirname(runtime.playerSnapshotFile), { recursive: true });
-          const tempPath = `${runtime.playerSnapshotFile}.tmp`;
-          fs.writeFileSync(tempPath, `${JSON.stringify(pool, null, 2)}\n`, { mode: 0o600 });
-          fs.renameSync(tempPath, runtime.playerSnapshotFile);
-        }
-        return json(response, 200, { source: pool.source, complete: pool.complete, players: pool.players.length, fetchedAt: pool.fetchedAt });
+        return json(response, 200, await fantasyProsRefresh.trigger(body, 'manual'));
       }
       if (request.method === 'GET' && serveStatic(url.pathname, response)) return;
       return json(response, 404, { error: 'NOT_FOUND', message: 'Route not found' });
     } catch (error) {
       const status = ['SESSION_NOT_FOUND', 'LEAGUE_NOT_FOUND'].includes(error.code) ? 404
         : error.code === 'FANTASYPROS_REQUEST_FAILED' ? 502
-          : error.code === 'FANTASYPROS_KEY_MISSING' ? 503
+          : ['FANTASYPROS_KEY_MISSING', 'OPENROUTER_KEY_MISSING'].includes(error.code) ? 503
+            : ['OPENROUTER_REQUEST_FAILED', 'VISION_RESPONSE_INVALID'].includes(error.code) ? 502
+              : error.code === 'BODY_TOO_LARGE' ? 413
+                : error.code === 'FANTASYPROS_BUDGET_EXHAUSTED' ? 429
             : 400;
       return json(response, status, { error: error.code || 'REQUEST_FAILED', message: error.message, details: error.details });
     }
@@ -250,6 +284,8 @@ function normalizeRuntime(runtime) {
   runtime.instanceName ||= 'huddle-local';
   runtime.auditFile ||= path.resolve('./data/audit/fleet-commands.jsonl');
   runtime.fantasyProsSyncEnabled ??= true;
+  runtime.fantasyProsAutoRefreshEnabled ??= false;
+  runtime.fantasyProsRefreshIntervalMs ||= 24 * 60 * 60 * 1000;
   runtime.fantasyProsCacheDir ||= path.resolve('./data/fantasypros-cache');
   runtime.playerHeadshots = headshotPolicy(runtime.playerHeadshots);
   runtime.playerPool = sanitizePlayerPool(runtime.playerPool, runtime.playerHeadshots);
@@ -264,19 +300,30 @@ function buildApp(inputRuntime = loadRuntimeConfig(), options = {}) {
     new DraftService({ league: entry.config, playerPool: runtime.playerPool, store: storeFactory(entry) })
   ]));
   const fantasyProsClient = options.fantasyProsClient || new FantasyProsClient({ cacheDir: runtime.fantasyProsCacheDir });
-  const server = http.createServer(createHandler({ runtime, draftServices, fantasyProsClient }));
+  const visionClient = options.visionClient || new OpenRouterVisionClient();
+  const fantasyProsRefresh = new FantasyProsRefreshController({
+    enabled: runtime.fantasyProsSyncEnabled && runtime.fantasyProsAutoRefreshEnabled,
+    configured: fantasyProsClient.configured,
+    intervalMs: runtime.fantasyProsRefreshIntervalMs,
+    sync: (input) => syncFantasyPros(runtime, fantasyProsClient, input),
+    quotaStatus: () => fantasyProsClient.quotaStatus()
+  });
+  const server = http.createServer(createHandler({ runtime, draftServices, fantasyProsClient, fantasyProsRefresh, visionClient }));
   const commandRelay = attachReadOnlyCommandRelay(server, { runtime, draftServices });
   return {
     server,
     runtime,
     draftServices,
     draftService: draftServices.get(runtime.defaultLeagueId),
-    commandRelay
+    commandRelay,
+    fantasyProsRefresh,
+    visionClient
   };
 }
 
 if (require.main === module) {
   const app = buildApp();
+  app.fantasyProsRefresh.start();
   app.server.listen(app.runtime.port, app.runtime.host, () => {
     console.log(`Huddle listening at http://${app.runtime.host}:${app.runtime.port}`);
     console.log(`Leagues: ${app.runtime.leagues.map((entry) => entry.id).join(', ')}`);
@@ -284,4 +331,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { buildApp, createHandler, handleDraftRoutes, normalizeRuntime, readBody };
+module.exports = { buildApp, createHandler, handleDraftRoutes, normalizeRuntime, readBody, syncFantasyPros };

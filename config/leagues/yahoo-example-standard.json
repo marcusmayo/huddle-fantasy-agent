@@ -1,0 +1,90 @@
+{
+  "id": "example-standard",
+  "platform": "yahoo",
+  "name": "HUDDLE 12-TEAM STANDARD",
+  "targetTeam": "GRIDIRON OPERATORS",
+  "teamCount": 12,
+  "scoringType": "head-to-head",
+  "draft": {
+    "type": "live-standard-snake",
+    "secondsPerPick": 90,
+    "draftSlot": null,
+    "autoRenew": true
+  },
+  "roster": {
+    "QB": 1,
+    "WR": 3,
+    "RB": 2,
+    "TE": 1,
+    "W/T": 1,
+    "W/R": 0,
+    "K": 1,
+    "DEF": 1,
+    "BN": 7,
+    "IR": 2
+  },
+  "scoring": {
+    "fractionalPoints": false,
+    "negativePoints": true,
+    "offense": {
+      "passingYardsPerPoint": 25,
+      "passingTouchdown": 4,
+      "interception": -2,
+      "rushingYardsPerPoint": 10,
+      "rushingTouchdown": 6,
+      "reception": 0,
+      "receivingYardsPerPoint": 10,
+      "receivingTouchdown": 6,
+      "returnTouchdown": 6,
+      "twoPointConversion": 2,
+      "fumbleLost": -2,
+      "offensiveFumbleReturnTouchdown": 6
+    },
+    "kicking": {
+      "fieldGoal0To19": 3,
+      "fieldGoal20To29": 3,
+      "fieldGoal30To39": 3,
+      "fieldGoal40To49": 4,
+      "fieldGoal50Plus": 5,
+      "pointAfterAttemptMade": 1
+    },
+    "defense": {
+      "sack": 1,
+      "interception": 2,
+      "fumbleRecovery": 2,
+      "touchdown": 6,
+      "safety": 2,
+      "blockedKick": 2,
+      "kickoffOrPuntReturnTouchdown": 6,
+      "pointsAllowed": {
+        "0": 10,
+        "1-6": 7,
+        "7-13": 4,
+        "14-20": 1,
+        "21-27": 0,
+        "28-34": -1,
+        "35+": -4
+      },
+      "extraPointReturned": 2
+    }
+  },
+  "waivers": {
+    "type": "continual-rolling-list",
+    "timeDays": 2,
+    "weeklyWindow": "game-time-through-tuesday"
+  },
+  "playoffs": {
+    "teams": 6,
+    "weeks": [15, 16, 17],
+    "tiebreaker": "higher-seed",
+    "reseed": true
+  },
+  "provenance": {
+    "source": "synthetic-demo-standard",
+    "apiVerificationRequired": [
+      "draft.draftSlot",
+      "keeperSettings",
+      "playerIdentifiers"
+    ]
+  }
+}
