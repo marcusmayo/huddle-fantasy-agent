@@ -103,14 +103,29 @@
               <img id="screenshot-image" alt="Selected Yahoo draft screenshot preview">
               <p id="screenshot-meta" class="muted"></p>
             </div>
-            <p id="screenshot-message" class="field-help">The image stays in this browser. Review it, click each visible drafted player, and confirm the pick. Automatic OCR is not enabled.</p>
+            <button id="analyze-screenshot" type="button" class="vision-button" disabled>Analyze screenshot</button>
+            <p id="screenshot-message" class="field-help">Choose a draft-log screenshot. Huddle will not send it anywhere until you click Analyze screenshot.</p>
+            <div id="screenshot-results" class="screenshot-results hidden">
+              <p id="screenshot-summary"></p>
+              <div id="screenshot-warnings" class="vision-warnings"></div>
+              <div id="screenshot-candidates"></div>
+              <button id="apply-screenshot-picks" type="button">Apply confirmed picks</button>
+            </div>
           </section>
           <form id="pick-form">
             <label for="player-search">Drafted player
               <input id="player-search" type="search" list="player-options" placeholder="Search name, position, or team" autocomplete="off" required>
               <datalist id="player-options"></datalist>
-              <small class="field-help">Type to search, or click any recommendation or board row.</small>
+              <small class="field-help">Searches every loaded undrafted player, not only the 12-player board.</small>
             </label>
+            <button id="manual-player-toggle" type="button" class="inline-action">Player not found?</button>
+            <div id="manual-player-fields" class="manual-player-fields hidden">
+              <label>Position
+                <select id="manual-player-position"><option>QB</option><option>RB</option><option>WR</option><option>TE</option><option>K</option><option>DEF</option></select>
+              </label>
+              <label>NFL team <input id="manual-player-team" type="text" maxlength="8" placeholder="FA or team abbreviation"></label>
+              <small class="field-help">The typed name above will be recorded as an unresolved manual player.</small>
+            </div>
             <label class="check"><input id="is-mine" type="checkbox"> This was my pick</label>
             <button type="submit">Record completed pick</button>
           </form>

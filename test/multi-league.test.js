@@ -160,3 +160,47 @@ test('Aegis WebSocket relay accepts allowlisted read commands only', async () =>
     await close(app);
   }
 });
+
+test('screenshot analysis is league-scoped and returns review candidates only', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'huddle-vision-api-'));
+  let received;
+  const visionClient = {
+    configured: true,
+    model: 'anthropic/claude-sonnet-4.6',
+    async analyzeDraftScreenshot(input) {
+      received = input;
+      return {
+        provider: 'openrouter',
+        model: this.model,
+        screenshotType: 'draft_log',
+        usableForPicks: true,
+        candidates: [{ candidateId: 'vision:1:1', overallPick: 1, playerId: 'demo-rb-1', playerName: 'Running Back Alpha', actionable: true }],
+        imagePersisted: false
+      };
+    }
+  };
+  const app = buildApp(runtime(tempDir), { storeFactory: () => new MemoryStateStore(), visionClient });
+  const base = await listen(app);
+  try {
+    const created = await fetchJson(`${base}/api/leagues/example-primary/draft/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ draftSlot: 3, sourceMode: 'screenshot' })
+    });
+    const analyzed = await fetchJson(`${base}/api/leagues/example-primary/draft/sessions/${created.body.id}/analyze-screenshot`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ dataUrl: 'data:image/png;base64,eA==' })
+    });
+    assert.equal(analyzed.status, 200);
+    assert.equal(analyzed.body.provider, 'openrouter');
+    assert.equal(analyzed.body.imagePersisted, false);
+    assert.equal(received.league.id, 'example-primary');
+    assert.equal(received.session.sourceMode, 'screenshot');
+
+    const stillEmpty = await fetchJson(`${base}/api/leagues/example-primary/draft/sessions/${created.body.id}`);
+    assert.equal(stillEmpty.body.picks.length, 0);
+  } finally {
+    await close(app);
+  }
+});

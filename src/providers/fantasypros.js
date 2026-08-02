@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DST'];
+const REQUESTS_PER_FULL_SYNC = POSITIONS.length * 2;
 const IMAGE_FIELD_RE = /(avatar|headshot|image|photo|picture|portrait)/i;
 
 function stripPlayerImageFields(value) {
@@ -93,17 +94,86 @@ class FantasyProsClient {
     baseUrl = process.env.FANTASYPROS_BASE_URL || 'https://api.fantasypros.com/public/v2/json',
     cacheDir = './data/fantasypros-cache',
     cacheTtlMs = 6 * 60 * 60 * 1000,
+    dailyRequestBudget = Number(process.env.FANTASYPROS_DAILY_REQUEST_BUDGET || 24),
     fetchImpl = global.fetch
   } = {}) {
     this.apiKey = apiKey;
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.cacheDir = path.resolve(cacheDir);
     this.cacheTtlMs = cacheTtlMs;
+    this.dailyRequestBudget = Math.max(REQUESTS_PER_FULL_SYNC, Number(dailyRequestBudget) || 24);
     this.fetch = fetchImpl;
+  }
+
+  get configured() {
+    return Boolean(this.apiKey);
+  }
+
+  usagePath(date = new Date()) {
+    const day = date.toISOString().slice(0, 10);
+    return path.join(this.cacheDir, `.request-usage-${day}.json`);
+  }
+
+  quotaStatus(date = new Date()) {
+    const usagePath = this.usagePath(date);
+    let used = 0;
+    if (fs.existsSync(usagePath)) {
+      try { used = Number(JSON.parse(fs.readFileSync(usagePath, 'utf8')).used) || 0; } catch { used = 0; }
+    }
+    return {
+      budget: this.dailyRequestBudget,
+      estimatedUsed: used,
+      estimatedRemaining: Math.max(0, this.dailyRequestBudget - used),
+      fullSyncCost: REQUESTS_PER_FULL_SYNC,
+      resetsOn: date.toISOString().slice(0, 10),
+      scope: 'local-estimate'
+    };
+  }
+
+  reserveRequest() {
+    const quota = this.quotaStatus();
+    if (quota.estimatedRemaining < 1) {
+      const error = new Error(`FantasyPros local daily budget exhausted (${quota.estimatedUsed}/${quota.budget})`);
+      error.code = 'FANTASYPROS_BUDGET_EXHAUSTED';
+      error.details = quota;
+      throw error;
+    }
+    const usagePath = this.usagePath();
+    fs.mkdirSync(this.cacheDir, { recursive: true });
+    fs.writeFileSync(usagePath, `${JSON.stringify({ used: quota.estimatedUsed + 1, updatedAt: new Date().toISOString() })}\n`, { mode: 0o600 });
+  }
+
+  requestDescriptor(endpoint, params) {
+    const query = new URLSearchParams(params);
+    const url = `${this.baseUrl}${endpoint}?${query}`;
+    const cacheKey = Buffer.from(url).toString('base64url');
+    return { url, cachePath: path.join(this.cacheDir, `${cacheKey}.json`) };
+  }
+
+  freshCache(cachePath) {
+    if (!fs.existsSync(cachePath)) return null;
+    try {
+      const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+      return Date.now() - Date.parse(cached.cachedAt) < this.cacheTtlMs ? cached : null;
+    } catch {
+      return null;
+    }
   }
 
   async loadDraftPool({ season, scoring = 'PPR', force = false } = {}) {
     if (!season) throw new Error('season is required');
+    const plan = POSITIONS.flatMap((position) => [
+      this.requestDescriptor(`/nfl/${season}/consensus-rankings`, { position, scoring, week: 0 }),
+      this.requestDescriptor(`/nfl/${season}/projections`, { position, week: 0 })
+    ]);
+    const requiredRequests = force ? plan.length : plan.filter((item) => !this.freshCache(item.cachePath)).length;
+    const quota = this.quotaStatus();
+    if (requiredRequests > quota.estimatedRemaining) {
+      const error = new Error(`FantasyPros refresh needs ${requiredRequests} requests but only ${quota.estimatedRemaining} remain in Huddle's daily budget`);
+      error.code = 'FANTASYPROS_BUDGET_EXHAUSTED';
+      error.details = { ...quota, requiredRequests };
+      throw error;
+    }
     const batches = await Promise.all(POSITIONS.map(async (position) => {
       const [rankings, projections] = await Promise.all([
         this.request(`/nfl/${season}/consensus-rankings`, { position, scoring, week: 0 }, { force }),
@@ -150,19 +220,17 @@ class FantasyProsClient {
       error.code = 'FANTASYPROS_KEY_MISSING';
       throw error;
     }
-    const query = new URLSearchParams(params);
-    const url = `${this.baseUrl}${endpoint}?${query}`;
-    const cacheKey = Buffer.from(url).toString('base64url');
-    const cachePath = path.join(this.cacheDir, `${cacheKey}.json`);
-    if (!force && fs.existsSync(cachePath)) {
-      const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
-      if (Date.now() - Date.parse(cached.cachedAt) < this.cacheTtlMs) {
+    const { url, cachePath } = this.requestDescriptor(endpoint, params);
+    if (!force) {
+      const cached = this.freshCache(cachePath);
+      if (cached) {
         const safeCached = { ...cached, payload: stripPlayerImageFields(cached.payload), cacheHit: true };
         fs.writeFileSync(cachePath, `${JSON.stringify(safeCached)}\n`, { mode: 0o600 });
         return safeCached;
       }
     }
 
+    this.reserveRequest();
     const response = await this.fetch(url, { headers: { 'x-api-key': this.apiKey, accept: 'application/json' } });
     if (!response.ok) {
       const error = new Error(`FantasyPros request failed (${response.status})`);
@@ -187,6 +255,7 @@ class FantasyProsClient {
 module.exports = {
   FantasyProsClient,
   POSITIONS,
+  REQUESTS_PER_FULL_SYNC,
   isTruncated,
   normalizeRankedPlayer,
   projectionPlayerId,

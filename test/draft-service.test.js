@@ -46,3 +46,17 @@ test('recommendation discloses data coverage and read-only execution', () => {
 test('invalid draft slot fails closed', () => {
   assert.throws(() => service().createSession({ draftSlot: 7 }), /between 1 and 6/);
 });
+
+test('an unlisted player can be recorded with operator-supplied identity', () => {
+  const drafts = service();
+  const session = drafts.createSession({ draftSlot: 1 });
+  const result = drafts.recordPick(session.id, {
+    manualPlayer: { name: 'Late Call-Up', position: 'WR', team: 'FA' },
+    isMine: true,
+    source: 'manual-unresolved'
+  });
+  assert.equal(result.applied, true);
+  assert.match(result.session.picks[0].playerId, /^manual:/);
+  assert.equal(result.session.picks[0].position, 'WR');
+  assert.equal(result.session.availableCount, playerPool.players.length);
+});

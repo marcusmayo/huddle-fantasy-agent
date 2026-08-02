@@ -45,6 +45,7 @@ test('FantasyPros documented NFL projection shape produces a complete player poo
   const client = new FantasyProsClient({
     apiKey: 'test-key',
     cacheDir: fs.mkdtempSync(path.join(os.tmpdir(), 'huddle-fantasypros-')),
+    dailyRequestBudget: 24,
     fetchImpl: async (value) => {
       const url = new URL(value);
       requested.push(url);
@@ -65,6 +66,37 @@ test('FantasyPros documented NFL projection shape produces a complete player poo
   assert.equal(projectionRequests.length, 6);
   assert.equal(projectionRequests.every((url) => url.searchParams.get('week') === '0'), true);
   assert.equal(projectionRequests.every((url) => !url.searchParams.has('scoring')), true);
+  assert.deepEqual(client.quotaStatus(), {
+    budget: 24,
+    estimatedUsed: 12,
+    estimatedRemaining: 12,
+    fullSyncCost: 12,
+    resetsOn: new Date().toISOString().slice(0, 10),
+    scope: 'local-estimate'
+  });
+});
+
+test('FantasyPros refresh fails before network calls when the local daily budget is exhausted', async () => {
+  const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'huddle-fantasypros-budget-'));
+  let requests = 0;
+  const client = new FantasyProsClient({
+    apiKey: 'test-key',
+    cacheDir,
+    dailyRequestBudget: 12,
+    fetchImpl: async (value) => {
+      requests += 1;
+      const url = new URL(value);
+      const position = url.searchParams.get('position');
+      const payload = url.pathname.endsWith('/projections')
+        ? { players: [{ fpid: `${position}-1`, name: `${position} Test`, position_id: position, stats: [{ points: 100 }] }] }
+        : { players: [{ player_id: `${position}-1`, player_name: `${position} Test`, player_position_id: position, rank_ecr: 1 }] };
+      return { ok: true, json: async () => payload, headers: new Headers() };
+    }
+  });
+  await client.loadDraftPool({ season: 2026, scoring: 'STD', force: true });
+  assert.equal(requests, 12);
+  await assert.rejects(() => client.loadDraftPool({ season: 2026, scoring: 'STD', force: true }), /daily budget/);
+  assert.equal(requests, 12);
 });
 
 test('player headshots are disabled by default and require an explicit licensed host', () => {

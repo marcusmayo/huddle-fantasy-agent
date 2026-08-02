@@ -3,6 +3,23 @@
 const crypto = require('node:crypto');
 const { buildRecommendationCard, STYLES } = require('../domain/draft-board');
 
+const POSITIONS = new Set(['QB', 'RB', 'WR', 'TE', 'K', 'DEF']);
+
+function manualPlayer(input) {
+  const value = input?.manualPlayer;
+  if (!value) return null;
+  const name = String(value.name || '').trim();
+  const position = String(value.position || '').trim().toUpperCase().replace('DST', 'DEF');
+  const team = String(value.team || 'FA').trim().toUpperCase().slice(0, 8) || 'FA';
+  if (name.length < 2 || name.length > 80 || !POSITIONS.has(position)) {
+    const error = new Error('Manual player requires a name and valid QB, RB, WR, TE, K, or DEF position');
+    error.code = 'INVALID_MANUAL_PLAYER';
+    throw error;
+  }
+  const fingerprint = crypto.createHash('sha256').update(`${name.toLowerCase()}|${position}|${team}`).digest('hex').slice(0, 16);
+  return { id: `manual:${fingerprint}`, name, position, team };
+}
+
 class DraftService {
   constructor({ league, playerPool, store }) {
     this.league = league;
@@ -59,22 +76,24 @@ class DraftService {
   recordPick(id, input) {
     const session = this.state.sessions[id];
     if (!session) return this.getSession(id);
-    if (!input?.playerId) {
-      const error = new Error('playerId is required');
+    if (!input?.playerId && !input?.manualPlayer) {
+      const error = new Error('playerId or manualPlayer is required');
       error.code = 'INVALID_PICK';
       throw error;
     }
-    const player = this.playerPool.players.find((candidate) => candidate.id === input.playerId);
+    const fallbackPlayer = manualPlayer(input);
+    const player = this.playerPool.players.find((candidate) => candidate.id === input.playerId) || fallbackPlayer;
     if (!player) {
       const error = new Error(`Unknown player: ${input.playerId}`);
       error.code = 'UNKNOWN_PLAYER';
       throw error;
     }
-    const eventId = input.eventId || `manual:${session.picks.length + 1}:${input.playerId}`;
+    const playerId = player.id;
+    const eventId = input.eventId || `manual:${session.picks.length + 1}:${playerId}`;
     if (session.appliedEventIds.includes(eventId)) {
       return { applied: false, reason: 'duplicate-event', session: this.decorate(session) };
     }
-    if (session.picks.some((pick) => pick.playerId === input.playerId)) {
+    if (session.picks.some((pick) => pick.playerId === playerId || pick.playerName.toLowerCase() === player.name.toLowerCase())) {
       return { applied: false, reason: 'player-already-drafted', session: this.decorate(session) };
     }
     const expectedOverall = session.picks.length + 1;
@@ -86,7 +105,7 @@ class DraftService {
     session.picks.push({
       eventId,
       overallPick: expectedOverall,
-      playerId: input.playerId,
+      playerId,
       playerName: player.name,
       position: player.position,
       teamId: input.teamId || null,
@@ -140,10 +159,12 @@ class DraftService {
   }
 
   decorate(session) {
+    const poolIds = new Set(this.playerPool.players.map((player) => player.id));
+    const draftedFromPool = session.picks.filter((pick) => poolIds.has(pick.playerId)).length;
     return {
       ...structuredClone(session),
       currentOverall: session.picks.length + 1,
-      availableCount: this.playerPool.players.length - session.picks.length
+      availableCount: this.playerPool.players.length - draftedFromPool
     };
   }
 
@@ -152,4 +173,4 @@ class DraftService {
   }
 }
 
-module.exports = { DraftService };
+module.exports = { DraftService, manualPlayer };

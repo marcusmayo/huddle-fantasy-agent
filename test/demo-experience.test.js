@@ -24,9 +24,14 @@ test('draft room includes fast search, clickable board rows, and a bounded board
   assert.match(html, /id="player-search"[^>]+list="player-options"/);
   assert.match(html, /class="table-wrap board-scroll"/);
   assert.match(html, /id="screenshot-file"[^>]+type="file"/);
+  assert.match(html, /id="analyze-screenshot"/);
+  assert.match(html, /id="screenshot-candidates"/);
+  assert.match(html, /id="manual-player-toggle"/);
   assert.match(html, /What built this draft board\?/);
   assert.match(client, /class="board-player" data-player-id=/);
   assert.match(client, /function reviewScreenshot\(/);
+  assert.match(client, /async function analyzeScreenshot\(/);
+  assert.match(client, /async function applyScreenshotPicks\(/);
   assert.match(client, /makePlayerSelectable\(document\.querySelector\('\.hero-card'\)/);
   assert.match(styles, /\.board-scroll \{[^}]*overflow-y: auto/);
   assert.match(styles, /\.board-scroll thead th \{[^}]*position: sticky/);

@@ -15,8 +15,8 @@ tiers:
 default_tier: routine
 
 vision:
-  model: claude-sonnet-4-6
-  api_url: https://api.anthropic.com/v1/messages
+  model: openrouter/anthropic/claude-sonnet-4.6
+  api_url: https://openrouter.ai/api/v1/chat/completions
 
 rules:
   - Draft rankings are deterministic; models may explain but never change the computed order.

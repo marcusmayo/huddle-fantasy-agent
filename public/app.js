@@ -11,6 +11,10 @@ const state = {
   selectedPlayerId: null,
   searchDirty: false,
   screenshotObjectUrl: null,
+  screenshotFile: null,
+  screenshotCandidates: [],
+  providerStatus: null,
+  providerStatusAt: 0,
   timer: null
 };
 const $ = (selector) => document.querySelector(selector);
@@ -176,8 +180,15 @@ function showDraftRoom() {
   const screenshotMode = state.session.sourceMode === 'screenshot';
   $('#screenshot-assistant').classList.toggle('hidden', !screenshotMode);
   $('#reconcile-help').textContent = screenshotMode
-    ? 'Select a screenshot below, review its draft results, then click and confirm each visible player. The board refreshes after every confirmed pick.'
+    ? 'Analyze a Yahoo draft-log screenshot, review every extracted candidate, then apply only the confirmed picks. Recommendations refresh from confirmed draft state.'
     : 'Until Yahoo OAuth is connected, record each selection here. The board refreshes immediately.';
+  if (screenshotMode) {
+    const configured = Boolean(state.providerStatus?.vision?.configured);
+    $('#analyze-screenshot').disabled = !configured || !state.screenshotFile;
+    $('#screenshot-message').textContent = configured
+      ? 'Choose a Yahoo draft-log screenshot. It is sent transiently to OpenRouter only after you click Analyze screenshot.'
+      : 'Preview only: set OPENROUTER_API_KEY and restart Huddle to enable screenshot analysis.';
+  }
 }
 
 function renderChoice(prefix, choice) {
@@ -240,6 +251,9 @@ function renderBoardEvidence(card) {
     .map(([factor, weight]) => `${factor} ${Math.round(weight * 100)}%`)
     .join(' · ');
   const sourceTime = evidence.fetchedAt ? new Date(evidence.fetchedAt).toLocaleString() : 'Bundled fixture';
+  const refresh = state.providerStatus?.fantasyPros?.autoRefresh;
+  const quota = refresh?.quota;
+  const vision = state.providerStatus?.vision;
   const rows = [
     ['Player evidence', `${evidence.source || 'unknown'} · ${evidence.season || 'season unknown'} · ${evidence.complete ? 'complete' : 'incomplete'}`],
     ['Evidence timestamp', sourceTime],
@@ -249,6 +263,8 @@ function renderBoardEvidence(card) {
     ['Player inputs', (evidence.ranking?.playerInputs || []).join(' · ')],
     ['Factor weights', weights || 'Not available'],
     ['Computed logic', (evidence.ranking?.computedFactors || []).join(' · ')],
+    ['FantasyPros refresh', refresh && quota ? `${refresh.enabled ? `automatic every ${refresh.intervalHours}h` : 'manual/cache only'} · ${quota.estimatedUsed}/${quota.budget} local daily request budget used` : 'Status unavailable'],
+    ['Screenshot vision', vision ? `${vision.configured ? 'enabled' : 'not configured'} · ${vision.provider} · ${vision.model} · confirmation required` : 'Status unavailable'],
     ['Draft state', `Pick ${card.currentOverall} · slot ${card.draftSlot || '—'} · next turn ${card.nextUserPick || '—'} · ${state.session.picks.length} confirmed picks`],
     ['Execution', 'Recommendation only; Huddle cannot submit a Yahoo pick']
   ];
@@ -269,11 +285,102 @@ function reviewScreenshot(event) {
     return;
   }
   if (state.screenshotObjectUrl) URL.revokeObjectURL(state.screenshotObjectUrl);
+  state.screenshotFile = file;
+  state.screenshotCandidates = [];
   state.screenshotObjectUrl = URL.createObjectURL(file);
   $('#screenshot-image').src = state.screenshotObjectUrl;
   $('#screenshot-meta').textContent = `${file.name} · ${(file.size / 1024).toFixed(0)} KB`;
   $('#screenshot-preview').classList.remove('hidden');
-  $('#screenshot-message').textContent = 'Screenshot ready for review. Click each visible drafted player and confirm it below; no pick is applied automatically.';
+  $('#screenshot-results').classList.add('hidden');
+  const configured = Boolean(state.providerStatus?.vision?.configured);
+  $('#analyze-screenshot').disabled = !configured;
+  $('#screenshot-message').textContent = configured
+    ? 'Preview ready. Click Analyze screenshot to send it transiently through OpenRouter; no extracted pick is applied automatically.'
+    : 'Preview ready, but vision is disabled until OPENROUTER_API_KEY is configured.';
+}
+
+function fileDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('The screenshot could not be read'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function candidatePlayerValue(candidate) {
+  const player = state.availablePlayers.find((item) => item.id === candidate.playerId);
+  return player ? playerLabel(player) : candidate.playerName;
+}
+
+function renderScreenshotAnalysis(analysis) {
+  state.screenshotCandidates = analysis.candidates || [];
+  $('#screenshot-summary').textContent = `${analysis.screenshotType.replaceAll('_', ' ')} · ${analysis.summary || 'Analysis complete.'}`;
+  $('#screenshot-warnings').innerHTML = (analysis.warnings || []).map((warning) => `<p>${escapeHtml(warning)}</p>`).join('');
+  $('#screenshot-candidates').innerHTML = state.screenshotCandidates.map((candidate, index) => `
+    <article class="vision-candidate" data-candidate-index="${index}">
+      <header><span>Pick ${candidate.overallPick || 'unknown'}</span><span>${Math.round(candidate.confidence * 100)}% · ${escapeHtml(candidate.status)}</span></header>
+      <input type="search" list="player-options" data-candidate-player value="${escapeHtml(candidatePlayerValue(candidate))}" aria-label="Player for extracted pick ${candidate.overallPick || index + 1}">
+      <label class="check"><input type="checkbox" data-candidate-include ${candidate.actionable ? 'checked' : ''}> Include this pick</label>
+      <label class="check"><input type="checkbox" data-candidate-mine ${candidate.isMine ? 'checked' : ''}> This was my pick</label>
+    </article>`).join('');
+  $('#apply-screenshot-picks').classList.toggle('hidden', !state.screenshotCandidates.length);
+  $('#screenshot-results').classList.remove('hidden');
+}
+
+async function analyzeScreenshot() {
+  if (!state.screenshotFile) return;
+  const button = $('#analyze-screenshot');
+  button.disabled = true;
+  $('#screenshot-message').textContent = 'OpenRouter is analyzing the screenshot. No pick will be applied automatically.';
+  try {
+    const analysis = await api(scoped(`/draft/sessions/${state.session.id}/analyze-screenshot`), {
+      method: 'POST',
+      body: JSON.stringify({ dataUrl: await fileDataUrl(state.screenshotFile) })
+    });
+    renderScreenshotAnalysis(analysis);
+    $('#screenshot-message').textContent = analysis.usableForPicks
+      ? 'Review the extracted candidates below. Correct names and ownership before applying.'
+      : 'No picks were extracted. Use a Yahoo Draft Results or Draft Log screenshot showing completed selections.';
+  } catch (error) {
+    $('#screenshot-message').textContent = error.message;
+  } finally {
+    button.disabled = !state.providerStatus?.vision?.configured;
+  }
+}
+
+async function applyScreenshotPicks() {
+  const rows = [...document.querySelectorAll('.vision-candidate')];
+  const button = $('#apply-screenshot-picks');
+  button.disabled = true;
+  let applied = 0;
+  try {
+    for (const row of rows) {
+      if (!row.querySelector('[data-candidate-include]').checked) continue;
+      const candidate = state.screenshotCandidates[Number(row.dataset.candidateIndex)];
+      const player = findPlayer(row.querySelector('[data-candidate-player]').value);
+      if (!player) throw new Error(`Match ${candidate.playerName} to a loaded player before applying the screenshot.`);
+      const result = await api(scoped(`/draft/sessions/${state.session.id}/picks`), {
+        method: 'POST',
+        body: JSON.stringify({
+          eventId: candidate.candidateId,
+          overallPick: candidate.overallPick,
+          playerId: player.id,
+          isMine: row.querySelector('[data-candidate-mine]').checked,
+          source: 'openrouter-screenshot'
+        })
+      });
+      if (result.applied) applied += 1;
+    }
+    $('#screenshot-message').textContent = `${applied} reviewed pick${applied === 1 ? '' : 's'} applied. Recommendations refreshed below.`;
+    await refresh();
+    await refreshFleetSummary();
+  } catch (error) {
+    $('#screenshot-message').textContent = `${applied} pick${applied === 1 ? '' : 's'} applied before review stopped: ${error.message}`;
+    await refresh();
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function renderPlayerPicker(players) {
@@ -303,11 +410,17 @@ function renderPlayerPicker(players) {
 
 async function refresh() {
   if (!state.session) return;
-  const [session, card, pool] = await Promise.all([
+  const shouldRefreshProviderStatus = Date.now() - state.providerStatusAt > 30_000;
+  const [session, card, pool, providerStatus] = await Promise.all([
     api(scoped(`/draft/sessions/${state.session.id}`)),
     api(scoped(`/draft/sessions/${state.session.id}/recommendation`)),
-    api(scoped(`/players?sessionId=${state.session.id}`))
+    api(scoped(`/players?sessionId=${state.session.id}`)),
+    shouldRefreshProviderStatus ? api('/api/provider-status') : Promise.resolve(null)
   ]);
+  if (providerStatus) {
+    state.providerStatus = providerStatus;
+    state.providerStatusAt = Date.now();
+  }
   state.session = session;
   renderRecommendation(card);
   renderPlayerPicker(pool.players);
@@ -320,7 +433,9 @@ async function recordPick(event) {
   event.preventDefault();
   const typedPlayer = findPlayer($('#player-search').value);
   if (typedPlayer) selectPlayer(typedPlayer.id);
-  if (!state.selectedPlayerId) {
+  const manualMode = !$('#manual-player-fields').classList.contains('hidden');
+  const manualName = $('#player-search').value.trim();
+  if (!state.selectedPlayerId && (!manualMode || manualName.length < 2)) {
     $('#pick-message').textContent = 'Choose a player from the search results or click a player on the board.';
     return;
   }
@@ -329,10 +444,21 @@ async function recordPick(event) {
   try {
     const result = await api(scoped(`/draft/sessions/${state.session.id}/picks`), {
       method: 'POST',
-      body: JSON.stringify({ playerId: state.selectedPlayerId, isMine: $('#is-mine').checked, source: state.session.sourceMode })
+      body: JSON.stringify({
+        playerId: state.selectedPlayerId,
+        manualPlayer: state.selectedPlayerId ? undefined : {
+          name: manualName,
+          position: $('#manual-player-position').value,
+          team: $('#manual-player-team').value || 'FA'
+        },
+        isMine: $('#is-mine').checked,
+        source: state.selectedPlayerId ? state.session.sourceMode : 'manual-unresolved'
+      })
     });
     $('#pick-message').textContent = result.applied ? 'Pick reconciled. Board refreshed.' : result.reason;
     $('#is-mine').checked = false;
+    $('#manual-player-fields').classList.add('hidden');
+    $('#manual-player-toggle').textContent = 'Player not found?';
     await refresh();
   } catch (error) {
     $('#pick-message').textContent = error.message;
@@ -358,8 +484,14 @@ async function resetSession() {
   state.session = null;
   if (state.screenshotObjectUrl) URL.revokeObjectURL(state.screenshotObjectUrl);
   state.screenshotObjectUrl = null;
+  state.screenshotFile = null;
+  state.screenshotCandidates = [];
   $('#screenshot-file').value = '';
   $('#screenshot-preview').classList.add('hidden');
+  $('#screenshot-results').classList.add('hidden');
+  $('#analyze-screenshot').disabled = true;
+  $('#manual-player-fields').classList.add('hidden');
+  $('#manual-player-toggle').textContent = 'Player not found?';
   $('#draft-room').classList.add('hidden');
   $('#setup').classList.remove('hidden');
   await refreshFleetSummary();
@@ -380,6 +512,19 @@ async function init() {
     if (player) selectPlayer(player.id);
   });
   $('#screenshot-file').addEventListener('change', reviewScreenshot);
+  $('#analyze-screenshot').addEventListener('click', analyzeScreenshot);
+  $('#apply-screenshot-picks').addEventListener('click', applyScreenshotPicks);
+  $('#manual-player-toggle').addEventListener('click', () => {
+    const fields = $('#manual-player-fields');
+    fields.classList.toggle('hidden');
+    $('#manual-player-toggle').textContent = fields.classList.contains('hidden') ? 'Player not found?' : 'Use loaded player search';
+    if (!fields.classList.contains('hidden')) {
+      state.selectedPlayerId = null;
+      syncPlayerHighlights();
+    }
+  });
+  state.providerStatus = await api('/api/provider-status');
+  state.providerStatusAt = Date.now();
   await loadFleet();
 }
 
