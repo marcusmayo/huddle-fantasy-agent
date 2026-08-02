@@ -76,8 +76,8 @@
 
       <div class="content-grid">
         <section class="panel">
-          <div class="section-head"><div><p class="eyebrow">LIVE BOARD</p><h2>Best available</h2></div><span id="updated-at" class="muted"></span></div>
-          <div class="table-wrap">
+          <div class="section-head"><div><p class="eyebrow">LIVE BOARD</p><h2>Best available</h2></div><div class="board-status"><span id="updated-at" class="muted"></span><small>Scroll or click a player</small></div></div>
+          <div class="table-wrap board-scroll" tabindex="0" aria-label="Scrollable best available players">
             <table>
               <thead><tr><th>#</th><th>Player</th><th>Pos</th><th>Score</th><th>Next-turn chance</th><th>Flag</th></tr></thead>
               <tbody id="board-body"></tbody>
@@ -90,7 +90,11 @@
           <h2>Reconcile the room</h2>
           <p class="muted">Until Yahoo OAuth is connected, record each selection here. The board refreshes immediately.</p>
           <form id="pick-form">
-            <label>Drafted player <select id="player-select" required></select></label>
+            <label for="player-search">Drafted player
+              <input id="player-search" type="search" list="player-options" placeholder="Search name, position, or team" autocomplete="off" required>
+              <datalist id="player-options"></datalist>
+              <small class="field-help">Type to search, or click any recommendation or board row.</small>
+            </label>
             <label class="check"><input id="is-mine" type="checkbox"> This was my pick</label>
             <button type="submit">Record completed pick</button>
           </form>

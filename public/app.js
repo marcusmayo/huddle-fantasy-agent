@@ -7,6 +7,9 @@ const state = {
   league: null,
   session: null,
   recommendation: null,
+  availablePlayers: [],
+  selectedPlayerId: null,
+  searchDirty: false,
   timer: null
 };
 const $ = (selector) => document.querySelector(selector);
@@ -31,6 +34,60 @@ function sessionKey() {
 
 function playerLabel(player) {
   return `${player.name} · ${player.position} · ${player.team}`;
+}
+
+function findPlayer(value) {
+  const needle = String(value || '').trim().toLowerCase();
+  if (!needle) return null;
+  return state.availablePlayers.find((player) =>
+    String(player.id).toLowerCase() === needle ||
+    player.name.toLowerCase() === needle ||
+    playerLabel(player).toLowerCase() === needle
+  ) || null;
+}
+
+function syncPlayerHighlights() {
+  document.querySelectorAll('[data-player-id]').forEach((element) => {
+    const selected = element.dataset.playerId === state.selectedPlayerId;
+    element.classList.toggle('selected-player', selected);
+    element.setAttribute('aria-pressed', String(selected));
+  });
+}
+
+function selectPlayer(playerId, announce = false) {
+  const player = state.availablePlayers.find((candidate) => candidate.id === playerId);
+  if (!player) return false;
+  state.selectedPlayerId = player.id;
+  state.searchDirty = false;
+  $('#player-search').value = playerLabel(player);
+  syncPlayerHighlights();
+  if (announce) $('#pick-message').textContent = `${player.name} selected. Confirm whether this was your pick, then record it.`;
+  return true;
+}
+
+function makePlayerSelectable(element, player) {
+  if (!element) return;
+  element.classList.toggle('player-selectable', Boolean(player));
+  if (!player) {
+    element.onclick = null;
+    element.onkeydown = null;
+    element.removeAttribute('data-player-id');
+    element.removeAttribute('role');
+    element.removeAttribute('tabindex');
+    element.removeAttribute('aria-label');
+    return;
+  }
+  element.dataset.playerId = player.id;
+  element.setAttribute('role', 'button');
+  element.setAttribute('tabindex', '0');
+  element.setAttribute('aria-label', `Select ${player.name} as the drafted player`);
+  element.onclick = () => selectPlayer(player.id, true);
+  element.onkeydown = (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      selectPlayer(player.id, true);
+    }
+  };
 }
 
 function escapeHtml(value) {
@@ -139,9 +196,12 @@ function renderRecommendation(card) {
   $('#explanation').textContent = card.explanation;
   renderChoice('safe', card.alternatives.safe);
   renderChoice('upside', card.alternatives.upside);
+  makePlayerSelectable(document.querySelector('.hero-card'), preferred?.player);
+  makePlayerSelectable(document.querySelector('.choice.safe'), card.alternatives.safe?.player);
+  makePlayerSelectable(document.querySelector('.choice.upside'), card.alternatives.upside?.player);
   $('#updated-at').textContent = `Updated ${new Date(card.generatedAt).toLocaleTimeString()}`;
   $('#board-body').innerHTML = card.board.map((item, index) => `
-    <tr>
+    <tr class="board-player" data-player-id="${escapeHtml(item.player.id)}" tabindex="0" role="button" aria-label="Select ${escapeHtml(item.player.name)} as the drafted player">
       <td>${index + 1}</td>
       <td><strong>${escapeHtml(item.player.name)}</strong><small>${escapeHtml(item.player.team)}</small></td>
       <td><span class="position">${escapeHtml(item.player.position)}</span></td>
@@ -149,6 +209,41 @@ function renderRecommendation(card) {
       <td>${Math.round(item.waitProbability * 100)}%</td>
       <td>${item.sleeper ? '<span class="badge">SLEEPER</span>' : ''}</td>
     </tr>`).join('');
+  document.querySelectorAll('.board-player').forEach((row) => {
+    row.addEventListener('click', () => selectPlayer(row.dataset.playerId, true));
+    row.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        selectPlayer(row.dataset.playerId, true);
+      }
+    });
+  });
+  syncPlayerHighlights();
+}
+
+function renderPlayerPicker(players) {
+  const input = $('#player-search');
+  const previousSelection = state.selectedPlayerId;
+  state.availablePlayers = [...players].sort((a, b) => (a.expertRank ?? 999) - (b.expertRank ?? 999));
+  $('#player-options').innerHTML = state.availablePlayers.map((player) =>
+    `<option value="${escapeHtml(playerLabel(player))}"></option>`
+  ).join('');
+
+  if (state.searchDirty) {
+    const exact = findPlayer(input.value);
+    state.selectedPlayerId = exact?.id || null;
+    syncPlayerHighlights();
+    return;
+  }
+  const nextSelection = state.availablePlayers.some((player) => player.id === previousSelection)
+    ? previousSelection
+    : state.availablePlayers[0]?.id;
+  if (nextSelection) selectPlayer(nextSelection);
+  else {
+    state.selectedPlayerId = null;
+    input.value = '';
+    syncPlayerHighlights();
+  }
 }
 
 async function refresh() {
@@ -160,12 +255,7 @@ async function refresh() {
   ]);
   state.session = session;
   renderRecommendation(card);
-  const select = $('#player-select');
-  const current = select.value;
-  select.innerHTML = pool.players
-    .sort((a, b) => (a.expertRank ?? 999) - (b.expertRank ?? 999))
-    .map((player) => `<option value="${escapeHtml(player.id)}">${escapeHtml(playerLabel(player))}</option>`).join('');
-  if ([...select.options].some((option) => option.value === current)) select.value = current;
+  renderPlayerPicker(pool.players);
   $('#recent-picks').innerHTML = session.picks.slice(-6).reverse().map((pick) =>
     `<li><span>${pick.overallPick}. ${escapeHtml(pick.playerName)}</span><small>${pick.isMine ? escapeHtml(state.league.targetTeam) : escapeHtml(pick.position)}</small></li>`
   ).join('');
@@ -173,12 +263,18 @@ async function refresh() {
 
 async function recordPick(event) {
   event.preventDefault();
+  const typedPlayer = findPlayer($('#player-search').value);
+  if (typedPlayer) selectPlayer(typedPlayer.id);
+  if (!state.selectedPlayerId) {
+    $('#pick-message').textContent = 'Choose a player from the search results or click a player on the board.';
+    return;
+  }
   const button = event.submitter;
   button.disabled = true;
   try {
     const result = await api(scoped(`/draft/sessions/${state.session.id}/picks`), {
       method: 'POST',
-      body: JSON.stringify({ playerId: $('#player-select').value, isMine: $('#is-mine').checked, source: 'manual' })
+      body: JSON.stringify({ playerId: state.selectedPlayerId, isMine: $('#is-mine').checked, source: 'manual' })
     });
     $('#pick-message').textContent = result.applied ? 'Pick reconciled. Board refreshed.' : result.reason;
     $('#is-mine').checked = false;
@@ -215,6 +311,15 @@ async function init() {
   $('#pick-form').addEventListener('submit', recordPick);
   $('#new-session').addEventListener('click', resetSession);
   $('#league-select').addEventListener('change', (event) => selectLeague(event.target.value));
+  $('#player-search').addEventListener('input', (event) => {
+    state.searchDirty = true;
+    state.selectedPlayerId = findPlayer(event.target.value)?.id || null;
+    syncPlayerHighlights();
+  });
+  $('#player-search').addEventListener('change', (event) => {
+    const player = findPlayer(event.target.value);
+    if (player) selectPlayer(player.id);
+  });
   await loadFleet();
 }
 
