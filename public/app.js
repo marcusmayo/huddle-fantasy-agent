@@ -10,6 +10,7 @@ const state = {
   availablePlayers: [],
   selectedPlayerId: null,
   searchDirty: false,
+  screenshotObjectUrl: null,
   timer: null
 };
 const $ = (selector) => document.querySelector(selector);
@@ -172,6 +173,11 @@ function showDraftRoom() {
   $('#setup').classList.add('hidden');
   $('#draft-room').classList.remove('hidden');
   $('#sync-label').textContent = `${state.session.sourceMode} sync · ${state.league.name}`;
+  const screenshotMode = state.session.sourceMode === 'screenshot';
+  $('#screenshot-assistant').classList.toggle('hidden', !screenshotMode);
+  $('#reconcile-help').textContent = screenshotMode
+    ? 'Select a screenshot below, review its draft results, then click and confirm each visible player. The board refreshes after every confirmed pick.'
+    : 'Until Yahoo OAuth is connected, record each selection here. The board refreshes immediately.';
 }
 
 function renderChoice(prefix, choice) {
@@ -188,6 +194,7 @@ function renderRecommendation(card) {
   $('#clock-state').classList.toggle('hot', card.onClock);
   $('#evidence-warning').classList.toggle('hidden', !card.evidence.warning);
   $('#evidence-warning').textContent = card.evidence.warning || '';
+  renderBoardEvidence(card);
   const preferred = card.preferred;
   $('#preferred-name').textContent = preferred?.player.name || 'No eligible player';
   $('#preferred-meta').textContent = preferred ? `${preferred.player.position} · ${preferred.player.team} · ADP ${preferred.player.adp ?? '—'}` : '';
@@ -219,6 +226,54 @@ function renderRecommendation(card) {
     });
   });
   syncPlayerHighlights();
+}
+
+function renderBoardEvidence(card) {
+  const evidence = card.evidence || {};
+  const league = evidence.league || {};
+  const offense = league.scoring?.offense || {};
+  const roster = Object.entries(league.roster || {})
+    .filter(([, count]) => count > 0)
+    .map(([slot, count]) => `${slot} ${count}`)
+    .join(' · ');
+  const weights = Object.entries(evidence.ranking?.weights || {})
+    .map(([factor, weight]) => `${factor} ${Math.round(weight * 100)}%`)
+    .join(' · ');
+  const sourceTime = evidence.fetchedAt ? new Date(evidence.fetchedAt).toLocaleString() : 'Bundled fixture';
+  const rows = [
+    ['Player evidence', `${evidence.source || 'unknown'} · ${evidence.season || 'season unknown'} · ${evidence.complete ? 'complete' : 'incomplete'}`],
+    ['Evidence timestamp', sourceTime],
+    ['League context', `${league.name || state.league.name} · ${league.teamCount || state.league.teamCount} teams · ${league.scoringType || state.league.scoringType}`],
+    ['Roster demand', roster || 'Not available'],
+    ['Scoring inputs', `${offense.reception ?? '—'} PPR · ${offense.passingTouchdown ?? '—'} pass-TD points · ${offense.passingYardsPerPoint ?? '—'} pass yards/point`],
+    ['Player inputs', (evidence.ranking?.playerInputs || []).join(' · ')],
+    ['Factor weights', weights || 'Not available'],
+    ['Computed logic', (evidence.ranking?.computedFactors || []).join(' · ')],
+    ['Draft state', `Pick ${card.currentOverall} · slot ${card.draftSlot || '—'} · next turn ${card.nextUserPick || '—'} · ${state.session.picks.length} confirmed picks`],
+    ['Execution', 'Recommendation only; Huddle cannot submit a Yahoo pick']
+  ];
+  $('#evidence-details').innerHTML = rows.map(([label, value]) => `
+    <div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join('');
+}
+
+function reviewScreenshot(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    $('#screenshot-message').textContent = 'Choose a PNG, JPEG, or WebP image.';
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    $('#screenshot-message').textContent = 'Screenshot exceeds the 5 MB review limit.';
+    event.target.value = '';
+    return;
+  }
+  if (state.screenshotObjectUrl) URL.revokeObjectURL(state.screenshotObjectUrl);
+  state.screenshotObjectUrl = URL.createObjectURL(file);
+  $('#screenshot-image').src = state.screenshotObjectUrl;
+  $('#screenshot-meta').textContent = `${file.name} · ${(file.size / 1024).toFixed(0)} KB`;
+  $('#screenshot-preview').classList.remove('hidden');
+  $('#screenshot-message').textContent = 'Screenshot ready for review. Click each visible drafted player and confirm it below; no pick is applied automatically.';
 }
 
 function renderPlayerPicker(players) {
@@ -274,7 +329,7 @@ async function recordPick(event) {
   try {
     const result = await api(scoped(`/draft/sessions/${state.session.id}/picks`), {
       method: 'POST',
-      body: JSON.stringify({ playerId: state.selectedPlayerId, isMine: $('#is-mine').checked, source: 'manual' })
+      body: JSON.stringify({ playerId: state.selectedPlayerId, isMine: $('#is-mine').checked, source: state.session.sourceMode })
     });
     $('#pick-message').textContent = result.applied ? 'Pick reconciled. Board refreshed.' : result.reason;
     $('#is-mine').checked = false;
@@ -301,6 +356,10 @@ async function resetSession() {
   clearInterval(state.timer);
   localStorage.removeItem(sessionKey());
   state.session = null;
+  if (state.screenshotObjectUrl) URL.revokeObjectURL(state.screenshotObjectUrl);
+  state.screenshotObjectUrl = null;
+  $('#screenshot-file').value = '';
+  $('#screenshot-preview').classList.add('hidden');
   $('#draft-room').classList.add('hidden');
   $('#setup').classList.remove('hidden');
   await refreshFleetSummary();
@@ -320,6 +379,7 @@ async function init() {
     const player = findPlayer(event.target.value);
     if (player) selectPlayer(player.id);
   });
+  $('#screenshot-file').addEventListener('change', reviewScreenshot);
   await loadFleet();
 }
 

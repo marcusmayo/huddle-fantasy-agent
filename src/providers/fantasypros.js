@@ -59,14 +59,31 @@ function normalizeRankedPlayer(raw, position) {
   };
 }
 
-function projectionPoints(raw) {
+function projectionPlayerId(raw) {
+  return raw?.fpid || raw?.player_id || raw?.playerId || raw?.id || null;
+}
+
+function projectionStats(raw) {
+  if (Array.isArray(raw?.stats)) return raw.stats[0] || {};
+  if (raw?.stats && typeof raw.stats === 'object') return raw.stats;
+  return raw || {};
+}
+
+function projectionPoints(raw, scoring = 'PPR') {
+  const stats = projectionStats(raw);
+  const scoringKey = String(scoring).toUpperCase();
+  const preferred = scoringKey === 'HALF' ? stats.points_half
+    : scoringKey === 'PPR' ? stats.points_ppr
+      : stats.points;
   return firstNumber(
-    raw.fpts,
-    raw.fantasy_points,
-    raw.fantasyPoints,
-    raw.projected_points,
-    raw.stats?.fpts,
-    raw.stats?.fantasy_points
+    preferred,
+    stats.points,
+    stats.points_ppr,
+    stats.points_half,
+    stats.fpts,
+    stats.fantasy_points,
+    stats.fantasyPoints,
+    stats.projected_points
   );
 }
 
@@ -89,8 +106,8 @@ class FantasyProsClient {
     if (!season) throw new Error('season is required');
     const batches = await Promise.all(POSITIONS.map(async (position) => {
       const [rankings, projections] = await Promise.all([
-        this.request(`/nfl/${season}/consensus-rankings`, { position, scoring }, { force }),
-        this.request(`/nfl/${season}/projections`, { position, scoring }, { force })
+        this.request(`/nfl/${season}/consensus-rankings`, { position, scoring, week: 0 }, { force }),
+        this.request(`/nfl/${season}/projections`, { position, week: 0 }, { force })
       ]);
       return { position, rankings, projections };
     }));
@@ -99,14 +116,15 @@ class FantasyProsClient {
     let complete = true;
     for (const batch of batches) {
       complete &&= !batch.rankings.truncated && !batch.projections.truncated;
-      const projectionById = new Map(responsePlayers(batch.projections.payload).map((raw) => [
-        String(raw.player_id || raw.playerId || raw.id), raw
-      ]));
+      const projectionById = new Map(responsePlayers(batch.projections.payload)
+        .map((raw) => [projectionPlayerId(raw), raw])
+        .filter(([id]) => id)
+        .map(([id, raw]) => [String(id), raw]));
       for (const raw of responsePlayers(batch.rankings.payload)) {
         const player = normalizeRankedPlayer(raw, batch.position);
         if (!player) continue;
         const projection = projectionById.get(player.fantasyProsId) || {};
-        const projectedPoints = projectionPoints(projection);
+        const projectedPoints = projectionPoints(projection, scoring);
         if (!Number.isFinite(projectedPoints)) continue;
         const spread = Math.max(12, projectedPoints * 0.16);
         players.push({
@@ -171,6 +189,8 @@ module.exports = {
   POSITIONS,
   isTruncated,
   normalizeRankedPlayer,
+  projectionPlayerId,
+  projectionPoints,
   responsePlayers,
   stripPlayerImageFields
 };

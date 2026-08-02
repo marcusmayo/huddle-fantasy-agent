@@ -9,6 +9,7 @@ The public example profile is a six-team, two-quarterback, full-PPR Yahoo league
 - Persistent draft sessions with snake-draft turn calculation.
 - Native multi-league registry with league-scoped state, sessions, settings, and dashboard selection.
 - Manual completed-pick entry with an import endpoint for structured screenshot/OCR results.
+- Screenshot-review mode with a browser-local image preview and mandatory operator confirmation before every imported pick. Automated OCR/vision extraction is not enabled in this MVP.
 - Balanced, safe, and upside recommendations after every reconciled pick.
 - Value above replacement, roster need, positional tier drop, risk, next-turn availability, and early K/DEF discipline.
 - Sleeper flags based on Expert Consensus Rank versus ADP and ceiling.
@@ -20,12 +21,6 @@ The public example profile is a six-team, two-quarterback, full-PPR Yahoo league
 - License-gated player headshots with initials fallback and FantasyPros image-field redaction.
 - Optional one-container-per-league fleet generator for one VM with separate state/env/audit volumes.
 - Local web dashboard and JSON API.
-
-## Aegis control plane preview
-
-![Huddle Aegis control plane preview](docs/assets/huddle-aegis-control-plane-preview.png)
-
-This representative preview uses demo league and player data. It shows the merged Huddle dashboard structure, including league-container health, target-locked controls, an active recommendation, alternatives, evidence status, sleeper signals, and the initials fallback used when licensed headshots are unavailable.
 
 ## Quick start
 
@@ -63,6 +58,8 @@ Player images are disabled by default. [FantasyPros states that its Sportradar-l
 4. **Re-rank:** The deterministic engine recalculates the available board from projection value, replacement value, positional scarcity, roster need, risk, and the probability each player survives to the next snake turn.
 5. **Display:** The dashboard refreshes every 1.5 seconds and shows one preferred pick, a safer alternative, an upside alternative, a 12-player board, sleeper flags, evidence freshness, and clear warnings for incomplete coverage.
 6. **Act:** The user makes the selection in Yahoo. Huddle has no endpoint or provider method that can submit a draft pick.
+
+In screenshot-review mode, the operator selects a PNG, JPEG, or WebP image in the draft-room sidebar. The image is previewed with a browser object URL and is not uploaded or persisted by Huddle. The operator clicks each player visible in the screenshot and confirms the pick; this keeps image-derived actions human-attested until a separately secured and tested OCR/vision provider is added.
 
 The ranking step is local and typically completes in milliseconds; Yahoo polling and network latency determine how quickly a completed opponent pick appears. The recommendation remains visible if Yahoo temporarily stalls, while the status/evidence fields show that the state may be stale.
 

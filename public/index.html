@@ -38,7 +38,7 @@
           <select id="source-mode">
             <option value="manual">Manual now</option>
             <option value="yahoo">Yahoo when OAuth is ready</option>
-            <option value="screenshot">Screenshot-assisted</option>
+            <option value="screenshot">Screenshot review + confirmation</option>
           </select>
         </label>
         <button type="submit">Open draft room</button>
@@ -54,6 +54,11 @@
       </div>
 
       <div id="evidence-warning" class="warning hidden"></div>
+
+      <details class="panel evidence-panel">
+        <summary>What built this draft board?</summary>
+        <div id="evidence-details" class="evidence-grid"></div>
+      </details>
 
       <section class="hero-card">
         <div class="clock-state" id="clock-state">Watching the room</div>
@@ -88,7 +93,18 @@
         <aside class="panel pick-panel">
           <p class="eyebrow">RECORD A PICK</p>
           <h2>Reconcile the room</h2>
-          <p class="muted">Until Yahoo OAuth is connected, record each selection here. The board refreshes immediately.</p>
+          <p id="reconcile-help" class="muted">Until Yahoo OAuth is connected, record each selection here. The board refreshes immediately.</p>
+          <section id="screenshot-assistant" class="screenshot-assistant hidden">
+            <p class="eyebrow">SCREENSHOT REVIEW</p>
+            <label for="screenshot-file" class="screenshot-upload">Choose Yahoo draft screenshot
+              <input id="screenshot-file" type="file" accept="image/png,image/jpeg,image/webp">
+            </label>
+            <div id="screenshot-preview" class="screenshot-preview hidden">
+              <img id="screenshot-image" alt="Selected Yahoo draft screenshot preview">
+              <p id="screenshot-meta" class="muted"></p>
+            </div>
+            <p id="screenshot-message" class="field-help">The image stays in this browser. Review it, click each visible drafted player, and confirm the pick. Automatic OCR is not enabled.</p>
+          </section>
           <form id="pick-form">
             <label for="player-search">Drafted player
               <input id="player-search" type="search" list="player-options" placeholder="Search name, position, or team" autocomplete="off" required>

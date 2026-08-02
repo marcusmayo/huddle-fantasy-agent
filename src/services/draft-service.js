@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
-const { buildRecommendationCard } = require('../domain/draft-board');
+const { buildRecommendationCard, STYLES } = require('../domain/draft-board');
 
 class DraftService {
   constructor({ league, playerPool, store }) {
@@ -117,6 +117,20 @@ class DraftService {
         season: this.playerPool.season,
         complete: this.playerPool.complete !== false,
         fetchedAt: this.playerPool.fetchedAt || null,
+        league: {
+          id: this.league.id,
+          name: this.league.name,
+          teamCount: this.league.teamCount,
+          scoringType: this.league.scoringType,
+          roster: structuredClone(this.league.roster),
+          scoring: structuredClone(this.league.scoring)
+        },
+        ranking: {
+          algorithm: 'deterministic-v1',
+          weights: structuredClone(STYLES.balanced),
+          playerInputs: ['projected points', 'floor', 'ceiling', 'ECR', 'ADP', 'tier', 'injury status', 'risk'],
+          computedFactors: ['value over replacement', 'positional scarcity', 'roster need', 'next-turn urgency', 'upside', 'floor', 'risk', 'K/DEF draft phase']
+        },
         warning: this.playerPool.complete === false
           ? 'Player evidence is truncated or incomplete; confirm the preferred player against Yahoo before drafting.'
           : null
