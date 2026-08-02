@@ -21,6 +21,12 @@ The public example profile is a six-team, two-quarterback, full-PPR Yahoo league
 - Optional one-container-per-league fleet generator for one VM with separate state/env/audit volumes.
 - Local web dashboard and JSON API.
 
+## Aegis control plane preview
+
+![Huddle Aegis control plane preview](docs/assets/huddle-aegis-control-plane-preview.png)
+
+This representative preview uses demo league and player data. It shows the merged Huddle dashboard structure, including league-container health, target-locked controls, an active recommendation, alternatives, evidence status, sleeper signals, and the initials fallback used when licensed headshots are unavailable.
+
 ## Quick start
 
 Requirements: Node.js 22 or newer.
