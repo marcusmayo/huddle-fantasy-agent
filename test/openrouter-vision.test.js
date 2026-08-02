@@ -56,7 +56,83 @@ test('a player-list screenshot is rejected as pick evidence', async () => {
   const analysis = await client.analyzeDraftScreenshot({ dataUrl: screenshot, players: playerPool.players, session: { picks: [] }, league });
   assert.equal(analysis.usableForPicks, false);
   assert.deepEqual(analysis.candidates, []);
-  assert.match(analysis.warnings[0], /not a usable Yahoo draft log/);
+  assert.match(analysis.warnings[0], /not compatible with the selected draft picks purpose/);
+});
+
+for (const example of [
+  {
+    purpose: 'available_players',
+    screenshotType: 'player_list',
+    player: { playerName: 'Running Back Alpha', position: 'RB', nflTeam: 'AFC', status: 'FA', confidence: 0.94 },
+    expected: { applyMode: 'evidence-review', playerId: 'demo-rb-1', evidenceStatus: 'fa' }
+  },
+  {
+    purpose: 'team_roster',
+    screenshotType: 'roster',
+    player: { playerName: 'Wide Receiver Alpha', position: 'WR', nflTeam: 'NFC', fantasyTeam: 'MY TEAM', rosterSlot: 'WR', confidence: 0.91 },
+    expected: { applyMode: 'evidence-review', playerId: 'demo-wr-1', rosterSlot: 'WR' }
+  },
+  {
+    purpose: 'waiver_players',
+    screenshotType: 'free_agent_list',
+    player: { playerName: 'Quarterback Alpha', position: 'QB', nflTeam: 'AFC', status: 'W', ownershipPercent: 67, confidence: 0.88 },
+    expected: { applyMode: 'evidence-review', playerId: 'demo-qb-1', ownershipPercent: 67 }
+  }
+]) {
+  test(`${example.purpose} accepts compatible visible-row evidence without creating picks`, async () => {
+    const client = new OpenRouterVisionClient({
+      apiKey: 'test-openrouter-key',
+      fetchImpl: async () => ({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: JSON.stringify({
+          screenshotType: example.screenshotType,
+          summary: 'Visible player evidence.',
+          warnings: [],
+          picks: [],
+          players: [example.player]
+        }) } }] })
+      })
+    });
+    const analysis = await client.analyzeDraftScreenshot({
+      dataUrl: screenshot,
+      purpose: example.purpose,
+      players: playerPool.players,
+      session: { picks: [] },
+      league
+    });
+    assert.equal(analysis.compatible, true);
+    assert.equal(analysis.usableForPicks, false);
+    assert.equal(analysis.applyMode, example.expected.applyMode);
+    assert.equal(analysis.candidates.length, 1);
+    for (const [key, value] of Object.entries(example.expected)) {
+      if (key !== 'applyMode') assert.equal(analysis.candidates[0][key], value);
+    }
+  });
+}
+
+test('a mismatched screenshot purpose returns no evidence candidates', async () => {
+  const client = new OpenRouterVisionClient({
+    apiKey: 'test-openrouter-key',
+    fetchImpl: async () => ({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify({
+        screenshotType: 'roster',
+        summary: 'A team roster.',
+        warnings: [],
+        picks: [],
+        players: [{ playerName: 'Running Back Alpha' }]
+      }) } }] })
+    })
+  });
+  const analysis = await client.analyzeDraftScreenshot({
+    dataUrl: screenshot,
+    purpose: 'waiver_players',
+    players: playerPool.players,
+    session: { picks: [] },
+    league
+  });
+  assert.equal(analysis.compatible, false);
+  assert.deepEqual(analysis.candidates, []);
 });
 
 test('screenshot transport validates type and size before OpenRouter', () => {

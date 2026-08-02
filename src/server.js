@@ -114,6 +114,7 @@ async function handleDraftRoutes(request, response, service, parts, { visionClie
     const body = await readBody(request, 7_500_000);
     const analysis = await visionClient.analyzeDraftScreenshot({
       dataUrl: body.dataUrl,
+      purpose: body.purpose,
       players: service.playerPool.players,
       session: service.getSession(sessionId),
       league: league || service.league
@@ -123,6 +124,10 @@ async function handleDraftRoutes(request, response, service, parts, { visionClie
   }
   if (parts[2] === 'picks' && request.method === 'POST') {
     json(response, 200, service.recordPick(sessionId, await readBody(request)));
+    return true;
+  }
+  if (parts[2] === 'evidence-reviews' && request.method === 'POST') {
+    json(response, 200, service.recordEvidenceReview(sessionId, await readBody(request)));
     return true;
   }
   if (parts[2] === 'import-picks' && request.method === 'POST') {
@@ -223,7 +228,8 @@ function createHandler({ runtime, draftServices, fantasyProsClient, fantasyProsR
             configured: visionClient.configured,
             model: visionClient.model,
             operatorConfirmationRequired: true,
-            imagePersistence: false
+            imagePersistence: false,
+            screenshotPurposes: ['draft_picks', 'available_players', 'team_roster', 'waiver_players']
           },
           yahoo: {
             credentialsConfigured: Boolean(process.env.YAHOO_CLIENT_ID && process.env.YAHOO_CLIENT_SECRET),

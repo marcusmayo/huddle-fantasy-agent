@@ -172,8 +172,11 @@ test('screenshot analysis is league-scoped and returns review candidates only', 
       return {
         provider: 'openrouter',
         model: this.model,
+        purpose: input.purpose || 'draft_picks',
         screenshotType: 'draft_log',
+        compatible: true,
         usableForPicks: true,
+        applyMode: 'pick-events',
         candidates: [{ candidateId: 'vision:1:1', overallPick: 1, playerId: 'demo-rb-1', playerName: 'Running Back Alpha', actionable: true }],
         imagePersisted: false
       };
@@ -190,16 +193,35 @@ test('screenshot analysis is league-scoped and returns review candidates only', 
     const analyzed = await fetchJson(`${base}/api/leagues/example-primary/draft/sessions/${created.body.id}/analyze-screenshot`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ dataUrl: 'data:image/png;base64,eA==' })
+      body: JSON.stringify({ dataUrl: 'data:image/png;base64,eA==', purpose: 'draft_picks' })
     });
     assert.equal(analyzed.status, 200);
     assert.equal(analyzed.body.provider, 'openrouter');
     assert.equal(analyzed.body.imagePersisted, false);
     assert.equal(received.league.id, 'example-primary');
     assert.equal(received.session.sourceMode, 'screenshot');
+    assert.equal(received.purpose, 'draft_picks');
 
     const stillEmpty = await fetchJson(`${base}/api/leagues/example-primary/draft/sessions/${created.body.id}`);
     assert.equal(stillEmpty.body.picks.length, 0);
+
+    const evidence = await fetchJson(`${base}/api/leagues/example-primary/draft/sessions/${created.body.id}/evidence-reviews`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        eventId: 'vision-review:waiver:1',
+        purpose: 'waiver_players',
+        observations: [{ candidateId: 'vision:waiver:1', playerId: 'demo-qb-1', playerName: 'Quarterback Alpha', confidence: 0.93 }]
+      })
+    });
+    assert.equal(evidence.status, 200);
+    assert.equal(evidence.body.applied, true);
+    assert.equal(evidence.body.session.picks.length, 0);
+    assert.equal(evidence.body.session.evidenceReviews.length, 1);
+
+    const card = await fetchJson(`${base}/api/leagues/example-primary/draft/sessions/${created.body.id}/recommendation`);
+    assert.equal(card.body.evidence.screenshotReviews.count, 1);
+    assert.deepEqual(card.body.board.find((item) => item.player.id === 'demo-qb-1').evidenceTags, ['WAIVER']);
   } finally {
     await close(app);
   }

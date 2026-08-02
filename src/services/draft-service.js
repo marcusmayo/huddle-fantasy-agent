@@ -4,6 +4,12 @@ const crypto = require('node:crypto');
 const { buildRecommendationCard, STYLES } = require('../domain/draft-board');
 
 const POSITIONS = new Set(['QB', 'RB', 'WR', 'TE', 'K', 'DEF']);
+const EVIDENCE_PURPOSES = new Set(['available_players', 'team_roster', 'waiver_players']);
+const EVIDENCE_TAGS = {
+  available_players: 'AVAILABLE',
+  team_roster: 'ROSTER',
+  waiver_players: 'WAIVER'
+};
 
 function manualPlayer(input) {
   const value = input?.manualPlayer;
@@ -51,6 +57,8 @@ class DraftService {
       status: 'active',
       picks: [],
       appliedEventIds: [],
+      evidenceReviews: [],
+      appliedEvidenceEventIds: [],
       createdAt: now,
       updatedAt: now
     };
@@ -119,15 +127,97 @@ class DraftService {
     return { applied: true, reason: null, session: this.decorate(session) };
   }
 
+  recordEvidenceReview(id, input) {
+    const session = this.state.sessions[id];
+    if (!session) return this.getSession(id);
+    const purpose = String(input?.purpose || '');
+    if (!EVIDENCE_PURPOSES.has(purpose)) {
+      const error = new Error('purpose must be available_players, team_roster, or waiver_players');
+      error.code = 'INVALID_EVIDENCE_PURPOSE';
+      throw error;
+    }
+    if (!Array.isArray(input.observations) || !input.observations.length || input.observations.length > 250) {
+      const error = new Error('observations must contain between 1 and 250 reviewed player rows');
+      error.code = 'INVALID_EVIDENCE_REVIEW';
+      throw error;
+    }
+    session.evidenceReviews ||= [];
+    session.appliedEvidenceEventIds ||= [];
+    const eventId = String(input.eventId || `review:${purpose}:${crypto.randomUUID()}`);
+    if (session.appliedEvidenceEventIds.includes(eventId)) {
+      return { applied: false, reason: 'duplicate-event', session: this.decorate(session) };
+    }
+
+    const draftedIds = new Set(session.picks.map((pick) => pick.playerId));
+    const observations = input.observations.map((item, index) => {
+      const player = this.playerPool.players.find((candidate) => candidate.id === item.playerId) || null;
+      const conflictsWithDraft = Boolean(player && draftedIds.has(player.id)
+        && ['available_players', 'waiver_players'].includes(purpose));
+      const ownership = Number(item.ownershipPercent);
+      return {
+        observationId: String(item.candidateId || `${eventId}:${index + 1}`),
+        playerId: player?.id || null,
+        playerName: player?.name || String(item.playerName || '').trim().slice(0, 80),
+        position: player?.position || String(item.position || '').trim().toUpperCase().replace('DST', 'DEF') || null,
+        nflTeam: player?.team || String(item.nflTeam || '').trim().toUpperCase().slice(0, 8) || null,
+        fantasyTeam: String(item.fantasyTeam || '').trim().slice(0, 80) || null,
+        rosterSlot: String(item.rosterSlot || '').trim().slice(0, 20) || null,
+        evidenceStatus: String(item.evidenceStatus || '').trim().slice(0, 30) || null,
+        ownershipPercent: Number.isFinite(ownership) ? Math.max(0, Math.min(100, ownership)) : null,
+        confidence: Math.max(0, Math.min(1, Number(item.confidence) || 0)),
+        status: conflictsWithDraft ? 'conflict-drafted' : player ? 'confirmed' : 'unresolved-player'
+      };
+    });
+    const now = new Date().toISOString();
+    const review = {
+      id: crypto.randomUUID(),
+      eventId,
+      purpose,
+      source: String(input.source || 'openrouter-screenshot').slice(0, 50),
+      observations,
+      createdAt: now
+    };
+    session.evidenceReviews.push(review);
+    session.evidenceReviews = session.evidenceReviews.slice(-20);
+    session.appliedEvidenceEventIds.push(eventId);
+    session.appliedEvidenceEventIds = session.appliedEvidenceEventIds.slice(-100);
+    session.updatedAt = now;
+    this.persist();
+    return { applied: true, reason: null, review: structuredClone(review), session: this.decorate(session) };
+  }
+
   recommendation(id) {
     const session = this.state.sessions[id];
     if (!session) return this.getSession(id);
-    const card = buildRecommendationCard({
+    session.evidenceReviews ||= [];
+    const rawCard = buildRecommendationCard({
       players: this.playerPool.players,
       picks: session.picks,
       league: this.league,
       draftSlot: session.draftSlot
     });
+    const draftedIds = new Set(session.picks.map((pick) => pick.playerId));
+    const tagsByPlayer = new Map();
+    for (const review of session.evidenceReviews) {
+      for (const observation of review.observations || []) {
+        if (!observation.playerId || observation.status === 'unresolved-player') continue;
+        if (draftedIds.has(observation.playerId) && ['available_players', 'waiver_players'].includes(review.purpose)) continue;
+        const tags = tagsByPlayer.get(observation.playerId) || new Set();
+        tags.add(EVIDENCE_TAGS[review.purpose]);
+        tagsByPlayer.set(observation.playerId, tags);
+      }
+    }
+    const annotate = (item) => item ? { ...item, evidenceTags: [...(tagsByPlayer.get(item.player.id) || [])] } : item;
+    const card = {
+      ...rawCard,
+      preferred: annotate(rawCard.preferred),
+      alternatives: {
+        safe: annotate(rawCard.alternatives.safe),
+        upside: annotate(rawCard.alternatives.upside)
+      },
+      board: rawCard.board.map(annotate)
+    };
+    const latestReview = session.evidenceReviews.at(-1) || null;
     return {
       ...card,
       sessionId: id,
@@ -150,6 +240,14 @@ class DraftService {
           playerInputs: ['projected points', 'floor', 'ceiling', 'ECR', 'ADP', 'tier', 'injury status', 'risk'],
           computedFactors: ['value over replacement', 'positional scarcity', 'roster need', 'next-turn urgency', 'upside', 'floor', 'risk', 'K/DEF draft phase']
         },
+        screenshotReviews: {
+          count: session.evidenceReviews.length,
+          latestPurpose: latestReview?.purpose || null,
+          latestAt: latestReview?.createdAt || null,
+          confirmedObservations: session.evidenceReviews.reduce((count, review) =>
+            count + (review.observations || []).filter((item) => item.status === 'confirmed').length, 0),
+          semantics: 'Positive visible-row evidence only; omitted players remain unknown and rankings are unchanged.'
+        },
         warning: this.playerPool.complete === false
           ? 'Player evidence is truncated or incomplete; confirm the preferred player against Yahoo before drafting.'
           : null
@@ -159,6 +257,8 @@ class DraftService {
   }
 
   decorate(session) {
+    session.evidenceReviews ||= [];
+    session.appliedEvidenceEventIds ||= [];
     const poolIds = new Set(this.playerPool.players.map((player) => player.id));
     const draftedFromPool = session.picks.filter((pick) => poolIds.has(pick.playerId)).length;
     return {

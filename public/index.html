@@ -96,7 +96,16 @@
           <p id="reconcile-help" class="muted">Until Yahoo OAuth is connected, record each selection here. The board refreshes immediately.</p>
           <section id="screenshot-assistant" class="screenshot-assistant hidden">
             <p class="eyebrow">SCREENSHOT REVIEW</p>
-            <label for="screenshot-file" class="screenshot-upload">Choose Yahoo draft screenshot
+            <label for="screenshot-purpose">What does this screenshot show?
+              <select id="screenshot-purpose">
+                <option value="draft_picks">Completed draft picks</option>
+                <option value="available_players">Available players</option>
+                <option value="team_roster">Team roster</option>
+                <option value="waiver_players">Waiver / free agents</option>
+              </select>
+              <small id="screenshot-purpose-help" class="field-help">Use a Yahoo Draft Results or Draft Log image. Only confirmed rows become pick events.</small>
+            </label>
+            <label for="screenshot-file" class="screenshot-upload">Choose Yahoo screenshot
               <input id="screenshot-file" type="file" accept="image/png,image/jpeg,image/webp">
             </label>
             <div id="screenshot-preview" class="screenshot-preview hidden">
@@ -104,12 +113,12 @@
               <p id="screenshot-meta" class="muted"></p>
             </div>
             <button id="analyze-screenshot" type="button" class="vision-button" disabled>Analyze screenshot</button>
-            <p id="screenshot-message" class="field-help">Choose a draft-log screenshot. Huddle will not send it anywhere until you click Analyze screenshot.</p>
+            <p id="screenshot-message" class="field-help">Choose a screenshot. Huddle will not send it anywhere until you click Analyze screenshot.</p>
             <div id="screenshot-results" class="screenshot-results hidden">
               <p id="screenshot-summary"></p>
               <div id="screenshot-warnings" class="vision-warnings"></div>
               <div id="screenshot-candidates"></div>
-              <button id="apply-screenshot-picks" type="button">Apply confirmed picks</button>
+              <button id="apply-screenshot-review" type="button">Apply confirmed picks</button>
             </div>
           </section>
           <form id="pick-form">

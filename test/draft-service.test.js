@@ -60,3 +60,48 @@ test('an unlisted player can be recorded with operator-supplied identity', () =>
   assert.equal(result.session.picks[0].position, 'WR');
   assert.equal(result.session.availableCount, playerPool.players.length);
 });
+
+test('reviewed availability evidence annotates but does not rerank the board', () => {
+  const drafts = service();
+  const session = drafts.createSession({ draftSlot: 2, sourceMode: 'screenshot' });
+  const before = drafts.recommendation(session.id);
+  const target = before.board[3];
+  const result = drafts.recordEvidenceReview(session.id, {
+    eventId: 'vision-review:available:1',
+    purpose: 'available_players',
+    observations: [{
+      candidateId: 'vision:available_players:1',
+      playerId: target.player.id,
+      playerName: target.player.name,
+      confidence: 0.97
+    }]
+  });
+  assert.equal(result.applied, true);
+  assert.equal(result.session.picks.length, 0);
+
+  const after = drafts.recommendation(session.id);
+  assert.deepEqual(after.board.map((item) => [item.player.id, item.score]), before.board.map((item) => [item.player.id, item.score]));
+  assert.deepEqual(after.board.find((item) => item.player.id === target.player.id).evidenceTags, ['AVAILABLE']);
+  assert.equal(after.evidence.screenshotReviews.count, 1);
+  assert.equal(after.evidence.screenshotReviews.confirmedObservations, 1);
+
+  const duplicate = drafts.recordEvidenceReview(session.id, {
+    eventId: 'vision-review:available:1',
+    purpose: 'available_players',
+    observations: [{ playerId: target.player.id, playerName: target.player.name }]
+  });
+  assert.equal(duplicate.applied, false);
+  assert.equal(duplicate.reason, 'duplicate-event');
+});
+
+test('availability evidence conflicting with a confirmed draft pick is retained but not tagged available', () => {
+  const drafts = service();
+  const session = drafts.createSession({ draftSlot: 1, sourceMode: 'screenshot' });
+  drafts.recordPick(session.id, { eventId: 'draft:1', playerId: 'demo-rb-1' });
+  const result = drafts.recordEvidenceReview(session.id, {
+    purpose: 'waiver_players',
+    observations: [{ playerId: 'demo-rb-1', playerName: 'Running Back Alpha', confidence: 0.9 }]
+  });
+  assert.equal(result.review.observations[0].status, 'conflict-drafted');
+  assert.equal(drafts.recommendation(session.id).board.some((item) => item.evidenceTags.includes('WAIVER')), false);
+});

@@ -87,6 +87,7 @@ th { color: var(--muted); font-size: .7rem; letter-spacing: .08em; }
 td small { display: block; color: var(--muted); margin-top: 3px; }
 .position { display: inline-block; min-width: 38px; text-align: center; background: var(--panel-2); padding: 5px 7px; border-radius: 6px; }
 .badge { color: var(--green); font-size: .65rem; letter-spacing: .08em; font-weight: 900; }
+.evidence-tag { display: inline-block; margin-top: 2px; color: #7edfff; }
 .board-player, .player-selectable { cursor: pointer; transition: background-color .15s ease, box-shadow .15s ease; }
 .board-player:hover td, .board-player:focus td { background: #b8f34a0d; }
 .board-player:focus, .player-selectable:focus { outline: 2px solid var(--green); outline-offset: 2px; }

@@ -9,7 +9,7 @@ The public example profile is a six-team, two-quarterback, full-PPR Yahoo league
 - Persistent draft sessions with snake-draft turn calculation.
 - Native multi-league registry with league-scoped state, sessions, settings, and dashboard selection.
 - Manual completed-pick entry, including an explicit unresolved-player path when a player is absent from the loaded pool.
-- Screenshot analysis through OpenRouter with a browser preview, draft-log classification, player reconciliation, confidence display, and mandatory operator confirmation before every pick.
+- Purpose-aware screenshot analysis through OpenRouter for completed picks, available players, team rosters, and waiver/free-agent pages, with a browser preview and mandatory operator confirmation before any state change.
 - Balanced, safe, and upside recommendations after every reconciled pick.
 - Value above replacement, roster need, positional tier drop, risk, next-turn availability, and early K/DEF discipline.
 - Sleeper flags based on Expert Consensus Rank versus ADP and ceiling.
@@ -60,7 +60,9 @@ Player images are disabled by default. [FantasyPros states that its Sportradar-l
 5. **Display:** The dashboard refreshes every 1.5 seconds and shows one preferred pick, a safer alternative, an upside alternative, a 12-player board, sleeper flags, evidence freshness, and clear warnings for incomplete coverage.
 6. **Act:** The user makes the selection in Yahoo. Huddle has no endpoint or provider method that can submit a draft pick.
 
-In screenshot-review mode, the operator selects a PNG, JPEG, or WebP image in the draft-room sidebar. It remains local while previewing. Only an explicit **Analyze screenshot** action sends the image transiently to OpenRouter's multimodal chat-completions endpoint; Huddle does not persist it. The vision model first classifies the image. Player lists, free-agent tables, rankings, rosters, and projections are rejected as pick evidence. A valid Yahoo Draft Results or Draft Log image produces a review queue with pick number, player match, owner, and confidence. The operator can correct or exclude every candidate before applying it. Vision never changes ranking scores and never applies a pick without confirmation.
+In screenshot-review mode, the operator first declares what the PNG, JPEG, or WebP image shows: **Completed draft picks**, **Available players**, **Team roster**, or **Waiver / free agents**. The image remains local while previewing. Only an explicit **Analyze screenshot** action sends it transiently to OpenRouter's multimodal chat-completions endpoint; Huddle does not persist it. The vision model independently classifies the page and rejects a mismatch between the detected page and selected purpose.
+
+A valid Yahoo Draft Results or Draft Log image produces a pick review queue with pick number, player match, owner, and confidence. Confirmed rows become idempotent pick events. Player, roster, and waiver pages instead produce review-only visible-row evidence: an available-player row can add an `AVAILABLE` board tag, a waiver row can add `WAIVER`, and a roster row can add `ROSTER`. These tags never change deterministic scores or board order, never submit a waiver claim, and never create a pick. A missing player in a filtered, paginated, or partial screenshot remains unknown; absence is never treated as evidence that the player was drafted, unavailable, or off a roster. The operator can correct, include, or exclude every candidate before saving.
 
 If a player is outside the visible 12-player board but present in the pool, the search field can find them. If the player is absent from the provider pool, **Player not found?** records a name, position, NFL team, and ownership as an unresolved manual pick so draft order and roster need remain accurate.
 
@@ -92,7 +94,8 @@ OpenRouter documents base64 image inputs through the OpenAI-compatible [`/api/v1
 | `GET` | `/api/draft/sessions/:id/recommendation` | Current decision card and board |
 | `POST` | `/api/draft/sessions/:id/picks` | Record one completed pick |
 | `POST` | `/api/draft/sessions/:id/import-picks` | Record normalized screenshot/Yahoo pick events |
-| `POST` | `/api/draft/sessions/:id/analyze-screenshot` | Extract review-only candidates through OpenRouter |
+| `POST` | `/api/draft/sessions/:id/analyze-screenshot` | Extract purpose-aware review candidates through OpenRouter |
+| `POST` | `/api/draft/sessions/:id/evidence-reviews` | Save operator-confirmed availability, roster, or waiver evidence without reranking |
 | `POST` | `/api/data/fantasypros/sync` | Refresh the cached player pool |
 | `GET` | `/api/agent-core/route` | Inspect the explanation-only model route |
 | `GET` | `/api/fleet/manifest` | Safe Aegis registration/capability contract |
