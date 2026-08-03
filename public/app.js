@@ -20,6 +20,7 @@ const state = {
   timer: null
 };
 const $ = (selector) => document.querySelector(selector);
+let toastTimer = null;
 const SCREENSHOT_PURPOSE_COPY = {
   draft_picks: {
     help: 'Use a Yahoo Draft Results or Draft Log image. Only confirmed rows become pick events.',
@@ -43,6 +44,42 @@ function selectedScreenshotPurpose() {
   return $('#screenshot-purpose')?.value || 'draft_picks';
 }
 
+function showToast(message) {
+  const toast = $('#app-toast');
+  toast.textContent = message;
+  toast.classList.remove('hidden');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.add('hidden'), 7000);
+}
+
+function flashBoardRefresh() {
+  const board = $('#board-panel');
+  board.classList.remove('board-evidence-updated');
+  requestAnimationFrame(() => board.classList.add('board-evidence-updated'));
+  setTimeout(() => board.classList.remove('board-evidence-updated'), 1200);
+}
+
+function finishScreenshotReview(message) {
+  if (state.screenshotObjectUrl) URL.revokeObjectURL(state.screenshotObjectUrl);
+  state.screenshotObjectUrl = null;
+  state.screenshotFile = null;
+  state.screenshotCandidates = [];
+  state.screenshotAnalysis = null;
+  state.screenshotReviewEventId = null;
+  $('#screenshot-file').value = '';
+  $('#screenshot-preview').classList.add('hidden');
+  $('#screenshot-results').classList.add('hidden');
+  $('#analyze-screenshot').disabled = true;
+  $('#screenshot-saved').textContent = message;
+  $('#screenshot-saved').classList.remove('hidden');
+  $('#screenshot-message').textContent = 'Review complete. Choose another screenshot whenever the draft room changes.';
+  $('#pick-message').textContent = message;
+  showToast(message);
+  flashBoardRefresh();
+  $('#pick-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  setTimeout(() => $('#player-search').focus({ preventScroll: true }), 350);
+}
+
 function updateScreenshotPurpose({ resetAnalysis = true } = {}) {
   const copy = SCREENSHOT_PURPOSE_COPY[selectedScreenshotPurpose()];
   $('#screenshot-purpose-help').textContent = copy.help;
@@ -51,6 +88,7 @@ function updateScreenshotPurpose({ resetAnalysis = true } = {}) {
     state.screenshotCandidates = [];
     state.screenshotReviewEventId = null;
     $('#screenshot-results').classList.add('hidden');
+    $('#screenshot-saved').classList.add('hidden');
   }
   if (state.screenshotFile) {
     $('#screenshot-message').textContent = state.providerStatus?.vision?.configured
@@ -338,6 +376,7 @@ function reviewScreenshot(event) {
   state.screenshotCandidates = [];
   state.screenshotAnalysis = null;
   state.screenshotReviewEventId = null;
+  $('#screenshot-saved').classList.add('hidden');
   state.screenshotObjectUrl = URL.createObjectURL(file);
   $('#screenshot-image').src = state.screenshotObjectUrl;
   $('#screenshot-meta').textContent = `${file.name} · ${(file.size / 1024).toFixed(0)} KB`;
@@ -370,6 +409,7 @@ function renderScreenshotAnalysis(analysis) {
   state.screenshotReviewEventId = `vision-review:${analysis.purpose}:${Date.now()}`;
   $('#screenshot-summary').textContent = `${analysis.screenshotType.replaceAll('_', ' ')} · ${analysis.summary || 'Analysis complete.'}`;
   $('#screenshot-warnings').innerHTML = (analysis.warnings || []).map((warning) => `<p>${escapeHtml(warning)}</p>`).join('');
+  $('#screenshot-analysis-notes').open = !analysis.compatible || !state.screenshotCandidates.length;
   const pickMode = analysis.applyMode === 'pick-events';
   $('#screenshot-candidates').innerHTML = state.screenshotCandidates.map((candidate, index) => {
     const context = pickMode
@@ -424,6 +464,7 @@ async function applyScreenshotReview() {
     return;
   }
   let applied = 0;
+  let confirmation = '';
   try {
     if (analysis.applyMode === 'pick-events') {
       for (const row of included) {
@@ -442,7 +483,7 @@ async function applyScreenshotReview() {
         });
         if (result.applied) applied += 1;
       }
-      $('#screenshot-message').textContent = `${applied} reviewed pick${applied === 1 ? '' : 's'} applied. Recommendations refreshed below.`;
+      confirmation = `${applied} reviewed pick${applied === 1 ? '' : 's'} applied. Draft board refreshed and ready for the next pick.`;
     } else {
       const observations = included.map((row) => {
         const candidate = state.screenshotCandidates[Number(row.dataset.candidateIndex)];
@@ -467,10 +508,12 @@ async function applyScreenshotReview() {
         })
       });
       applied = result.review?.observations?.length || 0;
-      $('#screenshot-message').textContent = `${applied} reviewed ${analysis.purpose.replaceAll('_', ' ')} row${applied === 1 ? '' : 's'} saved. Board evidence annotations refreshed; ranking scores are unchanged.`;
+      const matched = result.review?.observations?.filter((item) => item.status === 'confirmed').length || 0;
+      confirmation = `${applied} evidence row${applied === 1 ? '' : 's'} saved (${matched} matched). Draft board refreshed; ranking scores remain unchanged.`;
     }
     await refresh();
     await refreshFleetSummary();
+    finishScreenshotReview(confirmation);
   } catch (error) {
     $('#screenshot-message').textContent = `${applied} row${applied === 1 ? '' : 's'} saved before review stopped: ${error.message}`;
     await refresh();
@@ -587,7 +630,10 @@ async function resetSession() {
   $('#screenshot-file').value = '';
   $('#screenshot-preview').classList.add('hidden');
   $('#screenshot-results').classList.add('hidden');
+  $('#screenshot-saved').classList.add('hidden');
   $('#analyze-screenshot').disabled = true;
+  clearTimeout(toastTimer);
+  $('#app-toast').classList.add('hidden');
   $('#manual-player-fields').classList.add('hidden');
   $('#manual-player-toggle').textContent = 'Player not found?';
   $('#draft-room').classList.add('hidden');

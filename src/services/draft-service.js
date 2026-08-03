@@ -153,7 +153,9 @@ class DraftService {
       const player = this.playerPool.players.find((candidate) => candidate.id === item.playerId) || null;
       const conflictsWithDraft = Boolean(player && draftedIds.has(player.id)
         && ['available_players', 'waiver_players'].includes(purpose));
-      const ownership = Number(item.ownershipPercent);
+      const ownership = item.ownershipPercent == null || item.ownershipPercent === ''
+        ? Number.NaN
+        : Number(item.ownershipPercent);
       return {
         observationId: String(item.candidateId || `${eventId}:${index + 1}`),
         playerId: player?.id || null,

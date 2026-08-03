@@ -80,7 +80,7 @@
       </div>
 
       <div class="content-grid">
-        <section class="panel">
+        <section id="board-panel" class="panel">
           <div class="section-head"><div><p class="eyebrow">LIVE BOARD</p><h2>Best available</h2></div><div class="board-status"><span id="updated-at" class="muted"></span><small>Scroll or click a player</small></div></div>
           <div class="table-wrap board-scroll" tabindex="0" aria-label="Scrollable best available players">
             <table>
@@ -94,8 +94,27 @@
           <p class="eyebrow">RECORD A PICK</p>
           <h2>Reconcile the room</h2>
           <p id="reconcile-help" class="muted">Until Yahoo OAuth is connected, record each selection here. The board refreshes immediately.</p>
+          <form id="pick-form" class="pick-form-priority">
+            <label for="player-search">Drafted player
+              <input id="player-search" type="search" list="player-options" placeholder="Search name, position, or team" autocomplete="off" required>
+              <datalist id="player-options"></datalist>
+              <small class="field-help">Searches every loaded undrafted player, not only the 12-player board.</small>
+            </label>
+            <button id="manual-player-toggle" type="button" class="inline-action">Player not found?</button>
+            <div id="manual-player-fields" class="manual-player-fields hidden">
+              <label>Position
+                <select id="manual-player-position"><option>QB</option><option>RB</option><option>WR</option><option>TE</option><option>K</option><option>DEF</option></select>
+              </label>
+              <label>NFL team <input id="manual-player-team" type="text" maxlength="8" placeholder="FA or team abbreviation"></label>
+              <small class="field-help">The typed name above will be recorded as an unresolved manual player.</small>
+            </div>
+            <label class="check"><input id="is-mine" type="checkbox"> This was my pick</label>
+            <button type="submit">Record completed pick</button>
+          </form>
+          <p id="pick-message" class="message" aria-live="polite"></p>
           <section id="screenshot-assistant" class="screenshot-assistant hidden">
             <p class="eyebrow">SCREENSHOT REVIEW</p>
+            <p id="screenshot-saved" class="save-confirmation hidden" role="status"></p>
             <label for="screenshot-purpose">What does this screenshot show?
               <select id="screenshot-purpose">
                 <option value="draft_picks">Completed draft picks</option>
@@ -113,37 +132,23 @@
               <p id="screenshot-meta" class="muted"></p>
             </div>
             <button id="analyze-screenshot" type="button" class="vision-button" disabled>Analyze screenshot</button>
-            <p id="screenshot-message" class="field-help">Choose a screenshot. Huddle will not send it anywhere until you click Analyze screenshot.</p>
+            <p id="screenshot-message" class="field-help" aria-live="polite">Choose a screenshot. Huddle will not send it anywhere until you click Analyze screenshot.</p>
             <div id="screenshot-results" class="screenshot-results hidden">
-              <p id="screenshot-summary"></p>
-              <div id="screenshot-warnings" class="vision-warnings"></div>
-              <div id="screenshot-candidates"></div>
-              <button id="apply-screenshot-review" type="button">Apply confirmed picks</button>
+              <details id="screenshot-analysis-notes" class="analysis-notes">
+                <summary>OpenRouter analysis notes</summary>
+                <p id="screenshot-summary"></p>
+                <div id="screenshot-warnings" class="vision-warnings"></div>
+              </details>
+              <div id="screenshot-candidates" class="screenshot-candidates-scroll" tabindex="0" aria-label="Extracted screenshot rows"></div>
+              <div class="screenshot-actions"><button id="apply-screenshot-review" type="button">Apply confirmed picks</button></div>
             </div>
           </section>
-          <form id="pick-form">
-            <label for="player-search">Drafted player
-              <input id="player-search" type="search" list="player-options" placeholder="Search name, position, or team" autocomplete="off" required>
-              <datalist id="player-options"></datalist>
-              <small class="field-help">Searches every loaded undrafted player, not only the 12-player board.</small>
-            </label>
-            <button id="manual-player-toggle" type="button" class="inline-action">Player not found?</button>
-            <div id="manual-player-fields" class="manual-player-fields hidden">
-              <label>Position
-                <select id="manual-player-position"><option>QB</option><option>RB</option><option>WR</option><option>TE</option><option>K</option><option>DEF</option></select>
-              </label>
-              <label>NFL team <input id="manual-player-team" type="text" maxlength="8" placeholder="FA or team abbreviation"></label>
-              <small class="field-help">The typed name above will be recorded as an unresolved manual player.</small>
-            </div>
-            <label class="check"><input id="is-mine" type="checkbox"> This was my pick</label>
-            <button type="submit">Record completed pick</button>
-          </form>
-          <p id="pick-message" class="message"></p>
           <div class="recent"><p class="eyebrow">RECENT PICKS</p><ol id="recent-picks"></ol></div>
         </aside>
       </div>
     </section>
   </main>
+  <div id="app-toast" class="app-toast hidden" role="status" aria-live="assertive"></div>
   <script src="/app.js" defer></script>
 </body>
 </html>

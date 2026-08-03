@@ -20,6 +20,7 @@
 - In manual mode, record a pick only after Yahoo shows it as completed.
 - In screenshot mode, select the evidence purpose before analysis. Only **Completed draft picks** may create pick events; **Available players**, **Team roster**, and **Waiver / free agents** save review-only visible-row evidence.
 - Review every extracted row. Correct or exclude uncertain matches, and remember that a player missing from a partial or paginated screenshot remains unknown.
+- After saving, confirm the green notification and board highlight, then continue from the player-search form at the top of the right rail. Screenshot candidates scroll inside their own review area.
 - Check **This was my pick** for selections made by the configured target team.
 - The large card is the balanced recommendation. The smaller cards expose safer and higher-upside roster constructions.
 - “Next-turn chance” estimates whether the player will remain available at the target team's next snake turn. It is not a guarantee.
