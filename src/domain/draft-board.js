@@ -3,9 +3,9 @@
 const { draftedRosterSize, nextUserPick, pickOwner, positionTargets } = require('./league');
 
 const STYLES = {
-  balanced: { vorp: 0.34, scarcity: 0.18, need: 0.18, urgency: 0.15, upside: 0.08, floor: 0.07, risk: 0.08 },
-  upside: { vorp: 0.26, scarcity: 0.14, need: 0.13, urgency: 0.13, upside: 0.28, floor: 0.06, risk: 0.04 },
-  safe: { vorp: 0.30, scarcity: 0.16, need: 0.22, urgency: 0.10, upside: 0.04, floor: 0.18, risk: 0.14 }
+  balanced: { vorp: 0.28, scarcity: 0.16, need: 0.17, urgency: 0.14, upside: 0.07, floor: 0.06, consensus: 0.12, risk: 0.08 },
+  upside: { vorp: 0.22, scarcity: 0.13, need: 0.12, urgency: 0.12, upside: 0.25, floor: 0.04, consensus: 0.12, risk: 0.04 },
+  safe: { vorp: 0.25, scarcity: 0.14, need: 0.20, urgency: 0.09, upside: 0.04, floor: 0.16, consensus: 0.12, risk: 0.14 }
 };
 
 function clamp(value, min = 0, max = 1) {
@@ -86,6 +86,8 @@ function whyLines(player, components, mine, targets, waitProbability) {
   if (components.vorp >= 0.7) lines.push('Strong value above the currently available replacement level.');
   if (components.scarcity >= 0.7) lines.push(`A meaningful ${player.position} tier drop follows this player.`);
   if (components.upside >= 0.75) lines.push('Ceiling projection creates above-average upside.');
+  if (player.sourceDisagreement) lines.push('FantasyPros and Tank01 disagree materially; review both source ranks.');
+  if (player.sleeperTrend?.direction === 'rising') lines.push('Sleeper add activity is rising and breaks close ranking ties.');
   if (waitProbability < 0.35) lines.push('Model says this player is unlikely to reach your next turn.');
   if (!lines.length) lines.push('Best blended projection, roster-fit, scarcity, and next-turn value.');
   return lines.slice(0, 3);
@@ -125,6 +127,7 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
       urgency: 1 - waitProbability,
       upside: Math.max(0, player.ceiling - player.projectedPoints),
       floor: player.floor,
+      consensus: Number.isFinite(player.sourceConsensus) ? player.sourceConsensus : 0.5,
       risk: clamp(Number(player.risk) || 0) + injuryPenalty(player),
       penalty: phasePenalty(player.position, currentOverall, league)
     };
@@ -139,8 +142,12 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
     const components = Object.fromEntries(
       ['vorp', 'scarcity', 'need', 'urgency', 'upside', 'floor'].map((key) => [key, normalized[key][index]])
     );
+    components.consensus = row.consensus;
     const positive = Object.entries(components).reduce((sum, [key, value]) => sum + value * weights[key], 0);
-    const score = clamp(positive - row.risk * weights.risk - row.penalty);
+    const trendAdjustment = row.player.sleeperTrend?.direction === 'rising' ? 0.01
+      : row.player.sleeperTrend?.direction === 'falling' ? -0.01
+        : 0;
+    const score = clamp(positive - row.risk * weights.risk - row.penalty + trendAdjustment);
     const sleeper = Number.isFinite(row.player.adp)
       && Number.isFinite(row.player.expertRank)
       && row.player.adp - row.player.expertRank >= 10
@@ -152,6 +159,7 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
       sleeper,
       waitProbability: Math.round(row.waitProbability * 1000) / 1000,
       risk: Math.round(row.risk * 1000) / 1000,
+      trendAdjustment: Math.round(trendAdjustment * 1000) / 10,
       components: Object.fromEntries(Object.entries(components).map(([key, value]) => [key, Math.round(value * 1000) / 1000])),
       why: whyLines(row.player, components, mine, targets, row.waitProbability)
     };
@@ -177,7 +185,7 @@ function buildRecommendationCard(input) {
       safe: safe.find((item) => item.player.id !== preferred?.player.id) || safe[0] || null,
       upside: upside.find((item) => item.player.id !== preferred?.player.id) || upside[0] || null
     },
-    board: board.slice(0, 12)
+    board
   };
 }
 

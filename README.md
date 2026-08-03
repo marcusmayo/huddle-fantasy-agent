@@ -12,8 +12,9 @@ The public example profile is a six-team, two-quarterback, full-PPR Yahoo league
 - Purpose-aware screenshot analysis through OpenRouter for completed picks, available players, team rosters, and waiver/free-agent pages, with a browser preview and mandatory operator confirmation before any state change.
 - Balanced, safe, and upside recommendations after every reconciled pick.
 - Value above replacement, roster need, positional tier drop, risk, next-turn availability, and early K/DEF discipline.
-- Sleeper flags based on Expert Consensus Rank versus ADP and ceiling.
-- Cached FantasyPros rankings/projection adapter with explicit truncated-response warnings.
+- Sleeper-value flags based on Expert Consensus Rank versus ADP and ceiling, plus separately attributed Sleeper add/drop trend badges.
+- Cached FantasyPros rankings/projection adapter with explicit truncated-response warnings and an optional Tank01 second-opinion adapter.
+- Transparent source reconciliation: FantasyPros 67.5% and Tank01 32.5% within the normalized source-consensus factor; Sleeper trends only break close ties.
 - Read-only Yahoo settings, teams, and draft-results adapter plus an idempotent polling loop.
 - Agent-core model routing with an integrity check. Models can explain a computed card but cannot reorder it.
 - Aegis-compatible health, color, manifest, status, and allowlisted read-only WebSocket command contracts.
@@ -42,6 +43,7 @@ Keep real credentials only in `.env` or a deployment secret manager:
 
 ```dotenv
 FANTASYPROS_API_KEY=...
+TANK01_API_KEY=...
 OPENROUTER_API_KEY=...
 YAHOO_CLIENT_ID=...
 YAHOO_CLIENT_SECRET=...
@@ -53,20 +55,20 @@ Player images are disabled by default. [FantasyPros states that its Sportradar-l
 
 ## How live draft recommendations work
 
-1. **Before the draft:** The evidence leader refreshes FantasyPros rankings and projections at startup and every 24 hours, caches each response for six hours, reconciles player IDs, and computes league-specific replacement levels from the Yahoo roster/scoring configuration. The schedule is shared across every league in the process.
+1. **Before the draft:** The evidence leader refreshes FantasyPros rankings and projections, optionally requests one Tank01 ADP snapshot, and loads cached Sleeper add/drop trends. It reconciles player identities before computing league-specific replacement levels from the Yahoo roster/scoring configuration. The daily schedule and evidence cache are shared across every league in the process.
 2. **Observe:** During the draft, the Yahoo read-only poller requests completed draft results every five seconds. Until OAuth is available, the operator records each completed pick in the dashboard. Screenshot analysis can post the same normalized pick events through the import endpoint.
 3. **Reconcile:** Every pick event has a stable event ID. Replayed Yahoo responses are ignored, drafted players are removed, and Huddle updates the target roster only when the Yahoo team key matches the configured target team.
-4. **Re-rank:** The deterministic engine recalculates the available board from projection value, replacement value, positional scarcity, roster need, risk, and the probability each player survives to the next snake turn.
-5. **Display:** The dashboard refreshes every 1.5 seconds and shows one preferred pick, a safer alternative, an upside alternative, a 12-player board, sleeper flags, evidence freshness, and clear warnings for incomplete coverage.
+4. **Re-rank:** The deterministic engine recalculates the available board from the reconciled source consensus, projection value, replacement value, positional scarcity, roster need, risk, and the probability each player survives to the next snake turn. FantasyPros supplies 67.5% and Tank01 32.5% of the source-consensus component when both match; if Tank01 is unavailable, the UI discloses an effective 100% FantasyPros fallback. Sleeper rising/falling activity contributes at most a one-point tie-break and never overrides Yahoo availability.
+5. **Display:** The dashboard refreshes every 1.5 seconds and shows one preferred pick, safer and upside alternatives, the full ranked player pool, position filtering, a user-resizable board, trend/source-disagreement badges, evidence freshness, and clear warnings for incomplete coverage.
 6. **Act:** The user makes the selection in Yahoo. Huddle has no endpoint or provider method that can submit a draft pick.
 
 In screenshot-review mode, the operator first declares what the PNG, JPEG, or WebP image shows: **Completed draft picks**, **Available players**, **Team roster**, or **Waiver / free agents**. The image remains local while previewing. Only an explicit **Analyze screenshot** action sends it transiently to OpenRouter's multimodal chat-completions endpoint; Huddle does not persist it. The vision model independently classifies the page and rejects a mismatch between the detected page and selected purpose.
 
 A valid Yahoo Draft Results or Draft Log image produces a pick review queue with pick number, player match, owner, and confidence. Confirmed rows become idempotent pick events. Player, roster, and waiver pages instead produce review-only visible-row evidence: an available-player row can add an `AVAILABLE` board tag, a waiver row can add `WAIVER`, and a roster row can add `ROSTER`. These tags never change deterministic scores or board order, never submit a waiver claim, and never create a pick. A missing player in a filtered, paginated, or partial screenshot remains unknown; absence is never treated as evidence that the player was drafted, unavailable, or off a roster. The operator can correct, include, or exclude every candidate before saving.
 
-Draft-pick entry remains above the screenshot assistant and the extracted review queue scrolls independently, so a long player list does not push the live controls off-screen. After a successful save, Huddle collapses the review, refreshes and highlights the board, displays both an in-panel confirmation and a temporary fixed notification, and returns focus to player search for the next completed pick.
+Draft-pick entry and Recent Picks remain above the screenshot assistant, and the extracted review queue scrolls independently, so a long player list does not push the live controls off-screen. The Best Available table can be filtered to QB, RB, WR, TE, K, or DEF and resized with Shorter, Taller, Fit screen, or the native bottom-edge drag handle. After a successful save, Huddle collapses the review, refreshes and highlights the board, displays both an in-panel confirmation and a temporary fixed notification, and returns focus to player search for the next completed pick.
 
-If a player is outside the visible 12-player board but present in the pool, the search field can find them. If the player is absent from the provider pool, **Player not found?** records a name, position, NFL team, and ownership as an unresolved manual pick so draft order and roster need remain accurate.
+If a player is outside the current filtered board but present in the pool, the search field can find them. If the player is absent from the provider pool, **Player not found?** records a name, position, NFL team, and ownership as an unresolved manual pick so draft order and roster need remain accurate.
 
 The browser refreshes Huddle's local session state every 1.5 seconds; this does not call FantasyPros or OpenRouter. The ranking step is local and typically completes in milliseconds. Yahoo polling and network latency determine how quickly a completed opponent pick appears. The recommendation remains visible if Yahoo temporarily stalls, while the status/evidence fields show that the state may be stale.
 
@@ -79,6 +81,8 @@ The status endpoint and **What built this draft board?** panel expose the automa
 The bigger free-tier limitation may be **truncated responses**, not the daily count. Huddle marks the pool incomplete whenever the API or headers report truncation and warns the operator to verify the preferred player. Productization or multiple leagues would require a production/commercial FantasyPros license; the public API page describes the free tier as non-production and reserves commercial/redistribution use for a commercial plan.
 
 FantasyPros documents `https://api.fantasypros.com/public/v2/json` as its base URL, the `x-api-key` header, and consensus ranking/projection endpoints on its [official API page](https://www.fantasypros.com/api-data/). Yahoo describes the Fantasy Sports API as providing league, team, and player data through its [developer portal](https://sports.yahoo.com/developer/).
+
+Tank01 documents NFL fantasy projections and a Basic plan capped at 1,000 requests per month on its [official site](https://www.tank01.com/). Huddle uses its RapidAPI key only for a cached `/getNFLADP` second opinion and applies a stricter local default of 40 requests per month. [Sleeper's official API documentation](https://docs.sleeper.com/) says its read-only API requires no authentication, asks consumers to cache the roughly 5 MB player map and fetch it no more than daily, and provides 24-hour trending add/drop endpoints. Huddle follows those cache rules and displays Sleeper attribution with every trend signal.
 
 OpenRouter documents base64 image inputs through the OpenAI-compatible [`/api/v1/chat/completions` multimodal endpoint](https://openrouter.ai/docs/guides/overview/multimodal/image-understanding). Huddle defaults vision to [`anthropic/claude-sonnet-4.6`](https://openrouter.ai/anthropic/claude-sonnet-4.6) and allows an operator override with `OPENROUTER_VISION_MODEL`.
 
@@ -98,7 +102,8 @@ OpenRouter documents base64 image inputs through the OpenAI-compatible [`/api/v1
 | `POST` | `/api/draft/sessions/:id/import-picks` | Record normalized screenshot/Yahoo pick events |
 | `POST` | `/api/draft/sessions/:id/analyze-screenshot` | Extract purpose-aware review candidates through OpenRouter |
 | `POST` | `/api/draft/sessions/:id/evidence-reviews` | Save operator-confirmed availability, roster, or waiver evidence without reranking |
-| `POST` | `/api/data/fantasypros/sync` | Refresh the cached player pool |
+| `POST` | `/api/data/fantasypros/sync` | Backward-compatible alias that refreshes the reconciled player evidence pool |
+| `POST` | `/api/data/sources/sync` | Refresh FantasyPros plus cached Tank01/Sleeper evidence within local budgets |
 | `GET` | `/api/agent-core/route` | Inspect the explanation-only model route |
 | `GET` | `/api/fleet/manifest` | Safe Aegis registration/capability contract |
 | `GET` | `/api/fleet/status` | Fleet and league readiness summary |
@@ -127,7 +132,7 @@ npm run check
 
 - `config/leagues/` — normalized Yahoo settings and provenance.
 - `src/domain/` — deterministic scoring and snake-draft logic.
-- `src/providers/` — read-only FantasyPros and Yahoo boundaries.
+- `src/providers/` — read-only FantasyPros, Tank01, Sleeper, OpenRouter, and Yahoo boundaries.
 - `src/services/` — idempotent draft session and event handling.
 - `src/agent-core/` — explanation-only integration policy.
 - `public/` — operator dashboard.

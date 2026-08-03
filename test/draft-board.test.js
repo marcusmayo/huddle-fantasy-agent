@@ -41,3 +41,21 @@ test('card identifies when the target team is on the clock', () => {
   assert.equal(card.onClock, true);
   assert.equal(card.nextUserPick, 10);
 });
+
+test('card returns the full ranked pool for client-side position filtering', () => {
+  const card = buildRecommendationCard({ players: pool.players, picks: [], league, draftSlot: 3 });
+  assert.equal(card.board.length, pool.players.length);
+  assert.equal(card.board.some((item) => item.player.position === 'K'), true);
+  assert.equal(card.board.some((item) => item.player.position === 'DEF'), true);
+});
+
+test('Sleeper trend is limited to a small ranking tie-break', () => {
+  const players = [
+    { id: 'a', name: 'Rising Player', position: 'WR', team: 'A', projectedPoints: 250, floor: 210, ceiling: 290, expertRank: 10, adp: 10, risk: 0.1, sourceConsensus: 0.5, sleeperTrend: { direction: 'rising' } },
+    { id: 'b', name: 'Falling Player', position: 'WR', team: 'B', projectedPoints: 250, floor: 210, ceiling: 290, expertRank: 10, adp: 10, risk: 0.1, sourceConsensus: 0.5, sleeperTrend: { direction: 'falling' } }
+  ];
+  const board = scoreAvailablePlayers({ players, picks: [], league, draftSlot: 3, style: 'balanced' });
+  assert.equal(board[0].player.id, 'a');
+  assert.equal(board[0].trendAdjustment, 1);
+  assert.equal(board[1].trendAdjustment, -1);
+});
