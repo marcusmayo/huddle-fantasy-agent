@@ -7,6 +7,7 @@ const state = {
   league: null,
   session: null,
   recommendation: null,
+  boardPosition: 'ALL',
   availablePlayers: [],
   selectedPlayerId: null,
   searchDirty: false,
@@ -21,6 +22,7 @@ const state = {
 };
 const $ = (selector) => document.querySelector(selector);
 let toastTimer = null;
+const BOARD_HEIGHT_KEY = 'huddle-best-available-height';
 const SCREENSHOT_PURPOSE_COPY = {
   draft_picks: {
     help: 'Use a Yahoo Draft Results or Draft Log image. Only confirmed rows become pick events.',
@@ -275,6 +277,51 @@ function renderChoice(prefix, choice) {
   $(`#${prefix}-meta`).textContent = choice ? `${choice.player.position} · ${choice.score} score` : '';
 }
 
+function trendBadge(player) {
+  if (player.sleeperTrend?.direction === 'rising') return '<span class="badge trend-rising">SLEEPER RISING</span>';
+  if (player.sleeperTrend?.direction === 'falling') return '<span class="badge trend-falling">SLEEPER FALLING</span>';
+  return '';
+}
+
+function renderBoardRows() {
+  const position = state.boardPosition;
+  const board = state.recommendation?.board || [];
+  const visible = position === 'ALL' ? board : board.filter((item) => item.player.position === position);
+  $('#board-title').textContent = position === 'ALL' ? 'Best available' : `Best available · ${position}`;
+  $('#board-body').innerHTML = visible.length ? visible.map((item, index) => `
+    <tr class="board-player" data-player-id="${escapeHtml(item.player.id)}" tabindex="0" role="button" aria-label="Select ${escapeHtml(item.player.name)} as the drafted player">
+      <td>${index + 1}</td>
+      <td><strong>${escapeHtml(item.player.name)}</strong><small>${escapeHtml(item.player.team)}</small></td>
+      <td><span class="position">${escapeHtml(item.player.position)}</span></td>
+      <td><strong>${item.score}</strong></td>
+      <td>${Math.round(item.waitProbability * 100)}%</td>
+      <td>${[
+        item.sleeper ? '<span class="badge">SLEEPER</span>' : '',
+        trendBadge(item.player),
+        item.player.sourceDisagreement ? '<span class="badge source-split">SOURCES SPLIT</span>' : '',
+        ...(item.evidenceTags || []).map((tag) => `<span class="badge evidence-tag">${escapeHtml(tag)}</span>`)
+      ].filter(Boolean).join(' ')}</td>
+    </tr>`).join('') : '<tr><td colspan="6" class="empty-board">No undrafted players are loaded at this position.</td></tr>';
+  document.querySelectorAll('.board-player').forEach((row) => {
+    row.addEventListener('click', () => selectPlayer(row.dataset.playerId, true));
+    row.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        selectPlayer(row.dataset.playerId, true);
+      }
+    });
+  });
+  syncPlayerHighlights();
+}
+
+function setBoardHeight(height) {
+  const board = $('#board-scroll');
+  const maximum = Math.max(440, Math.floor(window.innerHeight * 0.82));
+  const next = Math.max(280, Math.min(maximum, Math.round(height)));
+  board.style.height = `${next}px`;
+  localStorage.setItem(BOARD_HEIGHT_KEY, String(next));
+}
+
 function renderRecommendation(card) {
   state.recommendation = card;
   $('#current-pick').textContent = card.currentOverall;
@@ -297,28 +344,7 @@ function renderRecommendation(card) {
   makePlayerSelectable(document.querySelector('.choice.safe'), card.alternatives.safe?.player);
   makePlayerSelectable(document.querySelector('.choice.upside'), card.alternatives.upside?.player);
   $('#updated-at').textContent = `Updated ${new Date(card.generatedAt).toLocaleTimeString()}`;
-  $('#board-body').innerHTML = card.board.map((item, index) => `
-    <tr class="board-player" data-player-id="${escapeHtml(item.player.id)}" tabindex="0" role="button" aria-label="Select ${escapeHtml(item.player.name)} as the drafted player">
-      <td>${index + 1}</td>
-      <td><strong>${escapeHtml(item.player.name)}</strong><small>${escapeHtml(item.player.team)}</small></td>
-      <td><span class="position">${escapeHtml(item.player.position)}</span></td>
-      <td><strong>${item.score}</strong></td>
-      <td>${Math.round(item.waitProbability * 100)}%</td>
-      <td>${[
-        item.sleeper ? '<span class="badge">SLEEPER</span>' : '',
-        ...(item.evidenceTags || []).map((tag) => `<span class="badge evidence-tag">${escapeHtml(tag)}</span>`)
-      ].filter(Boolean).join(' ')}</td>
-    </tr>`).join('');
-  document.querySelectorAll('.board-player').forEach((row) => {
-    row.addEventListener('click', () => selectPlayer(row.dataset.playerId, true));
-    row.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        selectPlayer(row.dataset.playerId, true);
-      }
-    });
-  });
-  syncPlayerHighlights();
+  renderBoardRows();
 }
 
 function renderBoardEvidence(card) {
@@ -335,8 +361,15 @@ function renderBoardEvidence(card) {
   const sourceTime = evidence.fetchedAt ? new Date(evidence.fetchedAt).toLocaleString() : 'Bundled fixture';
   const refresh = state.providerStatus?.fantasyPros?.autoRefresh;
   const quota = refresh?.quota;
+  const tank01 = state.providerStatus?.tank01;
+  const sleeper = state.providerStatus?.sleeper;
   const vision = state.providerStatus?.vision;
   const screenshotReviews = evidence.screenshotReviews || {};
+  const reconciliation = evidence.sourceReconciliation || {};
+  const configuredSourceWeights = reconciliation.configuredWeights || {};
+  const effectiveSourceWeights = reconciliation.effectiveWeights || {};
+  const sourceCoverage = reconciliation.coverage || {};
+  const sourceErrors = reconciliation.errors || [];
   const rows = [
     ['Player evidence', `${evidence.source || 'unknown'} · ${evidence.season || 'season unknown'} · ${evidence.complete ? 'complete' : 'incomplete'}`],
     ['Evidence timestamp', sourceTime],
@@ -346,7 +379,13 @@ function renderBoardEvidence(card) {
     ['Player inputs', (evidence.ranking?.playerInputs || []).join(' · ')],
     ['Factor weights', weights || 'Not available'],
     ['Computed logic', (evidence.ranking?.computedFactors || []).join(' · ')],
+    ['Source consensus', `Configured FantasyPros ${Math.round((configuredSourceWeights.fantasyPros ?? 0.675) * 100)}% · Tank01 ${Math.round((configuredSourceWeights.tank01 ?? 0.325) * 100)}% · effective FantasyPros ${Math.round((effectiveSourceWeights.fantasyPros ?? 1) * 100)}% / Tank01 ${Math.round((effectiveSourceWeights.tank01 ?? 0) * 100)}%`],
+    ['Source coverage', `${sourceCoverage.tank01Matched ?? 0}/${sourceCoverage.primaryPlayers ?? state.availablePlayers.length} Tank01 matches · ${sourceCoverage.sleeperMatched ?? 0} Sleeper trend matches`],
+    ['Source warnings', sourceErrors.length ? sourceErrors.map((item) => `${item.provider}: ${item.message}`).join(' · ') : 'No optional-source errors'],
     ['FantasyPros refresh', refresh && quota ? `${refresh.enabled ? `automatic every ${refresh.intervalHours}h` : 'manual/cache only'} · ${quota.estimatedUsed}/${quota.budget} local daily request budget used` : 'Status unavailable'],
+    ['Tank01 evidence', tank01 ? `${tank01.configured ? 'enabled' : 'key not configured'} · 24h cache · ${tank01.quota.estimatedUsed}/${tank01.quota.budget} local monthly budget used` : 'Status unavailable'],
+    ['Sleeper trend', sleeper ? `${sleeper.configured ? 'enabled' : 'disabled'} · ${sleeper.role} · attribution: ${sleeper.attribution}` : 'Status unavailable'],
+    ['Yahoo authority', reconciliation.yahooRole || 'Yahoo league scoring and confirmed availability remain authoritative filters.'],
     ['Screenshot vision', vision ? `${vision.configured ? 'enabled' : 'not configured'} · ${vision.provider} · ${vision.model} · confirmation required` : 'Status unavailable'],
     ['Screenshot evidence', screenshotReviews.count
       ? `${screenshotReviews.count} saved review${screenshotReviews.count === 1 ? '' : 's'} · ${screenshotReviews.confirmedObservations} matched visible rows · latest ${String(screenshotReviews.latestPurpose || '').replaceAll('_', ' ')}`
@@ -655,6 +694,21 @@ async function init() {
     const player = findPlayer(event.target.value);
     if (player) selectPlayer(player.id);
   });
+  $('#position-filter').addEventListener('change', (event) => {
+    state.boardPosition = event.target.value;
+    renderBoardRows();
+  });
+  $('#board-shorter').addEventListener('click', () => setBoardHeight($('#board-scroll').getBoundingClientRect().height - 180));
+  $('#board-taller').addEventListener('click', () => setBoardHeight($('#board-scroll').getBoundingClientRect().height + 180));
+  $('#board-fit').addEventListener('click', () => setBoardHeight(window.innerHeight - 180));
+  const savedBoardHeight = Number(localStorage.getItem(BOARD_HEIGHT_KEY));
+  if (Number.isFinite(savedBoardHeight) && savedBoardHeight > 0) setBoardHeight(savedBoardHeight);
+  if ('ResizeObserver' in window) {
+    new ResizeObserver(([entry]) => {
+      const height = Math.round(entry.contentRect.height);
+      if (height >= 280) localStorage.setItem(BOARD_HEIGHT_KEY, String(height));
+    }).observe($('#board-scroll'));
+  }
   $('#screenshot-file').addEventListener('change', reviewScreenshot);
   $('#screenshot-purpose').addEventListener('change', () => updateScreenshotPurpose());
   $('#analyze-screenshot').addEventListener('click', analyzeScreenshot);

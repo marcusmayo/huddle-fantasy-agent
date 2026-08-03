@@ -115,6 +115,8 @@ function loadRuntimeConfig() {
     fantasyProsAutoRefreshEnabled: parseBoolean(process.env.HUDDLE_FANTASYPROS_AUTO_REFRESH_ENABLED, true),
     fantasyProsRefreshIntervalMs: Math.max(6, Number(process.env.HUDDLE_FANTASYPROS_REFRESH_INTERVAL_HOURS || 24)) * 60 * 60 * 1000,
     fantasyProsCacheDir: path.resolve(process.env.FANTASYPROS_CACHE_DIR || './data/fantasypros-cache'),
+    tank01CacheDir: path.resolve(process.env.TANK01_CACHE_DIR || './data/tank01-cache'),
+    sleeperCacheDir: path.resolve(process.env.SLEEPER_CACHE_DIR || './data/sleeper-cache'),
     playerSnapshotFile: snapshotPath,
     season: Number(process.env.HUDDLE_SEASON || new Date().getFullYear()),
     league: defaultEntry.config,

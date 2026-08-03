@@ -81,8 +81,29 @@
 
       <div class="content-grid">
         <section id="board-panel" class="panel">
-          <div class="section-head"><div><p class="eyebrow">LIVE BOARD</p><h2>Best available</h2></div><div class="board-status"><span id="updated-at" class="muted"></span><small>Scroll or click a player</small></div></div>
-          <div class="table-wrap board-scroll" tabindex="0" aria-label="Scrollable best available players">
+          <div class="section-head board-heading">
+            <div><p class="eyebrow">LIVE BOARD</p><h2 id="board-title">Best available</h2></div>
+            <div class="board-status"><span id="updated-at" class="muted"></span><small>Filter, resize, or click a player</small></div>
+          </div>
+          <div class="board-controls" aria-label="Best available controls">
+            <label for="position-filter">Position
+              <select id="position-filter">
+                <option value="ALL">All positions</option>
+                <option value="QB">Quarterback</option>
+                <option value="RB">Running back</option>
+                <option value="WR">Wide receiver</option>
+                <option value="TE">Tight end</option>
+                <option value="K">Kicker</option>
+                <option value="DEF">Defense</option>
+              </select>
+            </label>
+            <div class="board-size-controls" aria-label="Board height">
+              <button id="board-shorter" type="button" class="ghost compact">− Shorter</button>
+              <button id="board-taller" type="button" class="ghost compact">+ Taller</button>
+              <button id="board-fit" type="button" class="ghost compact">Fit screen</button>
+            </div>
+          </div>
+          <div id="board-scroll" class="table-wrap board-scroll" tabindex="0" aria-label="Resizable best available players">
             <table>
               <thead><tr><th>#</th><th>Player</th><th>Pos</th><th>Score</th><th>Next-turn chance</th><th>Flag</th></tr></thead>
               <tbody id="board-body"></tbody>
@@ -98,7 +119,7 @@
             <label for="player-search">Drafted player
               <input id="player-search" type="search" list="player-options" placeholder="Search name, position, or team" autocomplete="off" required>
               <datalist id="player-options"></datalist>
-              <small class="field-help">Searches every loaded undrafted player, not only the 12-player board.</small>
+              <small class="field-help">Searches every loaded undrafted player, regardless of the current position filter.</small>
             </label>
             <button id="manual-player-toggle" type="button" class="inline-action">Player not found?</button>
             <div id="manual-player-fields" class="manual-player-fields hidden">
@@ -112,6 +133,7 @@
             <button type="submit">Record completed pick</button>
           </form>
           <p id="pick-message" class="message" aria-live="polite"></p>
+          <div class="recent"><p class="eyebrow">RECENT PICKS</p><ol id="recent-picks"></ol></div>
           <section id="screenshot-assistant" class="screenshot-assistant hidden">
             <p class="eyebrow">SCREENSHOT REVIEW</p>
             <p id="screenshot-saved" class="save-confirmation hidden" role="status"></p>
@@ -143,7 +165,6 @@
               <div class="screenshot-actions"><button id="apply-screenshot-review" type="button">Apply confirmed picks</button></div>
             </div>
           </section>
-          <div class="recent"><p class="eyebrow">RECENT PICKS</p><ol id="recent-picks"></ol></div>
         </aside>
       </div>
     </section>

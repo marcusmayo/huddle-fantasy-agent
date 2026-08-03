@@ -239,9 +239,16 @@ class DraftService {
         ranking: {
           algorithm: 'deterministic-v1',
           weights: structuredClone(STYLES.balanced),
-          playerInputs: ['projected points', 'floor', 'ceiling', 'ECR', 'ADP', 'tier', 'injury status', 'risk'],
-          computedFactors: ['value over replacement', 'positional scarcity', 'roster need', 'next-turn urgency', 'upside', 'floor', 'risk', 'K/DEF draft phase']
+          playerInputs: ['projected points', 'floor', 'ceiling', 'ECR', 'ADP', 'FantasyPros normalized positional rank', 'Tank01 ADP/projection rank', 'Sleeper add/drop trend', 'tier', 'injury status', 'risk'],
+          computedFactors: ['source consensus', 'value over replacement', 'positional scarcity', 'roster need', 'next-turn urgency', 'upside', 'floor', 'risk', 'K/DEF draft phase']
         },
+        sourceReconciliation: structuredClone(this.playerPool.sourceEvidence || {
+          algorithm: 'primary-source-only',
+          configuredWeights: { fantasyPros: 0.675, tank01: 0.325 },
+          effectiveWeights: { fantasyPros: 1, tank01: 0 },
+          sleeperRole: 'market tie-breaker only',
+          yahooRole: 'league scoring and player availability are authoritative filters'
+        }),
         screenshotReviews: {
           count: session.evidenceReviews.length,
           latestPurpose: latestReview?.purpose || null,

@@ -60,7 +60,7 @@ function executeReadCommand(prompt, runtime, draftServices) {
       currentOverall: card.currentOverall,
       onClock: card.onClock,
       nextUserPick: card.nextUserPick,
-      board: card.board,
+      board: card.board.slice(0, 12),
       evidence: card.evidence,
       execution: card.execution
     };

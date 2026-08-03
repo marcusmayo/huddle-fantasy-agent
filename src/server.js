@@ -10,8 +10,11 @@ const { colorContract, fleetManifest, fleetStatus } = require('./fleet/status');
 const { headshotPolicy, sanitizePlayerPool } = require('./media/player-headshots');
 const { FantasyProsClient } = require('./providers/fantasypros');
 const { OpenRouterVisionClient } = require('./providers/openrouter-vision');
+const { SleeperClient } = require('./providers/sleeper');
+const { Tank01Client } = require('./providers/tank01');
 const { DraftService } = require('./services/draft-service');
 const { FantasyProsRefreshController } = require('./services/fantasypros-refresh');
+const { reconcilePlayerEvidence } = require('./services/player-evidence');
 const { JsonStateStore } = require('./storage/json-state-store');
 
 const PUBLIC_DIR = path.resolve(__dirname, '../public');
@@ -145,14 +148,36 @@ async function handleDraftRoutes(request, response, service, parts, { visionClie
   return false;
 }
 
-async function syncFantasyPros(runtime, fantasyProsClient, input = {}) {
+async function syncFantasyPros(runtime, fantasyProsClient, input = {}, { tank01Client, sleeperClient } = {}) {
   const rawPool = await fantasyProsClient.loadDraftPool({
     season: input.season || runtime.season,
     scoring: input.scoring || 'PPR',
     force: Boolean(input.force)
   });
-  const pool = sanitizePlayerPool(rawPool, runtime.playerHeadshots);
-  if (!pool.players.length) throw Object.assign(new Error('FantasyPros returned no usable projected players'), { code: 'EMPTY_PLAYER_POOL' });
+  const primaryPool = sanitizePlayerPool(rawPool, runtime.playerHeadshots);
+  if (!primaryPool.players.length) throw Object.assign(new Error('FantasyPros returned no usable projected players'), { code: 'EMPTY_PLAYER_POOL' });
+  const errors = [];
+  const capture = async (provider, operation) => {
+    try { return await operation(); } catch (error) {
+      errors.push({ provider, message: error.message, code: error.code || null });
+      return null;
+    }
+  };
+  const [tank01, sleeper] = await Promise.all([
+    tank01Client?.configured
+      ? capture('tank01', () => tank01Client.loadDraftEvidence({ scoring: input.scoring || 'PPR', force: Boolean(input.force) }))
+      : Promise.resolve(null),
+    sleeperClient?.enabled
+      ? capture('sleeper', () => sleeperClient.loadDraftEvidence({ force: Boolean(input.force) }))
+      : Promise.resolve(null)
+  ]);
+  const pool = sanitizePlayerPool(reconcilePlayerEvidence(primaryPool, { tank01, sleeper, errors }), runtime.playerHeadshots);
+  runtime.sourceSyncStatus = {
+    lastAttemptAt: new Date().toISOString(),
+    tank01Loaded: Boolean(tank01?.players?.length),
+    sleeperLoaded: Boolean(sleeper?.players?.length),
+    errors
+  };
   Object.assign(runtime.playerPool, pool);
   if (runtime.playerSnapshotFile) {
     fs.mkdirSync(path.dirname(runtime.playerSnapshotFile), { recursive: true });
@@ -160,10 +185,16 @@ async function syncFantasyPros(runtime, fantasyProsClient, input = {}) {
     fs.writeFileSync(tempPath, `${JSON.stringify(pool, null, 2)}\n`, { mode: 0o600 });
     fs.renameSync(tempPath, runtime.playerSnapshotFile);
   }
-  return { source: pool.source, complete: pool.complete, players: pool.players.length, fetchedAt: pool.fetchedAt };
+  return {
+    source: pool.source,
+    complete: pool.complete,
+    players: pool.players.length,
+    fetchedAt: pool.fetchedAt,
+    sourceEvidence: pool.sourceEvidence
+  };
 }
 
-function createHandler({ runtime, draftServices, fantasyProsClient, fantasyProsRefresh, visionClient }) {
+function createHandler({ runtime, draftServices, fantasyProsClient, fantasyProsRefresh, tank01Client, sleeperClient, visionClient }) {
   return async function handler(request, response) {
     const url = new URL(request.url, 'http://huddle.local');
     const segments = url.pathname.split('/').filter(Boolean).map(decodeURIComponent);
@@ -223,6 +254,20 @@ function createHandler({ runtime, draftServices, fantasyProsClient, fantasyProsR
             syncEnabled: runtime.fantasyProsSyncEnabled,
             autoRefresh: fantasyProsRefresh.status()
           },
+          tank01: {
+            configured: tank01Client.configured,
+            cacheTtlHours: 24,
+            quota: tank01Client.quotaStatus(),
+            role: '32.5% of normalized source consensus when matched'
+          },
+          sleeper: {
+            configured: sleeperClient.configured,
+            authenticationRequired: false,
+            playerMapCacheTtlHours: 24,
+            trendCacheTtlHours: 6,
+            role: 'rising/falling market tie-breaker',
+            attribution: 'Sleeper'
+          },
           vision: {
             provider: 'openrouter',
             configured: visionClient.configured,
@@ -238,6 +283,8 @@ function createHandler({ runtime, draftServices, fantasyProsClient, fantasyProsR
           },
           leagueCount: runtime.leagues.length,
           activePlayerSource: runtime.playerPool.source,
+          sourceReconciliation: runtime.playerPool.sourceEvidence || null,
+          sourceSyncStatus: runtime.sourceSyncStatus || null,
           playerCoverageComplete: runtime.playerPool.complete !== false,
           playerHeadshots: {
             enabled: runtime.playerHeadshots.enabled,
@@ -249,7 +296,7 @@ function createHandler({ runtime, draftServices, fantasyProsClient, fantasyProsR
       if (request.method === 'GET' && url.pathname === '/api/agent-core/route') {
         return json(response, 200, explanationRoute(url.searchParams.get('tier') || 'routine'));
       }
-      if (request.method === 'POST' && url.pathname === '/api/data/fantasypros/sync') {
+      if (request.method === 'POST' && ['/api/data/fantasypros/sync', '/api/data/sources/sync'].includes(url.pathname)) {
         if (!runtime.fantasyProsSyncEnabled) {
           return json(response, 403, { error: 'SYNC_DISABLED', message: 'This fleet member is not the FantasyPros evidence leader.' });
         }
@@ -287,6 +334,9 @@ function normalizeRuntime(runtime) {
   runtime.fantasyProsAutoRefreshEnabled ??= false;
   runtime.fantasyProsRefreshIntervalMs ||= 24 * 60 * 60 * 1000;
   runtime.fantasyProsCacheDir ||= path.resolve('./data/fantasypros-cache');
+  runtime.tank01CacheDir ||= path.resolve('./data/tank01-cache');
+  runtime.sleeperCacheDir ||= path.resolve('./data/sleeper-cache');
+  runtime.sourceSyncStatus ||= null;
   runtime.playerHeadshots = headshotPolicy(runtime.playerHeadshots);
   runtime.playerPool = sanitizePlayerPool(runtime.playerPool, runtime.playerHeadshots);
   return runtime;
@@ -300,15 +350,25 @@ function buildApp(inputRuntime = loadRuntimeConfig(), options = {}) {
     new DraftService({ league: entry.config, playerPool: runtime.playerPool, store: storeFactory(entry) })
   ]));
   const fantasyProsClient = options.fantasyProsClient || new FantasyProsClient({ cacheDir: runtime.fantasyProsCacheDir });
+  const tank01Client = options.tank01Client || new Tank01Client({ cacheDir: runtime.tank01CacheDir });
+  const sleeperClient = options.sleeperClient || new SleeperClient({ cacheDir: runtime.sleeperCacheDir });
   const visionClient = options.visionClient || new OpenRouterVisionClient();
   const fantasyProsRefresh = new FantasyProsRefreshController({
     enabled: runtime.fantasyProsSyncEnabled && runtime.fantasyProsAutoRefreshEnabled,
     configured: fantasyProsClient.configured,
     intervalMs: runtime.fantasyProsRefreshIntervalMs,
-    sync: (input) => syncFantasyPros(runtime, fantasyProsClient, input),
+    sync: (input) => syncFantasyPros(runtime, fantasyProsClient, input, { tank01Client, sleeperClient }),
     quotaStatus: () => fantasyProsClient.quotaStatus()
   });
-  const server = http.createServer(createHandler({ runtime, draftServices, fantasyProsClient, fantasyProsRefresh, visionClient }));
+  const server = http.createServer(createHandler({
+    runtime,
+    draftServices,
+    fantasyProsClient,
+    fantasyProsRefresh,
+    tank01Client,
+    sleeperClient,
+    visionClient
+  }));
   const commandRelay = attachReadOnlyCommandRelay(server, { runtime, draftServices });
   return {
     server,
@@ -317,6 +377,8 @@ function buildApp(inputRuntime = loadRuntimeConfig(), options = {}) {
     draftService: draftServices.get(runtime.defaultLeagueId),
     commandRelay,
     fantasyProsRefresh,
+    tank01Client,
+    sleeperClient,
     visionClient
   };
 }
