@@ -17,6 +17,7 @@ const state = {
   screenshotAnalysis: null,
   screenshotReviewEventId: null,
   providerStatus: null,
+  leagueOnboarding: null,
   providerStatusAt: 0,
   timer: null
 };
@@ -186,11 +187,18 @@ function renderLeagueFleet() {
       <span class="league-state"><i></i>${league.activeSessions ? `${league.activeSessions} active draft` : 'ready'}</span>
       <strong>${escapeHtml(league.name)}</strong>
       <span>${escapeHtml(league.targetTeam)} · ${league.teamCount} teams</span>
-      <small>Yahoo ${escapeHtml(league.id)} · ${league.sessions} session${league.sessions === 1 ? '' : 's'}</small>
+      <small>Yahoo ${escapeHtml(league.id)} · ${league.sessions} session${league.sessions === 1 ? '' : 's'} · ${escapeHtml(league.verificationStatus || 'unverified')}</small>
     </button>`).join('');
   document.querySelectorAll('.league-card').forEach((card) => {
     card.addEventListener('click', () => selectLeague(card.dataset.leagueId));
   });
+}
+
+function renderLeagueSelector() {
+  $('#league-select').innerHTML = state.leagues.map((league) =>
+    `<option value="${escapeHtml(league.id)}">${escapeHtml(league.name)} · ${escapeHtml(league.targetTeam)}</option>`
+  ).join('');
+  if (state.leagueId) $('#league-select').value = state.leagueId;
 }
 
 async function loadFleet() {
@@ -199,10 +207,64 @@ async function loadFleet() {
   state.defaultLeagueId = fleet.defaultLeagueId;
   const saved = localStorage.getItem('huddle-active-league');
   const selected = state.leagues.some((league) => league.id === saved) ? saved : state.defaultLeagueId;
-  $('#league-select').innerHTML = state.leagues.map((league) =>
-    `<option value="${escapeHtml(league.id)}">${escapeHtml(league.name)} · ${escapeHtml(league.targetTeam)}</option>`
-  ).join('');
+  renderLeagueSelector();
   await selectLeague(selected);
+}
+
+function closeLeagueDialog() {
+  const dialog = $('#league-dialog');
+  if (dialog.open) dialog.close();
+  $('#league-form-message').textContent = '';
+}
+
+function openLeagueDialog() {
+  const dialog = $('#league-dialog');
+  $('#league-form-message').textContent = '';
+  if (!state.leagueOnboarding?.enabled) {
+    showToast(state.leagueOnboarding?.message || 'League onboarding is disabled on this instance.');
+    return;
+  }
+  dialog.showModal();
+  setTimeout(() => $('#add-league-name').focus(), 50);
+}
+
+function rosterInput() {
+  return Object.fromEntries([...document.querySelectorAll('[data-roster-slot]')]
+    .map((input) => [input.dataset.rosterSlot, Number(input.value)]));
+}
+
+async function addLeague(event) {
+  event.preventDefault();
+  const button = $('#save-league');
+  button.disabled = true;
+  $('#league-form-message').textContent = 'Saving isolated league configuration…';
+  try {
+    const result = await api('/api/leagues', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: $('#add-league-name').value,
+        targetTeam: $('#add-target-team').value,
+        teamCount: Number($('#add-team-count').value),
+        draftSlot: $('#add-draft-slot').value,
+        receptionPoints: Number($('#add-reception-points').value),
+        passingTouchdown: Number($('#add-passing-td').value),
+        roster: rosterInput(),
+        yahooLeagueKey: $('#add-yahoo-league-key').value,
+        yahooTeamKey: $('#add-yahoo-team-key').value
+      })
+    });
+    state.leagues = (await api('/api/leagues')).leagues;
+    renderLeagueSelector();
+    renderLeagueFleet();
+    closeLeagueDialog();
+    $('#league-form').reset();
+    showToast(`${result.league.name} added. Yahoo verification is still required.`);
+    await selectLeague(result.league.id);
+  } catch (error) {
+    $('#league-form-message').textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
 }
 
 async function selectLeague(leagueId) {
@@ -648,6 +710,7 @@ async function recordPick(event) {
 async function refreshFleetSummary() {
   const fleet = await api('/api/leagues');
   state.leagues = fleet.leagues;
+  renderLeagueSelector();
   renderLeagueFleet();
 }
 
@@ -681,6 +744,14 @@ async function resetSession() {
 }
 
 async function init() {
+  $('#add-league').addEventListener('click', openLeagueDialog);
+  $('#league-form').addEventListener('submit', addLeague);
+  $('#close-league-dialog').addEventListener('click', closeLeagueDialog);
+  $('#cancel-league').addEventListener('click', closeLeagueDialog);
+  $('#league-dialog').addEventListener('click', (event) => {
+    if (event.target === $('#league-dialog')) closeLeagueDialog();
+  });
+  $('#add-team-count').addEventListener('input', (event) => { $('#add-draft-slot').max = event.target.value; });
   $('#session-form').addEventListener('submit', createSession);
   $('#pick-form').addEventListener('submit', recordPick);
   $('#new-session').addEventListener('click', resetSession);
@@ -722,7 +793,13 @@ async function init() {
       syncPlayerHighlights();
     }
   });
-  state.providerStatus = await api('/api/provider-status');
+  [state.providerStatus, state.leagueOnboarding] = await Promise.all([
+    api('/api/provider-status'),
+    api('/api/leagues/onboarding')
+  ]);
+  $('#league-onboarding-status').textContent = state.leagueOnboarding.message;
+  $('#add-league').disabled = !state.leagueOnboarding.enabled;
+  $('#add-league').title = state.leagueOnboarding.enabled ? 'Add a league to this Huddle fleet' : state.leagueOnboarding.message;
   state.providerStatusAt = Date.now();
   await loadFleet();
 }
