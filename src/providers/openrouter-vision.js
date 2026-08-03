@@ -140,7 +140,9 @@ function reconcileObservedPlayers(analysis, { purpose, players, session }) {
     const status = conflictsWithDraft ? 'conflict-drafted'
       : matched ? 'matched'
         : 'unresolved-player';
-    const ownership = Number(candidate.ownershipPercent);
+    const ownership = candidate.ownershipPercent == null || candidate.ownershipPercent === ''
+      ? Number.NaN
+      : Number(candidate.ownershipPercent);
     return {
       candidateId: `vision:${purpose}:${index + 1}`,
       playerId: matched?.id || null,

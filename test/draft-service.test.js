@@ -78,6 +78,7 @@ test('reviewed availability evidence annotates but does not rerank the board', (
   });
   assert.equal(result.applied, true);
   assert.equal(result.session.picks.length, 0);
+  assert.equal(result.review.observations[0].ownershipPercent, null);
 
   const after = drafts.recommendation(session.id);
   assert.deepEqual(after.board.map((item) => [item.player.id, item.score]), before.board.map((item) => [item.player.id, item.score]));

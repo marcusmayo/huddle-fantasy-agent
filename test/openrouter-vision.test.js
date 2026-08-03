@@ -64,7 +64,7 @@ for (const example of [
     purpose: 'available_players',
     screenshotType: 'player_list',
     player: { playerName: 'Running Back Alpha', position: 'RB', nflTeam: 'AFC', status: 'FA', confidence: 0.94 },
-    expected: { applyMode: 'evidence-review', playerId: 'demo-rb-1', evidenceStatus: 'fa' }
+    expected: { applyMode: 'evidence-review', playerId: 'demo-rb-1', evidenceStatus: 'fa', ownershipPercent: null }
   },
   {
     purpose: 'team_roster',
