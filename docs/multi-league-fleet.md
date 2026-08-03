@@ -14,6 +14,22 @@ Multiple containers on one VM are feasible because Huddle is a small Node servic
 
 ## Mode A: native portfolio container
 
+### Dashboard onboarding
+
+On loopback instances, click **+ Add league** above the fleet cards. Enter the league name, target team, team count, scoring preset, draft slot, and roster slots. Huddle validates the profile, creates an isolated state file, writes only to the ignored managed registry under `data/leagues`, adds the league to the running dashboard immediately, and reloads it on the next restart.
+
+Dashboard-created profiles remain **unverified**. Yahoo OAuth league discovery and the local-versus-Yahoo settings diff are not implemented yet, so the operator must compare the new profile against Yahoo's Scoring & Settings page. FantasyPros, Tank01, and Sleeper provide player evidence; none of them can verify Yahoo league identity or rules.
+
+For a hosted container, league onboarding is disabled by default. Enable it only behind authenticated access:
+
+```dotenv
+HUDDLE_LEAGUE_ONBOARDING_ENABLED=true
+HUDDLE_LEAGUE_ONBOARDING_DIR=/app/data/leagues
+HUDDLE_MANAGED_LEAGUE_REGISTRY=/app/data/leagues/registry.managed.json
+```
+
+The `/app/data` volume must be persistent. Do not expose `POST /api/leagues` directly to the public internet.
+
 1. Copy `config/leagues/registry.example.json` to an untracked local registry.
 2. Add one league config per Yahoo league. Do not put OAuth credentials in these files.
 3. Give every entry its own `stateFile`, Yahoo league key, Yahoo team key, and credential reference.

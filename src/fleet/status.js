@@ -19,6 +19,7 @@ function leagueSummary(entry, service) {
     teamCount: entry.config.teamCount,
     yahooLeagueKeyConfigured: Boolean(entry.yahooLeagueKey),
     yahooTeamKeyConfigured: Boolean(entry.yahooTeamKey),
+    verificationStatus: entry.verificationStatus || 'unverified',
     sessions: sessions.length,
     activeSessions: sessions.filter((session) => session.status === 'active').length
   };

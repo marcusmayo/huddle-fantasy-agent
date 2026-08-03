@@ -30,6 +30,8 @@ h2 { letter-spacing: -0.03em; }
 .panel { padding: 24px; }
 .setup-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 50px; align-items: end; margin-top: 36px; }
 .portfolio-summary { margin: 20px 0 18px; }
+.fleet-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.fleet-actions button { white-space: nowrap; }
 .league-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
 .league-card { margin: 0; padding: 16px; text-align: left; color: var(--ink); background: #0b1813; border-color: var(--line); display: grid; gap: 6px; }
 .league-card:hover, .league-card.active { border-color: var(--green); box-shadow: inset 0 0 0 1px #b8f34a33; }
@@ -140,6 +142,21 @@ td small { display: block; color: var(--muted); margin-top: 3px; }
 .recent li { padding: 7px 0; }
 .recent li span, .recent li small { display: block; }
 .recent li small { color: var(--muted); margin-top: 2px; }
+.league-dialog { width: min(760px, calc(100% - 32px)); max-height: calc(100vh - 40px); padding: 0; color: var(--ink); background: #0b1813; border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 28px 90px #000c; }
+.league-dialog::backdrop { background: #020604c7; backdrop-filter: blur(5px); }
+.league-form { padding: clamp(20px, 4vw, 34px); }
+.league-form header { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; }
+.league-form header h2 { margin-bottom: 0; }
+.dialog-close { font-size: 1.4rem; line-height: 1; padding: 7px 12px; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.onboarding-details { border: 1px solid var(--line); border-radius: 12px; padding: 13px 15px; }
+.onboarding-details summary { color: var(--green); cursor: pointer; font-weight: 800; }
+.roster-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 14px; }
+.roster-grid input { padding: 9px; }
+.yahoo-identifiers { margin-top: 14px; }
+.verification-callout { display: grid; gap: 5px; border-left: 3px solid var(--orange); background: #251b0f; border-radius: 8px; padding: 12px 14px; color: #ffd49b; font-size: .76rem; line-height: 1.45; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.dialog-actions button { width: auto; margin: 0; }
 
 @media (max-width: 800px) {
   .topbar { align-items: flex-start; gap: 20px; }
@@ -154,6 +171,9 @@ td small { display: block; color: var(--muted); margin-top: 3px; }
   .draft-meta { grid-template-columns: repeat(2, 1fr); }
   .player-line { align-items: flex-start; }
   .score-ring { flex-basis: 78px; height: 78px; }
+  .fleet-actions { align-items: flex-end; flex-direction: column; }
+  .form-grid { grid-template-columns: 1fr; }
+  .roster-grid { grid-template-columns: repeat(3, 1fr); }
 }
 
 @media (max-width: 520px) {
@@ -163,4 +183,7 @@ td small { display: block; color: var(--muted); margin-top: 3px; }
   .choice-grid { grid-template-columns: 1fr; }
   .draft-meta { grid-template-columns: 1fr 1fr; }
   .clock-state { position: static; margin-bottom: 20px; }
+  .portfolio-summary .section-head { gap: 14px; }
+  .fleet-actions { align-items: stretch; }
+  .roster-grid { grid-template-columns: repeat(2, 1fr); }
 }

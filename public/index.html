@@ -22,7 +22,10 @@
 
   <main class="shell">
     <section id="portfolio-summary" class="portfolio-summary">
-      <div class="section-head"><div><p class="eyebrow">PORTFOLIO</p><h2>Yahoo league fleet</h2></div><span id="fleet-mode" class="muted"></span></div>
+      <div class="section-head">
+        <div><p class="eyebrow">PORTFOLIO</p><h2>Yahoo league fleet</h2></div>
+        <div class="fleet-actions"><span id="fleet-mode" class="muted"></span><button id="add-league" type="button" class="ghost">+ Add league</button></div>
+      </div>
       <div id="league-grid" class="league-grid"></div>
     </section>
 
@@ -169,6 +172,55 @@
       </div>
     </section>
   </main>
+  <dialog id="league-dialog" class="league-dialog" aria-labelledby="league-dialog-title">
+    <form id="league-form" class="league-form">
+      <header>
+        <div><p class="eyebrow">LEAGUE ONBOARDING</p><h2 id="league-dialog-title">Add a Yahoo league</h2></div>
+        <button id="close-league-dialog" type="button" class="ghost dialog-close" aria-label="Close league onboarding">×</button>
+      </header>
+      <p id="league-onboarding-status" class="muted">Loading onboarding status…</p>
+      <div class="form-grid">
+        <label>League name <input id="add-league-name" name="name" maxlength="120" placeholder="DR FANTASY FOOTBALL" required></label>
+        <label>Your team name <input id="add-target-team" name="targetTeam" maxlength="120" placeholder="BIG BALLERS 4" required></label>
+        <label>Teams <input id="add-team-count" name="teamCount" type="number" min="2" max="20" value="12" required></label>
+        <label>Draft slot <input id="add-draft-slot" name="draftSlot" type="number" min="1" max="20" placeholder="Optional"></label>
+        <label>Reception scoring
+          <select id="add-reception-points" name="receptionPoints">
+            <option value="1">Full PPR · 1 point</option>
+            <option value="0.5">Half PPR · 0.5 points</option>
+            <option value="0">Standard · 0 points</option>
+          </select>
+        </label>
+        <label>Passing touchdown
+          <select id="add-passing-td" name="passingTouchdown"><option value="4">4 points</option><option value="6">6 points</option></select>
+        </label>
+      </div>
+      <details class="onboarding-details">
+        <summary>Roster and Yahoo identifiers</summary>
+        <div class="roster-grid">
+          <label>QB <input data-roster-slot="QB" type="number" min="0" max="4" value="1"></label>
+          <label>RB <input data-roster-slot="RB" type="number" min="0" max="8" value="2"></label>
+          <label>WR <input data-roster-slot="WR" type="number" min="0" max="8" value="2"></label>
+          <label>TE <input data-roster-slot="TE" type="number" min="0" max="4" value="1"></label>
+          <label>Flex <input data-roster-slot="W/R" type="number" min="0" max="4" value="1"></label>
+          <label>K <input data-roster-slot="K" type="number" min="0" max="2" value="1"></label>
+          <label>DEF <input data-roster-slot="DEF" type="number" min="0" max="2" value="1"></label>
+          <label>Bench <input data-roster-slot="BN" type="number" min="0" max="20" value="6"></label>
+          <label>IR <input data-roster-slot="IR" type="number" min="0" max="10" value="2"></label>
+        </div>
+        <div class="form-grid yahoo-identifiers">
+          <label>Yahoo league key <input id="add-yahoo-league-key" maxlength="120" placeholder="Optional until OAuth"></label>
+          <label>Yahoo team key <input id="add-yahoo-team-key" maxlength="120" placeholder="Optional until OAuth"></label>
+        </div>
+      </details>
+      <div class="verification-callout">
+        <strong>Verification status: unverified</strong>
+        <span>Huddle will save this as a separate league now. Yahoo remains authoritative; OAuth import and a settings-diff confirmation are required before it is marked verified.</span>
+      </div>
+      <p id="league-form-message" class="message" role="status"></p>
+      <div class="dialog-actions"><button id="cancel-league" type="button" class="ghost">Cancel</button><button id="save-league" type="submit">Add league to dashboard</button></div>
+    </form>
+  </dialog>
   <div id="app-toast" class="app-toast hidden" role="status" aria-live="assertive"></div>
   <script src="/app.js" defer></script>
 </body>
