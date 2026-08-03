@@ -1,6 +1,6 @@
 # Huddle Fantasy Agent
 
-Huddle is a read-only fantasy football decision agent for league-specific draft and weekly management. This MVP provides a multi-league portfolio dashboard and live draft rooms that reconcile completed picks and immediately refresh deterministic draft boards. It never submits a Yahoo draft pick.
+Huddle is a read-only fantasy football decision agent for league-specific drafting, with weekly management planned as the next major product increment. The current MVP provides a multi-league portfolio dashboard and live draft rooms that reconcile completed picks and immediately refresh deterministic draft boards. It never submits a Yahoo draft pick.
 
 The public example profile is a six-team, two-quarterback, full-PPR Yahoo league with six-point passing touchdowns. Real league IDs, team names, OAuth references, and commissioner settings belong only in untracked local configuration or a secret manager. Every profile remains configurable and can be verified against Yahoo once OAuth access is approved.
 
@@ -22,6 +22,16 @@ The public example profile is a six-team, two-quarterback, full-PPR Yahoo league
 - License-gated player headshots with initials fallback and FantasyPros image-field redaction.
 - Optional one-container-per-league fleet generator for one VM with separate state/env/audit volumes.
 - Local web dashboard and JSON API.
+
+## Draft-room preview
+
+![Huddle live draft room showing the resizable best-available board, player search, evidence confirmation, and recent picks](docs/assets/huddle-draft-room-preview.png)
+
+The board can be filtered by position and resized vertically. Draft-pick entry and Recent Picks remain above the screenshot assistant, while confirmed availability evidence is shown as a tag and does not silently change a player's ranking score.
+
+## Current scope boundary
+
+The running MVP is a **draft assistant**, not yet a complete in-season manager. It persists league-scoped draft sessions, completed picks, and operator-confirmed screenshot evidence. It does not currently fetch or persist weekly Yahoo scoreboards, standings, matchup results, lineup performance, transactions, or free-agent pools. It therefore does not yet calculate weekly winners, track each team's weekly league position, optimize starters, or produce add/drop/hold waiver recommendations. Those capabilities remain explicitly planned in [Next product increments](#next-product-increments).
 
 ## Quick start
 
@@ -146,5 +156,5 @@ npm run check
 1. Complete Yahoo OAuth callback/token refresh and verify every league registry entry against the API.
 2. Add Yahoo/FantasyPros player-ID crosswalk coverage tests and a visible unresolved-player queue.
 3. Add encrypted image-analysis audit metadata and provider retention controls before multi-user production use.
-4. Add weekly lineup optimization, matchup/injury/bye review, waiver adds/drops, and a first-class `HOLD` outcome.
+4. Add league-scoped weekly snapshots that retain every team's points, opponent, matchup winner, standings position and movement, roster actuals, and transaction history; then add lineup/injury/bye optimization plus waiver add/drop recommendations with expected-point delta, priority or FAAB guidance, and a first-class `HOLD` outcome.
 5. Add multi-user tenancy, encrypted secret storage, observability, notifications, licensing controls, and paid-source entitlement checks before commercial release.
