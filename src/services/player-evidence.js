@@ -30,10 +30,23 @@ function evidenceIndex(rows = []) {
   const byYahooId = new Map();
   const byIdentity = new Map();
   const byName = new Map();
+  const ambiguousYahooIds = new Set();
+  const ambiguousIdentities = new Set();
+  const yahooIdCounts = new Map();
+  const identityCounts = new Map();
   for (const row of rows) {
     const id = yahooId(row);
-    if (id) byYahooId.set(id, row);
     const key = identityKey(row);
+    if (id) yahooIdCounts.set(id, (yahooIdCounts.get(id) || 0) + 1);
+    if (!key.startsWith('|')) identityCounts.set(key, (identityCounts.get(key) || 0) + 1);
+  }
+  for (const [id, count] of yahooIdCounts) if (count > 1) ambiguousYahooIds.add(id);
+  for (const [key, count] of identityCounts) if (count > 1) ambiguousIdentities.add(key);
+  for (const row of rows) {
+    const id = yahooId(row);
+    const key = identityKey(row);
+    if ((id && ambiguousYahooIds.has(id)) || ambiguousIdentities.has(key)) continue;
+    if (id) byYahooId.set(id, row);
     if (!key.startsWith('|')) byIdentity.set(key, row);
     const name = normalizeName(row.name);
     if (name) {
@@ -42,7 +55,7 @@ function evidenceIndex(rows = []) {
       byName.set(name, values);
     }
   }
-  return { byYahooId, byIdentity, byName };
+  return { byYahooId, byIdentity, byName, ambiguousYahooIds, ambiguousIdentities };
 }
 
 function matchEvidence(player, index) {
@@ -120,6 +133,21 @@ function reconcilePlayerEvidence(primaryPool, { tank01 = null, sleeper = null, e
   const activeSources = ['fantasypros'];
   if (tankPlayers.length) activeSources.push('tank01');
   if (sleeperPlayers.length) activeSources.push('sleeper');
+  const warnings = [
+    ['tank01', tankIndex],
+    ['sleeper', sleeperIndex]
+  ].flatMap(([provider, index]) => {
+    const ambiguousYahooIds = [...index.ambiguousYahooIds].sort();
+    const ambiguousIdentities = [...index.ambiguousIdentities].sort();
+    if (!ambiguousYahooIds.length && !ambiguousIdentities.length) return [];
+    return [{
+      provider,
+      code: 'AMBIGUOUS_PLAYER_EVIDENCE',
+      message: `${provider} evidence contains duplicate player identities; ambiguous rows were excluded`,
+      ambiguousYahooIds,
+      ambiguousIdentities
+    }];
+  });
   return {
     ...primaryPool,
     source: activeSources.join('+'),
@@ -133,14 +161,21 @@ function reconcilePlayerEvidence(primaryPool, { tank01 = null, sleeper = null, e
       coverage: {
         primaryPlayers: primaryPlayers.length,
         tank01Matched: tankMatched,
-        sleeperMatched
+        sleeperMatched,
+        ambiguousTank01: tankIndex.ambiguousYahooIds.size + tankIndex.ambiguousIdentities.size,
+        ambiguousSleeper: sleeperIndex.ambiguousYahooIds.size + sleeperIndex.ambiguousIdentities.size
       },
       fetchedAt: {
         fantasyPros: primaryPool.fetchedAt || null,
         tank01: tank01?.fetchedAt || null,
         sleeper: sleeper?.fetchedAt || null
       },
-      errors: errors.map((error) => ({ provider: error.provider, message: String(error.message || error) }))
+      warnings,
+      errors: errors.map((error) => ({
+        provider: error.provider,
+        code: error.code || null,
+        message: String(error.message || error)
+      }))
     }
   };
 }
