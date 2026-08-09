@@ -6,7 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const { SleeperClient, normalizeSleeperTrends } = require('../src/providers/sleeper');
-const { Tank01Client, normalizeTank01Players, scoringToAdpType } = require('../src/providers/tank01');
+const { Tank01Client, normalizeTank01Players, positionFromPosAdp, scoringToAdpType } = require('../src/providers/tank01');
 const { SOURCE_WEIGHTS, reconcilePlayerEvidence } = require('../src/services/player-evidence');
 
 test('Tank01 normalizes draft rows and caches one ADP request', async () => {
@@ -40,6 +40,32 @@ test('Tank01 accepts map-shaped response bodies', () => {
   const players = normalizeTank01Players({ body: { one: { playerID: '1', longName: 'Defense Test', pos: 'DST', overallRank: 3 } } });
   assert.equal(players[0].position, 'DEF');
   assert.equal(players[0].rank, 3);
+});
+
+test('Tank01 accepts the live ADP response shape and derives position from posADP', () => {
+  const players = normalizeTank01Players({
+    statusCode: 200,
+    body: {
+      adpDate: '20260803',
+      adpType: 'PPR',
+      adpList: [
+        { posADP: 'RB1', overallADP: '1.5', playerID: '101', longName: 'Draft Runner' },
+        { posADP: 'DST 2', overallADP: 145, playerID: '102', longName: 'Draft Defense' }
+      ]
+    }
+  });
+
+  assert.equal(players.length, 2);
+  assert.deepEqual(players[0], {
+    tank01Id: '101',
+    name: 'Draft Runner',
+    position: 'RB',
+    team: 'FA',
+    rank: 1.5,
+    projectedPoints: null
+  });
+  assert.equal(players[1].position, 'DEF');
+  assert.equal(positionFromPosAdp('WR12'), 'WR');
 });
 
 test('Sleeper maps add/drop activity and caches its large player map', async () => {
