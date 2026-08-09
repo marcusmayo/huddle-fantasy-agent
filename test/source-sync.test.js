@@ -47,10 +47,13 @@ test('source sync enriches FantasyPros with Tank01 and Sleeper without changing 
 test('optional source failure degrades to primary evidence instead of blocking the draft', async () => {
   const value = runtime();
   const result = await syncFantasyPros(value, { loadDraftPool: async () => primaryPool() }, {}, {
-    tank01Client: { configured: true, loadDraftEvidence: async () => { throw new Error('temporary Tank01 failure'); } },
+    tank01Client: { configured: true, loadDraftEvidence: async () => {
+      throw Object.assign(new Error('temporary Tank01 failure'), { code: 'TANK01_TEMPORARY_FAILURE' });
+    } },
     sleeperClient: { enabled: false }
   });
   assert.equal(result.source, 'fantasypros');
   assert.deepEqual(result.sourceEvidence.effectiveWeights, { fantasyPros: 1, tank01: 0 });
   assert.equal(result.sourceEvidence.errors[0].provider, 'tank01');
+  assert.equal(result.sourceEvidence.errors[0].code, 'TANK01_TEMPORARY_FAILURE');
 });
