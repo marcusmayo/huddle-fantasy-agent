@@ -64,7 +64,8 @@ function loadLeagueRegistry(registryPath) {
       stateFile: path.resolve(baseDir, entry.stateFile || `../../data/leagues/${entry.id}/state.json`),
       yahooLeagueKey: entry.yahooLeagueKey || null,
       yahooTeamKey: entry.yahooTeamKey || null,
-      credentialRef: entry.credentialRef || null
+      credentialRef: entry.credentialRef || null,
+      verificationStatus: entry.verificationStatus || config.provenance?.verificationStatus || 'unverified'
     };
   });
   const defaultLeagueId = String(registry.defaultLeagueId || leagues[0].id);
@@ -98,6 +99,23 @@ function loadRuntimeConfig() {
           credentialRef: 'yahoo-primary'
         }]
       };
+  const leagueOnboardingDir = path.resolve(process.env.HUDDLE_LEAGUE_ONBOARDING_DIR || './data/leagues');
+  const leagueManagedRegistryPath = path.resolve(
+    process.env.HUDDLE_MANAGED_LEAGUE_REGISTRY || path.join(leagueOnboardingDir, 'registry.managed.json')
+  );
+  if (fs.existsSync(leagueManagedRegistryPath)) {
+    const managed = loadLeagueRegistry(leagueManagedRegistryPath);
+    const ids = new Set(registry.leagues.map((entry) => String(entry.id || entry.config.id)));
+    for (const entry of managed.leagues) {
+      if (ids.has(entry.id)) {
+        const error = new Error(`Managed league id ${entry.id} duplicates a configured league`);
+        error.code = 'DUPLICATE_LEAGUE_ID';
+        throw error;
+      }
+      ids.add(entry.id);
+      registry.leagues.push(entry);
+    }
+  }
   for (const entry of registry.leagues) entry.id ||= String(entry.config.id);
   registry.defaultLeagueId ||= registry.leagues[0].id;
   const defaultEntry = registry.leagues.find((entry) => entry.id === registry.defaultLeagueId);
@@ -118,6 +136,12 @@ function loadRuntimeConfig() {
     tank01CacheDir: path.resolve(process.env.TANK01_CACHE_DIR || './data/tank01-cache'),
     sleeperCacheDir: path.resolve(process.env.SLEEPER_CACHE_DIR || './data/sleeper-cache'),
     playerSnapshotFile: snapshotPath,
+    leagueOnboardingDir,
+    leagueManagedRegistryPath,
+    leagueOnboardingEnabled: parseBoolean(
+      process.env.HUDDLE_LEAGUE_ONBOARDING_ENABLED,
+      ['127.0.0.1', 'localhost', '::1'].includes(process.env.HUDDLE_HOST || '127.0.0.1')
+    ),
     season: Number(process.env.HUDDLE_SEASON || new Date().getFullYear()),
     league: defaultEntry.config,
     stateFile: defaultEntry.stateFile,

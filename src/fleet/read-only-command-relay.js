@@ -21,7 +21,7 @@ function appendAudit(runtime, prompt, command, outcome) {
   fs.appendFileSync(runtime.auditFile, `${JSON.stringify(record)}\n`, { mode: 0o600 });
 }
 
-function executeReadCommand(prompt, runtime, draftServices) {
+function executeReadCommand(prompt, runtime, draftServices, weeklyServices = new Map()) {
   const tokens = String(prompt || '').trim().split(/\s+/);
   const command = (tokens.shift() || '').toLowerCase();
   if (command === 'help') {
@@ -34,19 +34,27 @@ function executeReadCommand(prompt, runtime, draftServices) {
           'sessions <leagueId>',
           'board <leagueId> <sessionId>',
           'recommendation <leagueId> <sessionId>',
+          'weekly <leagueId> [week] [season]',
           'help'
         ],
         policy: 'read-only; no draft, roster, waiver, or provider write commands exist'
       }
     };
   }
-  if (command === 'status') return { command, value: fleetStatus(runtime, draftServices) };
-  if (command === 'leagues') return { command, value: fleetManifest(runtime, draftServices).leagues };
+  if (command === 'status') return { command, value: fleetStatus(runtime, draftServices, weeklyServices) };
+  if (command === 'leagues') return { command, value: fleetManifest(runtime, draftServices, weeklyServices).leagues };
   if (command === 'sessions') {
     const [leagueId] = tokens;
     const service = draftServices.get(leagueId);
     if (!service) throw Object.assign(new Error(`Unknown league: ${leagueId || '(missing)'}`), { code: 'LEAGUE_NOT_FOUND' });
     return { command, value: { leagueId, sessions: service.listSessions() } };
+  }
+  if (command === 'weekly') {
+    const [leagueId, week, season] = tokens;
+    const service = weeklyServices.get(leagueId);
+    if (!service) throw Object.assign(new Error(`Unknown league: ${leagueId || '(missing)'}`), { code: 'LEAGUE_NOT_FOUND' });
+    const review = week ? service.getWeek(Number(week), season ? Number(season) : undefined) : service.latest();
+    return { command, value: { leagueId, status: service.status(), review } };
   }
   if (command === 'recommendation' || command === 'board') {
     const [leagueId, sessionId] = tokens;
@@ -77,7 +85,7 @@ function executeReadCommand(prompt, runtime, draftServices) {
   throw Object.assign(new Error('Unknown command. Use: help'), { code: 'COMMAND_NOT_ALLOWED' });
 }
 
-function attachReadOnlyCommandRelay(server, { runtime, draftServices }) {
+function attachReadOnlyCommandRelay(server, { runtime, draftServices, weeklyServices = new Map() }) {
   const wss = new WebSocketServer({ noServer: true });
   server.on('upgrade', (request, socket, head) => {
     const url = new URL(request.url, 'http://huddle.local');
@@ -100,7 +108,7 @@ function attachReadOnlyCommandRelay(server, { runtime, draftServices }) {
       }
       ws.send(JSON.stringify({ type: 'start', text: 'Running read-only Huddle command.' }));
       try {
-        const result = executeReadCommand(prompt, runtime, draftServices);
+        const result = executeReadCommand(prompt, runtime, draftServices, weeklyServices);
         appendAudit(runtime, prompt, result.command, 'ok');
         ws.send(JSON.stringify({ type: 'token', text: JSON.stringify(result.value, null, 2) }));
       } catch (error) {

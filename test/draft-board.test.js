@@ -4,7 +4,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const league = require('../config/leagues/yahoo-example.json');
 const pool = require('../config/fixtures/demo-players.json');
-const { availabilityAtPick, buildRecommendationCard, scoreAvailablePlayers } = require('../src/domain/draft-board');
+const {
+  assessRosterConstraint,
+  availabilityAtPick,
+  buildRecommendationCard,
+  defaultPositionMaximums,
+  scoreAvailablePlayers
+} = require('../src/domain/draft-board');
 
 test('drafted players are excluded from every recommendation', () => {
   const picks = [{ playerId: 'demo-rb-1', isMine: false }];
@@ -58,4 +64,35 @@ test('Sleeper trend is limited to a small ranking tie-break', () => {
   assert.equal(board[0].player.id, 'a');
   assert.equal(board[0].trendAdjustment, 1);
   assert.equal(board[1].trendAdjustment, -1);
+});
+
+test('recommendations stop adding scarce positions after the completion-safe maximum', () => {
+  const smallLeague = {
+    ...structuredClone(league),
+    teamCount: 4,
+    roster: { QB: 1, RB: 1, WR: 1, TE: 1, K: 1, DEF: 1, BN: 2 }
+  };
+  const maximums = defaultPositionMaximums(smallLeague);
+  assert.equal(maximums.QB, 2);
+  assert.equal(maximums.K, 1);
+  assert.equal(maximums.DEF, 1);
+  const result = assessRosterConstraint({ position: 'QB' }, { QB: 2 }, smallLeague);
+  assert.equal(result.feasible, false);
+  assert.match(result.reasons.join(' '), /QB roster maximum/);
+});
+
+test('final recommendations reserve enough picks to complete every required starter slot', () => {
+  const smallLeague = {
+    ...structuredClone(league),
+    teamCount: 4,
+    roster: { QB: 1, RB: 1, WR: 1, TE: 1, K: 1, DEF: 1, BN: 2 }
+  };
+  const mine = { QB: 1, RB: 2, WR: 2, TE: 1 };
+  const skillPlayer = assessRosterConstraint({ position: 'WR' }, mine, smallLeague);
+  const kicker = assessRosterConstraint({ position: 'K' }, mine, smallLeague);
+  const defense = assessRosterConstraint({ position: 'DEF' }, mine, smallLeague);
+  assert.equal(skillPlayer.feasible, false);
+  assert.match(skillPlayer.reasons.join(' '), /required starter slots/);
+  assert.equal(kicker.feasible, true);
+  assert.equal(defense.feasible, true);
 });

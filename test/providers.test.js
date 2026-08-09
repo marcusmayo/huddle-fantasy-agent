@@ -123,6 +123,11 @@ test('Yahoo provider exposes GET-only league methods', () => {
   const client = new YahooReadOnlyClient({ accessToken: 'not-a-real-token', fetchImpl: async () => ({ ok: true, json: async () => ({}) }) });
   assert.equal(typeof client.leagueSettings, 'function');
   assert.equal(typeof client.draftResults, 'function');
+  assert.equal(typeof client.scoreboard, 'function');
+  assert.equal(typeof client.standings, 'function');
+  assert.equal(typeof client.transactions, 'function');
+  assert.equal(typeof client.roster, 'function');
+  assert.equal(typeof client.availablePlayers, 'function');
   assert.equal(client.addPlayer, undefined);
   assert.equal(client.submitDraftPick, undefined);
 });

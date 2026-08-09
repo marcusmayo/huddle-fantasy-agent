@@ -1,0 +1,133 @@
+{
+  "season": 2026,
+  "week": 1,
+  "source": "normalized-yahoo-export",
+  "observedAt": "2026-09-15T12:00:00.000Z",
+  "teams": [
+    {
+      "teamId": "target",
+      "name": "MY TEAM",
+      "isTarget": true,
+      "score": 112.4,
+      "opponentId": "opponent",
+      "standingRank": 3,
+      "previousStandingRank": 4,
+      "wins": 1,
+      "losses": 0,
+      "pointsFor": 112.4,
+      "pointsAgainst": 104.8
+    },
+    {
+      "teamId": "opponent",
+      "name": "WEEKLY OPPONENT",
+      "score": 104.8,
+      "opponentId": "target",
+      "standingRank": 4,
+      "previousStandingRank": 3,
+      "wins": 0,
+      "losses": 1,
+      "pointsFor": 104.8,
+      "pointsAgainst": 112.4
+    },
+    {
+      "teamId": "team-3",
+      "name": "LEAGUE TEAM 3",
+      "score": 101.2,
+      "opponentId": "team-4",
+      "standingRank": 1,
+      "previousStandingRank": 1,
+      "wins": 1,
+      "losses": 0,
+      "pointsFor": 118.2,
+      "pointsAgainst": 92.4
+    },
+    {
+      "teamId": "team-4",
+      "name": "LEAGUE TEAM 4",
+      "score": 98.7,
+      "opponentId": "team-3",
+      "standingRank": 5,
+      "previousStandingRank": 6,
+      "wins": 0,
+      "losses": 1,
+      "pointsFor": 98.7,
+      "pointsAgainst": 101.2
+    },
+    {
+      "teamId": "team-5",
+      "name": "LEAGUE TEAM 5",
+      "score": 95.3,
+      "opponentId": "team-6",
+      "standingRank": 2,
+      "previousStandingRank": 2,
+      "wins": 1,
+      "losses": 0,
+      "pointsFor": 109.1,
+      "pointsAgainst": 95.3
+    },
+    {
+      "teamId": "team-6",
+      "name": "LEAGUE TEAM 6",
+      "score": 91.6,
+      "opponentId": "team-5",
+      "standingRank": 6,
+      "previousStandingRank": 5,
+      "wins": 0,
+      "losses": 1,
+      "pointsFor": 91.6,
+      "pointsAgainst": 109.1
+    }
+  ],
+  "roster": [
+    {
+      "playerId": "example-qb",
+      "name": "Example Quarterback",
+      "position": "QB",
+      "rosterSlot": "QB",
+      "actualPoints": 21.2,
+      "projectedPoints": 19.5,
+      "remainingProjectedPoints": 245,
+      "injuryStatus": "HEALTHY"
+    },
+    {
+      "playerId": "example-rb",
+      "name": "Example Running Back",
+      "position": "RB",
+      "rosterSlot": "RB",
+      "actualPoints": 8.1,
+      "projectedPoints": 12.5,
+      "remainingProjectedPoints": 145,
+      "injuryStatus": "HEALTHY"
+    },
+    {
+      "playerId": "example-bench-rb",
+      "name": "Example Bench Back",
+      "position": "RB",
+      "rosterSlot": "BN",
+      "actualPoints": 16.4,
+      "projectedPoints": 9.5,
+      "remainingProjectedPoints": 95,
+      "injuryStatus": "HEALTHY"
+    }
+  ],
+  "availablePlayers": [
+    {
+      "playerId": "example-free-agent",
+      "name": "Example Free Agent",
+      "position": "RB",
+      "nflTeam": "FA",
+      "available": true,
+      "projectedPoints": 11.8,
+      "remainingProjectedPoints": 125,
+      "sleeperTrend": {
+        "direction": "rising"
+      }
+    }
+  ],
+  "transactions": [],
+  "waiver": {
+    "budgetRemaining": 100,
+    "priority": 5
+  },
+  "holdThreshold": 2
+}

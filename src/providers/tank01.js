@@ -26,6 +26,7 @@ function responseRows(payload) {
   if (Array.isArray(body)) return body;
   if (Array.isArray(body?.players)) return body.players;
   if (Array.isArray(body?.adp)) return body.adp;
+  if (Array.isArray(body?.adpList)) return body.adpList;
   if (body && typeof body === 'object') return Object.values(body).filter((item) => item && typeof item === 'object');
   return [];
 }
@@ -35,10 +36,16 @@ function normalizePosition(value) {
   return position === 'DST' || position === 'D/ST' ? 'DEF' : position;
 }
 
+function positionFromPosAdp(value) {
+  const match = String(value || '').trim().toUpperCase().match(/^(D\/ST|DST|DEF|QB|RB|WR|TE|K)(?=[^A-Z]|$)/);
+  return normalizePosition(match?.[1]);
+}
+
 function normalizeTank01Players(payload) {
   return responseRows(payload).map((raw, index) => {
     const name = raw.longName || raw.playerName || raw.name || raw.fullName;
-    const position = normalizePosition(raw.pos || raw.position || raw.playerPosition);
+    const position = normalizePosition(raw.pos || raw.position || raw.playerPosition)
+      || positionFromPosAdp(raw.posADP);
     if (!name || !position) return null;
     return {
       tank01Id: String(raw.playerID || raw.playerId || raw.id || ''),
@@ -181,6 +188,7 @@ module.exports = {
   DEFAULT_HOST,
   Tank01Client,
   normalizeTank01Players,
+  positionFromPosAdp,
   responseRows,
   scoringToAdpType
 };

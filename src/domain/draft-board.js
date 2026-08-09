@@ -2,6 +2,13 @@
 
 const { draftedRosterSize, nextUserPick, pickOwner, positionTargets } = require('./league');
 
+const BENCH_SLOTS = new Set(['BN', 'BENCH', 'IR', 'IL', 'NA']);
+const SLOT_ELIGIBILITY = {
+  QB: ['QB'], RB: ['RB'], WR: ['WR'], TE: ['TE'], K: ['K'], DEF: ['DEF'], DST: ['DEF'],
+  'W/R': ['WR', 'RB'], 'W/T': ['WR', 'TE'], 'R/W/T': ['RB', 'WR', 'TE'], FLEX: ['RB', 'WR', 'TE'],
+  'Q/W/R/T': ['QB', 'WR', 'RB', 'TE'], SUPERFLEX: ['QB', 'WR', 'RB', 'TE']
+};
+
 const STYLES = {
   balanced: { vorp: 0.28, scarcity: 0.16, need: 0.17, urgency: 0.14, upside: 0.07, floor: 0.06, consensus: 0.12, risk: 0.08 },
   upside: { vorp: 0.22, scarcity: 0.13, need: 0.12, urgency: 0.12, upside: 0.25, floor: 0.04, consensus: 0.12, risk: 0.04 },
@@ -24,6 +31,79 @@ function groupByPosition(players) {
     (groups[player.position] ||= []).push(player);
     return groups;
   }, {});
+}
+
+function starterSlots(roster = {}) {
+  return Object.entries(roster).flatMap(([slot, count]) => {
+    const normalized = String(slot).toUpperCase();
+    if (BENCH_SLOTS.has(normalized)) return [];
+    const eligibility = SLOT_ELIGIBILITY[normalized] || [normalized];
+    return Array.from({ length: Math.max(0, Number(count) || 0) }, () => eligibility);
+  });
+}
+
+function maximumStarterAssignments(positionCounts, roster) {
+  const tokens = Object.entries(positionCounts).flatMap(([position, count]) =>
+    Array.from({ length: Math.max(0, Number(count) || 0) }, () => position)
+  );
+  const slots = starterSlots(roster);
+  const matchedTokenBySlot = Array(slots.length).fill(-1);
+  function assign(tokenIndex, seen) {
+    for (let slotIndex = 0; slotIndex < slots.length; slotIndex += 1) {
+      if (seen.has(slotIndex) || !slots[slotIndex].includes(tokens[tokenIndex])) continue;
+      seen.add(slotIndex);
+      if (matchedTokenBySlot[slotIndex] === -1 || assign(matchedTokenBySlot[slotIndex], seen)) {
+        matchedTokenBySlot[slotIndex] = tokenIndex;
+        return true;
+      }
+    }
+    return false;
+  }
+  let filled = 0;
+  for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex += 1) {
+    if (assign(tokenIndex, new Set())) filled += 1;
+  }
+  return filled;
+}
+
+function defaultPositionMaximums(league) {
+  const roster = league.roster || {};
+  const bench = Math.max(0, Number(roster.BN || roster.BENCH || 0));
+  const slots = starterSlots(roster);
+  const configured = league.rosterMaximums || {};
+  return Object.fromEntries(['QB', 'RB', 'WR', 'TE', 'K', 'DEF'].map((position) => {
+    const explicit = Number(configured[position]);
+    if (Number.isInteger(explicit) && explicit >= 0) return [position, explicit];
+    const starterCapacity = slots.filter((eligibility) => eligibility.includes(position)).length;
+    if (!starterCapacity) return [position, 0];
+    if (['K', 'DEF'].includes(position)) return [position, starterCapacity];
+    if (['QB', 'TE'].includes(position)) return [position, starterCapacity + Math.min(2, Math.max(1, Math.ceil(bench / 3)))];
+    return [position, starterCapacity + bench];
+  }));
+}
+
+function assessRosterConstraint(player, mine, league) {
+  const rosterSize = draftedRosterSize(league.roster);
+  const selected = Object.values(mine).reduce((total, count) => total + count, 0);
+  const remainingPicks = rosterSize - selected - 1;
+  const maximums = defaultPositionMaximums(league);
+  const counts = { ...mine, [player.position]: (mine[player.position] || 0) + 1 };
+  const reasons = [];
+  if (remainingPicks < 0) reasons.push('Target roster is already full.');
+  if ((counts[player.position] || 0) > (maximums[player.position] ?? rosterSize)) {
+    reasons.push(`${player.position} roster maximum of ${maximums[player.position]} would be exceeded.`);
+  }
+  const missingStarterSlots = starterSlots(league.roster).length - maximumStarterAssignments(counts, league.roster);
+  if (missingStarterSlots > Math.max(0, remainingPicks)) {
+    reasons.push(`This pick would leave ${missingStarterSlots} required starter slots for only ${Math.max(0, remainingPicks)} remaining picks.`);
+  }
+  return {
+    feasible: reasons.length === 0,
+    reasons,
+    remainingPicks: Math.max(0, remainingPicks),
+    missingStarterSlots,
+    positionMaximum: maximums[player.position] ?? null
+  };
 }
 
 function replacementBaselines(players, league) {
@@ -118,9 +198,11 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
     const positionIndex = positionGroup.findIndex((candidate) => candidate.id === player.id);
     const nextAtPosition = positionGroup[positionIndex + 1];
     const waitProbability = availabilityAtPick(player.adp, nextPick);
+    const rosterConstraint = assessRosterConstraint(player, mine, league);
     return {
       player,
       waitProbability,
+      rosterConstraint,
       vorp: player.projectedPoints - (baselines[player.position] || 0),
       scarcity: Math.max(0, player.projectedPoints - (nextAtPosition?.projectedPoints || baselines[player.position] || 0)),
       need: calculateNeed(player.position, mine, targets),
@@ -147,7 +229,9 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
     const trendAdjustment = row.player.sleeperTrend?.direction === 'rising' ? 0.01
       : row.player.sleeperTrend?.direction === 'falling' ? -0.01
         : 0;
-    const score = clamp(positive - row.risk * weights.risk - row.penalty + trendAdjustment);
+    const score = row.rosterConstraint.feasible
+      ? clamp(positive - row.risk * weights.risk - row.penalty + trendAdjustment)
+      : 0;
     const sleeper = Number.isFinite(row.player.adp)
       && Number.isFinite(row.player.expertRank)
       && row.player.adp - row.player.expertRank >= 10
@@ -155,15 +239,20 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
     return {
       player: row.player,
       score: Math.round(score * 1000) / 10,
+      rosterFeasible: row.rosterConstraint.feasible,
+      rosterConstraint: row.rosterConstraint,
       style,
       sleeper,
       waitProbability: Math.round(row.waitProbability * 1000) / 1000,
       risk: Math.round(row.risk * 1000) / 1000,
       trendAdjustment: Math.round(trendAdjustment * 1000) / 10,
       components: Object.fromEntries(Object.entries(components).map(([key, value]) => [key, Math.round(value * 1000) / 1000])),
-      why: whyLines(row.player, components, mine, targets, row.waitProbability)
+      why: row.rosterConstraint.feasible
+        ? whyLines(row.player, components, mine, targets, row.waitProbability)
+        : row.rosterConstraint.reasons.slice(0, 3)
     };
-  }).sort((a, b) => b.score - a.score || a.player.expertRank - b.player.expertRank);
+  }).sort((a, b) => Number(b.rosterFeasible) - Number(a.rosterFeasible)
+    || b.score - a.score || a.player.expertRank - b.player.expertRank);
 }
 
 function buildRecommendationCard(input) {
@@ -173,7 +262,7 @@ function buildRecommendationCard(input) {
   const picks = input.picks;
   const currentOverall = picks.length + 1;
   const owner = input.draftSlot ? pickOwner(currentOverall, input.league.teamCount) : null;
-  const preferred = board[0] || null;
+  const preferred = board.find((item) => item.rosterFeasible) || null;
   return {
     generatedAt: new Date().toISOString(),
     currentOverall,
@@ -182,8 +271,8 @@ function buildRecommendationCard(input) {
     nextUserPick: nextUserPick(currentOverall, input.league.teamCount, input.draftSlot, owner !== input.draftSlot),
     preferred,
     alternatives: {
-      safe: safe.find((item) => item.player.id !== preferred?.player.id) || safe[0] || null,
-      upside: upside.find((item) => item.player.id !== preferred?.player.id) || upside[0] || null
+      safe: safe.find((item) => item.rosterFeasible && item.player.id !== preferred?.player.id) || preferred,
+      upside: upside.find((item) => item.rosterFeasible && item.player.id !== preferred?.player.id) || preferred
     },
     board
   };
@@ -191,8 +280,11 @@ function buildRecommendationCard(input) {
 
 module.exports = {
   STYLES,
+  assessRosterConstraint,
   availabilityAtPick,
   buildRecommendationCard,
+  defaultPositionMaximums,
+  maximumStarterAssignments,
   replacementBaselines,
   scoreAvailablePlayers
 };

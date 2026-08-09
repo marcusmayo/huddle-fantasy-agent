@@ -17,8 +17,12 @@ const state = {
   screenshotAnalysis: null,
   screenshotReviewEventId: null,
   providerStatus: null,
+  leagueOnboarding: null,
   providerStatusAt: 0,
-  timer: null
+  timer: null,
+  mode: localStorage.getItem('huddle-mode') === 'weekly' ? 'weekly' : 'draft',
+  weeklyReview: null,
+  weeklyWeeks: []
 };
 const $ = (selector) => document.querySelector(selector);
 let toastTimer = null;
@@ -186,11 +190,18 @@ function renderLeagueFleet() {
       <span class="league-state"><i></i>${league.activeSessions ? `${league.activeSessions} active draft` : 'ready'}</span>
       <strong>${escapeHtml(league.name)}</strong>
       <span>${escapeHtml(league.targetTeam)} · ${league.teamCount} teams</span>
-      <small>Yahoo ${escapeHtml(league.id)} · ${league.sessions} session${league.sessions === 1 ? '' : 's'}</small>
+      <small>Yahoo ${escapeHtml(league.id)} · ${league.sessions} draft session${league.sessions === 1 ? '' : 's'} · ${league.weekly?.storedWeeks || 0} weekly review${league.weekly?.storedWeeks === 1 ? '' : 's'} · ${escapeHtml(league.verificationStatus || 'unverified')}</small>
     </button>`).join('');
   document.querySelectorAll('.league-card').forEach((card) => {
     card.addEventListener('click', () => selectLeague(card.dataset.leagueId));
   });
+}
+
+function renderLeagueSelector() {
+  $('#league-select').innerHTML = state.leagues.map((league) =>
+    `<option value="${escapeHtml(league.id)}">${escapeHtml(league.name)} · ${escapeHtml(league.targetTeam)}</option>`
+  ).join('');
+  if (state.leagueId) $('#league-select').value = state.leagueId;
 }
 
 async function loadFleet() {
@@ -199,10 +210,94 @@ async function loadFleet() {
   state.defaultLeagueId = fleet.defaultLeagueId;
   const saved = localStorage.getItem('huddle-active-league');
   const selected = state.leagues.some((league) => league.id === saved) ? saved : state.defaultLeagueId;
-  $('#league-select').innerHTML = state.leagues.map((league) =>
-    `<option value="${escapeHtml(league.id)}">${escapeHtml(league.name)} · ${escapeHtml(league.targetTeam)}</option>`
-  ).join('');
+  renderLeagueSelector();
   await selectLeague(selected);
+}
+
+function showMode(mode) {
+  state.mode = mode;
+  localStorage.setItem('huddle-mode', mode);
+  const weekly = mode === 'weekly';
+  $('#draft-mode').classList.toggle('active', !weekly);
+  $('#draft-mode').classList.toggle('ghost', weekly);
+  $('#weekly-mode').classList.toggle('active', weekly);
+  $('#weekly-mode').classList.toggle('ghost', !weekly);
+  $('#app-context').textContent = weekly ? 'HUDDLE / WEEKLY MANAGEMENT' : 'HUDDLE / DRAFT ROOM';
+  $('#app-title').textContent = weekly ? 'Win the week, league by league.' : 'Make the next pick count.';
+  $('#weekly-room').classList.toggle('hidden', !weekly);
+  if (weekly) {
+    clearInterval(state.timer);
+    $('#setup').classList.add('hidden');
+    $('#draft-room').classList.add('hidden');
+    $('#sync-label').textContent = `Weekly review · ${state.league?.name || 'league'}`;
+    if (state.leagueId) loadWeekly().catch((error) => { $('#weekly-message').textContent = error.message; });
+  } else {
+    $('#weekly-room').classList.add('hidden');
+    if (state.session) {
+      showDraftRoom();
+      startPolling();
+    } else {
+      $('#draft-room').classList.add('hidden');
+      $('#setup').classList.remove('hidden');
+      $('#sync-label').textContent = 'Ready · recommendation only';
+    }
+  }
+}
+
+function closeLeagueDialog() {
+  const dialog = $('#league-dialog');
+  if (dialog.open) dialog.close();
+  $('#league-form-message').textContent = '';
+}
+
+function openLeagueDialog() {
+  const dialog = $('#league-dialog');
+  $('#league-form-message').textContent = '';
+  if (!state.leagueOnboarding?.enabled) {
+    showToast(state.leagueOnboarding?.message || 'League onboarding is disabled on this instance.');
+    return;
+  }
+  dialog.showModal();
+  setTimeout(() => $('#add-league-name').focus(), 50);
+}
+
+function rosterInput() {
+  return Object.fromEntries([...document.querySelectorAll('[data-roster-slot]')]
+    .map((input) => [input.dataset.rosterSlot, Number(input.value)]));
+}
+
+async function addLeague(event) {
+  event.preventDefault();
+  const button = $('#save-league');
+  button.disabled = true;
+  $('#league-form-message').textContent = 'Saving isolated league configuration…';
+  try {
+    const result = await api('/api/leagues', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: $('#add-league-name').value,
+        targetTeam: $('#add-target-team').value,
+        teamCount: Number($('#add-team-count').value),
+        draftSlot: $('#add-draft-slot').value,
+        receptionPoints: Number($('#add-reception-points').value),
+        passingTouchdown: Number($('#add-passing-td').value),
+        roster: rosterInput(),
+        yahooLeagueKey: $('#add-yahoo-league-key').value,
+        yahooTeamKey: $('#add-yahoo-team-key').value
+      })
+    });
+    state.leagues = (await api('/api/leagues')).leagues;
+    renderLeagueSelector();
+    renderLeagueFleet();
+    closeLeagueDialog();
+    $('#league-form').reset();
+    showToast(`${result.league.name} added. Yahoo verification is still required.`);
+    await selectLeague(result.league.id);
+  } catch (error) {
+    $('#league-form-message').textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
 }
 
 async function selectLeague(leagueId) {
@@ -214,11 +309,18 @@ async function selectLeague(leagueId) {
   $('#league-select').value = leagueId;
   state.league = await api(scoped());
   $('#league-name').textContent = `${state.league.name} · ${state.league.targetTeam}`;
+  $('#weekly-league-name').textContent = `${state.league.name} · ${state.league.targetTeam}`;
   $('#draft-slot').max = state.league.teamCount;
   $('#draft-room').classList.add('hidden');
   $('#setup').classList.remove('hidden');
-  $('#sync-label').textContent = 'Ready · recommendation only';
+  $('#sync-label').textContent = state.mode === 'weekly' ? `Weekly review · ${state.league.name}` : 'Ready · recommendation only';
   renderLeagueFleet();
+
+  if (state.mode === 'weekly') {
+    $('#weekly-room').classList.remove('hidden');
+    await loadWeekly();
+    return;
+  }
 
   let sessionId = localStorage.getItem(sessionKey());
   if (!sessionId && leagueId === state.defaultLeagueId) {
@@ -226,6 +328,175 @@ async function selectLeague(leagueId) {
     if (sessionId) localStorage.setItem(sessionKey(), sessionId);
   }
   if (sessionId) await resumeSession(sessionId);
+}
+
+function weeklyKey(review) {
+  return review ? `${review.season}:${review.week}` : '';
+}
+
+function weeklyTemplate() {
+  const week = Number($('#weekly-week').value || 1);
+  const season = Number($('#weekly-season').value || new Date().getFullYear());
+  const teams = Array.from({ length: state.league.teamCount }, (_, index) => {
+    const isTarget = index === 0;
+    const pairedIndex = index % 2 === 0 ? index + 1 : index - 1;
+    const hasBye = pairedIndex >= state.league.teamCount;
+    const opponentIndex = hasBye ? null : pairedIndex;
+    return {
+      teamId: isTarget ? 'target' : `team-${index + 1}`,
+      name: isTarget ? state.league.targetTeam : index === 1 ? 'WEEKLY OPPONENT' : `LEAGUE TEAM ${index + 1}`,
+      isTarget,
+      score: roundTemplateScore(112.4 - index * 2.7),
+      opponentId: hasBye ? null : opponentIndex === 0 ? 'target' : `team-${opponentIndex + 1}`,
+      bye: hasBye,
+      standingRank: index + 1,
+      previousStandingRank: index === 0 ? Math.min(2, state.league.teamCount) : index,
+      wins: index % 2 === 0 ? 1 : 0,
+      losses: index % 2 === 0 ? 0 : 1,
+      pointsFor: roundTemplateScore(112.4 - index * 2.7),
+      pointsAgainst: roundTemplateScore(104.8 + index * 1.1)
+    };
+  });
+  return {
+    season,
+    week,
+    source: 'manual-normalized-import',
+    observedAt: new Date().toISOString(),
+    teams,
+    roster: [
+      { playerId: 'qb-starter', name: 'Starting Quarterback', position: 'QB', rosterSlot: 'QB', actualPoints: 18.2, projectedPoints: 19.5, remainingProjectedPoints: 245 },
+      { playerId: 'rb-starter-1', name: 'Starting Running Back', position: 'RB', rosterSlot: 'RB', actualPoints: 14.1, projectedPoints: 13.5, remainingProjectedPoints: 178 },
+      { playerId: 'wr-starter-1', name: 'Starting Wide Receiver', position: 'WR', rosterSlot: 'WR', actualPoints: 11.8, projectedPoints: 15.2, remainingProjectedPoints: 190 },
+      { playerId: 'te-starter', name: 'Starting Tight End', position: 'TE', rosterSlot: 'TE', actualPoints: 7.4, projectedPoints: 8.1, remainingProjectedPoints: 105 },
+      { playerId: 'bench-rb', name: 'Bench Running Back', position: 'RB', rosterSlot: 'BN', actualPoints: 19.6, projectedPoints: 10.1, remainingProjectedPoints: 120 },
+      { playerId: 'bench-wr', name: 'Bench Wide Receiver', position: 'WR', rosterSlot: 'BN', actualPoints: 4.2, projectedPoints: 6.1, remainingProjectedPoints: 72 }
+    ],
+    availablePlayers: [
+      { playerId: 'free-agent-wr', name: 'Available Wide Receiver', position: 'WR', nflTeam: 'FA', available: true, projectedPoints: 9.5, remainingProjectedPoints: 115, sleeperTrend: { direction: 'rising' } },
+      { playerId: 'free-agent-rb', name: 'Available Running Back', position: 'RB', nflTeam: 'FA', available: true, projectedPoints: 8.2, remainingProjectedPoints: 102 }
+    ],
+    transactions: [],
+    waiver: { budgetRemaining: 100, priority: 5 },
+    holdThreshold: 2
+  };
+}
+
+function roundTemplateScore(value) {
+  return Math.round(value * 10) / 10;
+}
+
+function movementLabel(value) {
+  if (value == null || value === 0) return 'No movement';
+  return value > 0 ? `▲ ${value} place${value === 1 ? '' : 's'}` : `▼ ${Math.abs(value)} place${value === -1 ? '' : 's'}`;
+}
+
+function renderWeekly(review) {
+  state.weeklyReview = review;
+  const hasReview = Boolean(review);
+  $('#weekly-empty').classList.toggle('hidden', hasReview);
+  $('#weekly-review').classList.toggle('hidden', !hasReview);
+  if (!review) return;
+  $('#weekly-season').value = review.season;
+  $('#weekly-week').value = review.week;
+  $('#weekly-history').value = weeklyKey(review);
+  const target = review.targetResult || {};
+  $('#weekly-result').textContent = target.result || 'PENDING';
+  $('#weekly-score').textContent = `${target.score ?? '—'} vs ${target.opponentScore ?? '—'} · ${target.opponentName || 'opponent'}`;
+  $('#weekly-rank').textContent = target.standingRank ? `#${target.standingRank}` : '—';
+  $('#weekly-movement').textContent = movementLabel(target.positionMovement);
+  $('#weekly-lineup-loss').textContent = `${review.lineup.pointsLeftOnBench} pts`;
+  $('#weekly-lineup-score').textContent = `${review.lineup.actualPoints} actual · ${review.lineup.optimalPoints} optimal`;
+  const winners = review.weeklyWinners || [];
+  $('#weekly-winner').textContent = winners.map((item) => item.name).join(', ') || '—';
+  $('#weekly-winner-score').textContent = winners.length ? `${winners[0].score} points` : 'No completed scores';
+
+  const waiver = review.waiver.recommendation;
+  $('#waiver-card').classList.toggle('hold', waiver.action === 'HOLD');
+  $('#waiver-action').textContent = waiver.action === 'HOLD' ? 'HOLD — no worthwhile claim' : `ADD ${waiver.add.name}`;
+  $('#waiver-move').textContent = waiver.action === 'ADD_DROP'
+    ? `Drop ${waiver.drop.name} (${waiver.drop.position}) for ${waiver.add.name} (${waiver.add.position}).`
+    : 'Keep the current roster and preserve waiver capital this week.';
+  $('#waiver-gain').textContent = `${waiver.expectedPointsGained} expected points gained`;
+  $('#waiver-faab').textContent = waiver.faab.recommended == null ? `${waiver.faab.percent}% FAAB guidance` : `$${waiver.faab.recommended} · ${waiver.faab.percent}% FAAB`;
+  $('#waiver-confidence').textContent = `${waiver.confidenceLabel} confidence`;
+  $('#waiver-reasons').innerHTML = waiver.reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join('');
+  $('#waiver-priority').textContent = waiver.priorityGuidance;
+
+  $('#weekly-standings').innerHTML = review.standings.map((team) => `<tr class="${team.teamId === target.teamId ? 'target-team-row' : ''}">
+    <td>${team.standingRank ?? '—'}</td><td><strong>${escapeHtml(team.name)}</strong><small>${escapeHtml(team.result || 'pending')}</small></td>
+    <td>${team.score}</td><td>${team.pointsFor ?? '—'}</td><td>${team.pointsAgainst ?? '—'}</td><td>${escapeHtml(movementLabel(team.positionMovement))}</td>
+  </tr>`).join('');
+  $('#weekly-roster').innerHTML = review.roster.map((player) => `<tr><td><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.position)} · ${escapeHtml(player.nflTeam || 'FA')}</small></td><td>${escapeHtml(player.rosterSlot || '—')}</td><td>${player.actualPoints ?? '—'}</td><td>${player.projectedPoints ?? '—'}</td></tr>`).join('');
+  $('#weekly-switches').innerHTML = review.lineup.suggestedSwitches.length
+    ? review.lineup.suggestedSwitches.map((item) => `<article><strong>Start ${escapeHtml(item.start.name)}</strong><span>${item.start.actualPoints} pts${item.sit ? ` · sit ${escapeHtml(item.sit.name)} (${item.sit.actualPoints} pts)` : ''}</span></article>`).join('')
+    : '<article><strong>Best lineup used</strong><span>No points were left on the bench.</span></article>';
+  $('#weekly-risks').innerHTML = review.lineupRisks.length
+    ? review.lineupRisks.map((item) => `<article class="risk-${escapeHtml(item.severity)}"><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.risks.join(' · '))} · ${escapeHtml(item.rosterSlot || 'roster')}</span></article>`).join('')
+    : '<article><strong>No immediate risks</strong><span>No bye, injury, or zero-projection starter was detected.</span></article>';
+  $('#weekly-transactions').innerHTML = review.transactions.length
+    ? review.transactions.map((item) => `<article><strong>${escapeHtml(item.type.toUpperCase())}</strong><span>${escapeHtml([...(item.playersAdded || []), ...(item.playersDropped || [])].map((player) => player.name || player).join(' · ') || item.teamId || 'League transaction')}</span></article>`).join('')
+    : '<article><strong>No transactions imported</strong><span>Adds, drops, trades, and waiver results remain empty for this snapshot.</span></article>';
+  const evidence = review.evidence;
+  $('#weekly-evidence').innerHTML = [
+    ['League scoring', 'Applied to raw projected and actual stats when supplied'],
+    ['Yahoo authority', evidence.yahooAuthority],
+    ['Shared player source', `${evidence.sharedPlayerSource} · ${evidence.sharedFetchedAt ? new Date(evidence.sharedFetchedAt).toLocaleString() : 'bundled/current cache'}`],
+    ['Available pool', `${evidence.availablePlayersReviewed} league-visible players reviewed`],
+    ['Source coverage', `${evidence.sourceCoverage.fantasyPros} FantasyPros · ${evidence.sourceCoverage.tank01} Tank01 · ${evidence.sourceCoverage.sleeper} Sleeper`]
+  ].map(([label, value]) => `<article><strong>${escapeHtml(label)}</strong><span>${escapeHtml(value)}</span></article>`).join('');
+}
+
+async function loadWeekly(reviewKey) {
+  const result = await api(scoped('/weekly/weeks'));
+  state.weeklyWeeks = result.weeks;
+  $('#weekly-history').innerHTML = '<option value="">Latest</option>' + result.weeks.map((week) =>
+    `<option value="${week.season}:${week.week}">${week.season} · Week ${week.week} · ${escapeHtml(week.waiverAction)}</option>`).join('');
+  if (!result.weeks.length) {
+    renderWeekly(null);
+    return;
+  }
+  const selected = reviewKey || `${result.weeks[0].season}:${result.weeks[0].week}`;
+  const [season, week] = selected.split(':').map(Number);
+  const review = await api(scoped(`/weekly/weeks/${week}?season=${season}`));
+  renderWeekly(review);
+}
+
+async function importWeekly() {
+  const button = $('#weekly-import');
+  button.disabled = true;
+  $('#weekly-message').textContent = 'Calculating this league’s weekly review…';
+  try {
+    const snapshot = JSON.parse($('#weekly-json').value);
+    const week = Number(snapshot.week || $('#weekly-week').value);
+    const season = Number(snapshot.season || $('#weekly-season').value);
+    const result = await api(scoped(`/weekly/weeks/${week}/import?season=${season}`), {
+      method: 'POST',
+      body: JSON.stringify({ snapshot: { ...snapshot, week, season }, eventId: `dashboard:${state.leagueId}:${season}:${week}:${Date.now()}` })
+    });
+    await refreshFleetSummary();
+    await loadWeekly(`${result.review.season}:${result.review.week}`);
+    showToast(`Week ${result.review.week} saved for ${state.league.name}. ${result.review.waiver.recommendation.action} recommendation ready.`);
+  } catch (error) {
+    $('#weekly-message').textContent = error instanceof SyntaxError ? `Snapshot JSON is invalid: ${error.message}` : error.message;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function rerunWeekly() {
+  if (!state.weeklyReview) return;
+  const button = $('#weekly-rerun');
+  button.disabled = true;
+  try {
+    const review = state.weeklyReview;
+    const result = await api(scoped(`/weekly/weeks/${review.week}/run?season=${review.season}`), { method: 'POST', body: '{}' });
+    await loadWeekly(`${result.review.season}:${result.review.week}`);
+    showToast(`Week ${result.review.week} recalculated using current shared provider evidence and isolated league rules.`);
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    button.disabled = false;
+  }
 }
 
 async function createSession(event) {
@@ -289,7 +560,7 @@ function renderBoardRows() {
   const visible = position === 'ALL' ? board : board.filter((item) => item.player.position === position);
   $('#board-title').textContent = position === 'ALL' ? 'Best available' : `Best available · ${position}`;
   $('#board-body').innerHTML = visible.length ? visible.map((item, index) => `
-    <tr class="board-player" data-player-id="${escapeHtml(item.player.id)}" tabindex="0" role="button" aria-label="Select ${escapeHtml(item.player.name)} as the drafted player">
+    <tr class="board-player" data-player-id="${escapeHtml(item.player.id)}" data-roster-blocked="${item.rosterFeasible === false}" tabindex="0" role="button" aria-label="Select ${escapeHtml(item.player.name)} as the drafted player" title="${escapeHtml(item.rosterFeasible === false ? (item.rosterConstraint?.reasons || []).join(' ') : '')}">
       <td>${index + 1}</td>
       <td><strong>${escapeHtml(item.player.name)}</strong><small>${escapeHtml(item.player.team)}</small></td>
       <td><span class="position">${escapeHtml(item.player.position)}</span></td>
@@ -297,6 +568,7 @@ function renderBoardRows() {
       <td>${Math.round(item.waitProbability * 100)}%</td>
       <td>${[
         item.sleeper ? '<span class="badge">SLEEPER</span>' : '',
+        item.rosterFeasible === false ? '<span class="badge roster-blocked-badge">ROSTER BLOCKED</span>' : '',
         trendBadge(item.player),
         item.player.sourceDisagreement ? '<span class="badge source-split">SOURCES SPLIT</span>' : '',
         ...(item.evidenceTags || []).map((tag) => `<span class="badge evidence-tag">${escapeHtml(tag)}</span>`)
@@ -648,6 +920,7 @@ async function recordPick(event) {
 async function refreshFleetSummary() {
   const fleet = await api('/api/leagues');
   state.leagues = fleet.leagues;
+  renderLeagueSelector();
   renderLeagueFleet();
 }
 
@@ -681,6 +954,31 @@ async function resetSession() {
 }
 
 async function init() {
+  $('#draft-mode').addEventListener('click', () => showMode('draft'));
+  $('#weekly-mode').addEventListener('click', () => showMode('weekly'));
+  $('#weekly-template').addEventListener('click', () => { $('#weekly-json').value = JSON.stringify(weeklyTemplate(), null, 2); });
+  $('#weekly-import').addEventListener('click', importWeekly);
+  $('#weekly-rerun').addEventListener('click', rerunWeekly);
+  $('#weekly-import-another').addEventListener('click', () => {
+    $('#weekly-review').classList.add('hidden');
+    $('#weekly-empty').classList.remove('hidden');
+    $('#weekly-json').value = state.weeklyReview ? JSON.stringify({ season: state.weeklyReview.season, week: state.weeklyReview.week, teams: state.weeklyReview.teams, roster: state.weeklyReview.roster, availablePlayers: state.weeklyReview.availablePlayers, transactions: state.weeklyReview.transactions, waiver: state.weeklyReview.waiver.state }, null, 2) : '';
+    $('#weekly-empty').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  $('#weekly-history').addEventListener('change', (event) => loadWeekly(event.target.value || undefined));
+  $('#weekly-file').addEventListener('change', async (event) => {
+    const file = event.target.files?.[0];
+    if (file) $('#weekly-json').value = await file.text();
+  });
+  $('#weekly-season').value = new Date().getFullYear();
+  $('#add-league').addEventListener('click', openLeagueDialog);
+  $('#league-form').addEventListener('submit', addLeague);
+  $('#close-league-dialog').addEventListener('click', closeLeagueDialog);
+  $('#cancel-league').addEventListener('click', closeLeagueDialog);
+  $('#league-dialog').addEventListener('click', (event) => {
+    if (event.target === $('#league-dialog')) closeLeagueDialog();
+  });
+  $('#add-team-count').addEventListener('input', (event) => { $('#add-draft-slot').max = event.target.value; });
   $('#session-form').addEventListener('submit', createSession);
   $('#pick-form').addEventListener('submit', recordPick);
   $('#new-session').addEventListener('click', resetSession);
@@ -722,9 +1020,16 @@ async function init() {
       syncPlayerHighlights();
     }
   });
-  state.providerStatus = await api('/api/provider-status');
+  [state.providerStatus, state.leagueOnboarding] = await Promise.all([
+    api('/api/provider-status'),
+    api('/api/leagues/onboarding')
+  ]);
+  $('#league-onboarding-status').textContent = state.leagueOnboarding.message;
+  $('#add-league').disabled = !state.leagueOnboarding.enabled;
+  $('#add-league').title = state.leagueOnboarding.enabled ? 'Add a league to this Huddle fleet' : state.leagueOnboarding.message;
   state.providerStatusAt = Date.now();
   await loadFleet();
+  showMode(state.mode);
 }
 
 init().catch((error) => { document.body.innerHTML = `<pre>${escapeHtml(error.message)}</pre>`; });
