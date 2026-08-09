@@ -1,0 +1,171 @@
+'use strict';
+
+const crypto = require('node:crypto');
+const { buildWeeklyReview } = require('../domain/weekly-management');
+
+class WeeklyManagementService {
+  constructor({ league, playerPool, draftService }) {
+    this.league = league;
+    this.playerPool = playerPool;
+    this.draftService = draftService;
+    this.state = draftService.state;
+    this.state.weekly ||= { weeks: {}, appliedEventIds: [], runs: [] };
+    this.state.weekly.weeks ||= {};
+    this.state.weekly.appliedEventIds ||= [];
+    this.state.weekly.runs ||= [];
+  }
+
+  key(season, week) {
+    return `${Number(season)}:${Number(week)}`;
+  }
+
+  listWeeks() {
+    return Object.values(this.state.weekly.weeks)
+      .map((entry) => this.summary(entry))
+      .sort((a, b) => b.season - a.season || b.week - a.week);
+  }
+
+  getWeek(week, season) {
+    const resolvedSeason = Number(season || this.latest()?.season || new Date().getFullYear());
+    const entry = this.state.weekly.weeks[this.key(resolvedSeason, week)];
+    if (!entry) {
+      const error = new Error(`Weekly review not found for ${resolvedSeason} week ${week}`);
+      error.code = 'WEEK_NOT_FOUND';
+      throw error;
+    }
+    return structuredClone(entry.review);
+  }
+
+  latest() {
+    const first = this.listWeeks()[0];
+    return first ? this.getWeek(first.week, first.season) : null;
+  }
+
+  importSnapshot(snapshot, { expectedWeek, eventId, source, preferSharedProjections = false } = {}) {
+    const now = new Date().toISOString();
+    const stableEventId = String(eventId || snapshot?.eventId || `weekly:${crypto.randomUUID()}`);
+    if (this.state.weekly.appliedEventIds.includes(stableEventId)) {
+      const prior = Object.values(this.state.weekly.weeks).find((entry) => entry.eventId === stableEventId);
+      return { applied: false, reason: 'duplicate-event', review: prior ? structuredClone(prior.review) : null };
+    }
+    const normalized = { ...structuredClone(snapshot), source: source || snapshot?.source || 'normalized-import' };
+    const review = buildWeeklyReview({
+      snapshot: normalized,
+      league: this.league,
+      playerPool: this.playerPool,
+      expectedWeek,
+      preferSharedProjections
+    });
+    const key = this.key(review.season, review.week);
+    const existing = this.state.weekly.weeks[key];
+    const run = {
+      id: crypto.randomUUID(),
+      eventId: stableEventId,
+      season: review.season,
+      week: review.week,
+      source: review.source,
+      action: review.waiver.recommendation.action,
+      expectedPointsGained: review.waiver.recommendation.expectedPointsGained,
+      recordedAt: now
+    };
+    this.state.weekly.weeks[key] = {
+      eventId: stableEventId,
+      snapshot: normalized,
+      review,
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+      revisions: (existing?.revisions || 0) + 1
+    };
+    this.state.weekly.appliedEventIds.push(stableEventId);
+    this.state.weekly.appliedEventIds = this.state.weekly.appliedEventIds.slice(-500);
+    this.state.weekly.runs.push(run);
+    this.state.weekly.runs = this.state.weekly.runs.slice(-250);
+    this.draftService.persist();
+    return { applied: true, reason: null, review: structuredClone(review), run };
+  }
+
+  rerun(week, season) {
+    const resolvedSeason = Number(season || this.latest()?.season || new Date().getFullYear());
+    const key = this.key(resolvedSeason, week);
+    const entry = this.state.weekly.weeks[key];
+    if (!entry) return this.getWeek(week, resolvedSeason);
+    return this.importSnapshot(entry.snapshot, {
+      expectedWeek: Number(week),
+      source: `${entry.snapshot.source || 'normalized-import'}:rerun`,
+      preferSharedProjections: true
+    });
+  }
+
+  status() {
+    const latest = this.latest();
+    return {
+      leagueId: this.league.id,
+      storedWeeks: this.listWeeks().length,
+      latest: latest ? {
+        season: latest.season,
+        week: latest.week,
+        observedAt: latest.observedAt,
+        waiverAction: latest.waiver.recommendation.action,
+        targetResult: latest.targetResult?.result || null
+      } : null,
+      execution: 'recommendation-only'
+    };
+  }
+
+  summary(entry) {
+    const review = entry.review;
+    return {
+      leagueId: review.leagueId,
+      season: review.season,
+      week: review.week,
+      observedAt: review.observedAt,
+      updatedAt: entry.updatedAt,
+      revisions: entry.revisions,
+      targetResult: review.targetResult?.result || null,
+      targetScore: review.targetResult?.score ?? null,
+      standingRank: review.targetResult?.standingRank ?? null,
+      waiverAction: review.waiver.recommendation.action,
+      expectedPointsGained: review.waiver.recommendation.expectedPointsGained,
+      lineupPointsLost: review.lineup.pointsLeftOnBench
+    };
+  }
+}
+
+class WeeklyFleetRunner {
+  constructor({ weeklyServices }) {
+    this.weeklyServices = weeklyServices;
+  }
+
+  async run(input = {}) {
+    if (!Array.isArray(input.leagues) || !input.leagues.length) {
+      const error = new Error('leagues must contain at least one league snapshot');
+      error.code = 'INVALID_WEEKLY_FLEET_RUN';
+      throw error;
+    }
+    const settled = await Promise.all(input.leagues.map(async (item) => {
+      const leagueId = String(item.leagueId || '');
+      const service = this.weeklyServices.get(leagueId);
+      if (!service) {
+        const error = new Error(`League not found: ${leagueId}`);
+        error.code = 'LEAGUE_NOT_FOUND';
+        throw error;
+      }
+      const snapshot = { ...structuredClone(item.snapshot || {}), season: item.snapshot?.season || input.season, week: item.snapshot?.week || input.week };
+      const result = service.importSnapshot(snapshot, { expectedWeek: input.week, eventId: item.eventId, source: item.source });
+      return { leagueId, applied: result.applied, review: result.review };
+    }).map((operation) => operation.then((value) => ({ status: 'fulfilled', value }), (reason) => ({ status: 'rejected', reason }))));
+    const results = settled.map((item, index) => item.status === 'fulfilled' ? item.value : {
+      leagueId: String(input.leagues[index].leagueId || ''),
+      error: item.reason.code || 'WEEKLY_RUN_FAILED',
+      message: item.reason.message
+    });
+    return {
+      complete: results.every((item) => !item.error),
+      succeeded: results.filter((item) => !item.error).length,
+      failed: results.filter((item) => item.error).length,
+      results
+    };
+  }
+}
+
+module.exports = { WeeklyFleetRunner, WeeklyManagementService };

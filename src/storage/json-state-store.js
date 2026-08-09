@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 
 class JsonStateStore {
   constructor(filePath) {
@@ -15,9 +16,20 @@ class JsonStateStore {
 
   save(state) {
     fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-    const tempPath = `${this.filePath}.tmp`;
-    fs.writeFileSync(tempPath, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
-    fs.renameSync(tempPath, this.filePath);
+    const tempPath = `${this.filePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
+    try {
+      const descriptor = fs.openSync(tempPath, 'wx', 0o600);
+      try {
+        fs.writeFileSync(descriptor, `${JSON.stringify(state, null, 2)}\n`);
+        fs.fsyncSync(descriptor);
+      } finally {
+        fs.closeSync(descriptor);
+      }
+      fs.renameSync(tempPath, this.filePath);
+    } catch (error) {
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+      throw error;
+    }
   }
 }
 

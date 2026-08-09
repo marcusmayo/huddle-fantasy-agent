@@ -2,8 +2,10 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { validateLeagueConfig } = require('../domain/league');
 const { DraftService } = require('./draft-service');
+const { WeeklyManagementService } = require('./weekly-management-service');
 
 function onboardingError(code, message) {
   return Object.assign(new Error(message), { code });
@@ -136,15 +138,21 @@ function buildLeagueConfig(input) {
 
 function atomicWriteJson(filePath, value) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  const temporary = `${filePath}.tmp`;
-  fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
-  fs.renameSync(temporary, filePath);
+  const temporary = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
+  try {
+    fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
+    fs.renameSync(temporary, filePath);
+  } catch (error) {
+    if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+    throw error;
+  }
 }
 
 class LeagueOnboardingService {
-  constructor({ runtime, draftServices, storeFactory }) {
+  constructor({ runtime, draftServices, weeklyServices, storeFactory }) {
     this.runtime = runtime;
     this.draftServices = draftServices;
+    this.weeklyServices = weeklyServices;
     this.storeFactory = storeFactory;
   }
 
@@ -204,11 +212,14 @@ class LeagueOnboardingService {
       verificationStatus: 'unverified'
     };
     const service = new DraftService({ league: config, playerPool: this.runtime.playerPool, store: this.storeFactory(entry) });
+    const weeklyService = new WeeklyManagementService({ league: config, playerPool: this.runtime.playerPool, draftService: service });
     this.runtime.leagues.push(entry);
     this.draftServices.set(entry.id, service);
+    this.weeklyServices.set(entry.id, weeklyService);
     return {
       entry,
       service,
+      weeklyService,
       verification: {
         status: 'unverified',
         authority: 'yahoo',

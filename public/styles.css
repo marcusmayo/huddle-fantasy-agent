@@ -30,6 +30,9 @@ h2 { letter-spacing: -0.03em; }
 .panel { padding: 24px; }
 .setup-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 50px; align-items: end; margin-top: 36px; }
 .portfolio-summary { margin: 20px 0 18px; }
+.mode-switch { display: inline-flex; gap: 8px; padding: 6px; margin: 4px 0 18px; border: 1px solid var(--line); border-radius: 14px; background: #081510; }
+.mode-switch button { width: auto; margin: 0; padding: 9px 14px; }
+.mode-switch button.active { background: var(--green); color: #10180b; border-color: var(--green); }
 .fleet-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
 .fleet-actions button { white-space: nowrap; }
 .league-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
@@ -105,6 +108,8 @@ td small { display: block; color: var(--muted); margin-top: 3px; }
 .board-player:hover td, .board-player:focus td { background: #b8f34a0d; }
 .board-player:focus, .player-selectable:focus { outline: 2px solid var(--green); outline-offset: 2px; }
 .board-player.selected-player td { background: #b8f34a17; }
+.board-player[data-roster-blocked="true"] td { opacity: .58; }
+.roster-blocked-badge { color: var(--orange); }
 .player-selectable:hover { box-shadow: inset 0 0 0 1px #b8f34a55; }
 .player-selectable.selected-player { box-shadow: inset 0 0 0 2px var(--green); }
 .field-help { display: block; margin-top: 7px; line-height: 1.4; }
@@ -158,6 +163,41 @@ td small { display: block; color: var(--muted); margin-top: 3px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .dialog-actions button { width: auto; margin: 0; }
 
+.weekly-head { display: grid; grid-template-columns: 1.3fr 1fr; gap: 28px; align-items: end; margin-bottom: 16px; }
+.weekly-head h2 { margin-bottom: 8px; }
+.weekly-controls { grid-template-columns: repeat(3, 1fr); align-items: end; }
+.weekly-controls button { grid-column: 1 / -1; }
+.weekly-empty { display: grid; gap: 14px; margin-bottom: 50px; }
+.weekly-empty h2 { margin-bottom: 0; }
+.weekly-import-grid { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end; }
+.weekly-file input { padding: 9px; }
+.weekly-import-grid button { margin: 0; }
+textarea { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 13px; background: #07130f; color: var(--ink); font: .78rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; resize: vertical; }
+.weekly-import-actions { display: flex; justify-content: flex-end; }
+.weekly-import-actions button { width: auto; }
+.weekly-scorecards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+.metric { display: grid; gap: 5px; }
+.metric .eyebrow { margin: 0; }
+.metric strong { font-size: 1.6rem; }
+.metric span { color: var(--muted); font-size: .78rem; line-height: 1.4; }
+.weekly-waiver { margin-bottom: 16px; border-color: var(--green); }
+.weekly-waiver.hold { border-color: var(--blue); }
+.weekly-waiver h2 { margin: 12px 0 6px; font-size: clamp(2rem, 5vw, 3.8rem); }
+.weekly-move { color: var(--muted); font-size: 1rem; }
+.weekly-recommendation-meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+.weekly-recommendation-meta span { padding: 7px 10px; border: 1px solid var(--line); border-radius: 99px; color: var(--muted); font-size: .75rem; }
+.weekly-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.weekly-grid > .panel { min-width: 0; }
+.weekly-list { display: grid; gap: 8px; }
+.weekly-list article { display: grid; gap: 4px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 9px; background: #091510; }
+.weekly-list strong { font-size: .82rem; }
+.weekly-list span { color: var(--muted); font-size: .75rem; line-height: 1.45; }
+.weekly-list .risk-high { border-left: 3px solid var(--orange); }
+.weekly-list .risk-medium { border-left: 3px solid #ffd49b; }
+.weekly-subhead { margin-top: 20px; }
+.target-team-row td { background: #b8f34a0c; }
+.weekly-bottom-actions { display: flex; justify-content: flex-end; padding: 16px 0 50px; }
+
 @media (max-width: 800px) {
   .topbar { align-items: flex-start; gap: 20px; }
   .top-actions { align-items: stretch; flex-direction: column; }
@@ -174,6 +214,8 @@ td small { display: block; color: var(--muted); margin-top: 3px; }
   .fleet-actions { align-items: flex-end; flex-direction: column; }
   .form-grid { grid-template-columns: 1fr; }
   .roster-grid { grid-template-columns: repeat(3, 1fr); }
+  .weekly-head, .weekly-grid { grid-template-columns: 1fr; }
+  .weekly-scorecards { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 520px) {
@@ -186,4 +228,6 @@ td small { display: block; color: var(--muted); margin-top: 3px; }
   .portfolio-summary .section-head { gap: 14px; }
   .fleet-actions { align-items: stretch; }
   .roster-grid { grid-template-columns: repeat(2, 1fr); }
+  .weekly-controls, .weekly-scorecards, .weekly-import-grid { grid-template-columns: 1fr; }
+  .weekly-import-grid button, .weekly-import-actions button { width: 100%; }
 }

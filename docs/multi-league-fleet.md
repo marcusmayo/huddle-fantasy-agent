@@ -40,8 +40,10 @@ The `/app/data` volume must be persistent. Do not expose `POST /api/leagues` dir
    HUDDLE_INSTANCE_NAME=huddle-portfolio
    ```
 
-5. Start Huddle and open the dashboard. The portfolio cards and selector switch among isolated league sessions.
+5. Start Huddle and open the dashboard. The portfolio cards and selector switch among isolated draft sessions and weekly reviews. Use **Weekly management** to import and recalculate each league independently.
 6. Verify `/api/fleet/manifest` and `/health/readiness` before adding the Huddle target to Aegis.
+
+At startup, each league state file is loaded independently. A malformed state file is quarantined in the manifest with `availability: "quarantined"` and `LEAGUE_STATE_UNAVAILABLE`; healthy leagues continue serving draft and weekly routes. Fleet readiness reports `degraded` until the damaged state is repaired or restored. JSON writes use unique, fsynced temporary files followed by an atomic rename, but the local file store is still intended for one Huddle process. Use a transactional production database before running multiple application writers or commercial multi-user tenancy.
 
 The legacy `HUDDLE_LEAGUE_CONFIG` path remains available for a single league.
 
@@ -168,6 +170,7 @@ The target-locked Aegis prompt lane accepts only these Huddle commands:
 - `sessions <leagueId>`
 - `board <leagueId> <sessionId>`
 - `recommendation <leagueId> <sessionId>`
+- `weekly <leagueId> [week] [season]`
 - `help`
 
 Unknown or mutating commands fail closed. Both Aegis and Huddle audit command hashes and lengths rather than raw prompts.

@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Huddle Draft Room</title>
+  <title>Huddle Fantasy Manager</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <header class="shell topbar">
     <div>
-      <p class="eyebrow">HUDDLE / DRAFT ROOM</p>
-      <h1>Make the next pick count.</h1>
+      <p id="app-context" class="eyebrow">HUDDLE / DRAFT ROOM</p>
+      <h1 id="app-title">Make the next pick count.</h1>
     </div>
     <div class="top-actions">
       <label class="league-picker">League
@@ -28,6 +28,11 @@
       </div>
       <div id="league-grid" class="league-grid"></div>
     </section>
+
+    <nav class="mode-switch" aria-label="Huddle workspace">
+      <button id="draft-mode" type="button" class="active">Draft room</button>
+      <button id="weekly-mode" type="button" class="ghost">Weekly management</button>
+    </nav>
 
     <section id="setup" class="panel setup-grid">
       <div>
@@ -170,6 +175,69 @@
           </section>
         </aside>
       </div>
+    </section>
+
+    <section id="weekly-room" class="hidden">
+      <div class="weekly-head panel">
+        <div>
+          <p class="eyebrow">LEAGUE-SCOPED REVIEW</p>
+          <h2 id="weekly-league-name">Weekly team management</h2>
+          <p class="muted">Import one normalized result snapshot for this league. Huddle stores the week, calculates the optimal lineup, and returns either an add/drop recommendation or an explicit HOLD.</p>
+        </div>
+        <form id="weekly-controls" class="weekly-controls">
+          <label>Season <input id="weekly-season" type="number" min="2020" max="2100" required></label>
+          <label>Week <input id="weekly-week" type="number" min="1" max="18" value="1" required></label>
+          <label>Saved review
+            <select id="weekly-history"><option value="">Latest</option></select>
+          </label>
+          <button id="weekly-rerun" type="button" class="ghost">Re-run league</button>
+        </form>
+      </div>
+
+      <section id="weekly-empty" class="panel weekly-empty">
+        <p class="eyebrow">FIRST WEEKLY RUN</p>
+        <h2>Import this league’s weekly snapshot</h2>
+        <p class="muted">Yahoo OAuth can later produce this normalized JSON automatically. Today you can upload an adapter export or paste JSON. No add, drop, lineup, or waiver action is submitted to Yahoo.</p>
+        <div class="weekly-import-grid">
+          <label class="weekly-file">Snapshot JSON file <input id="weekly-file" type="file" accept="application/json,.json"></label>
+          <button id="weekly-template" type="button" class="ghost">Load editable template</button>
+        </div>
+        <label>Normalized weekly snapshot
+          <textarea id="weekly-json" rows="14" spellcheck="false" placeholder='{"season":2026,"week":1,"teams":[],"roster":[],"availablePlayers":[]}'></textarea>
+        </label>
+        <div class="weekly-import-actions"><button id="weekly-import" type="button">Import and run this league</button></div>
+        <p id="weekly-message" class="message" role="status"></p>
+      </section>
+
+      <section id="weekly-review" class="hidden">
+        <div class="weekly-scorecards">
+          <article class="panel metric"><p class="eyebrow">WEEK RESULT</p><strong id="weekly-result">—</strong><span id="weekly-score">—</span></article>
+          <article class="panel metric"><p class="eyebrow">LEAGUE POSITION</p><strong id="weekly-rank">—</strong><span id="weekly-movement">—</span></article>
+          <article class="panel metric"><p class="eyebrow">LINEUP REVIEW</p><strong id="weekly-lineup-loss">—</strong><span id="weekly-lineup-score">—</span></article>
+          <article class="panel metric"><p class="eyebrow">WEEKLY WINNER</p><strong id="weekly-winner">—</strong><span id="weekly-winner-score">—</span></article>
+        </div>
+
+        <section id="waiver-card" class="hero-card weekly-waiver">
+          <div class="clock-state">RECOMMENDATION ONLY</div>
+          <p class="eyebrow">WAIVER DECISION</p>
+          <h2 id="waiver-action">HOLD</h2>
+          <p id="waiver-move" class="weekly-move"></p>
+          <div class="weekly-recommendation-meta">
+            <span id="waiver-gain"></span><span id="waiver-faab"></span><span id="waiver-confidence"></span>
+          </div>
+          <ul id="waiver-reasons"></ul>
+          <p id="waiver-priority" class="explanation"></p>
+        </section>
+
+        <div class="weekly-grid">
+          <section class="panel"><div class="section-head"><div><p class="eyebrow">STANDINGS</p><h2>League movement</h2></div></div><div class="table-wrap"><table><thead><tr><th>Rank</th><th>Team</th><th>Week</th><th>PF</th><th>PA</th><th>Move</th></tr></thead><tbody id="weekly-standings"></tbody></table></div></section>
+          <section class="panel"><p class="eyebrow">TARGET ROSTER</p><h2>Player results</h2><div class="table-wrap"><table><thead><tr><th>Player</th><th>Slot</th><th>Actual</th><th>Projection</th></tr></thead><tbody id="weekly-roster"></tbody></table></div></section>
+          <section class="panel"><p class="eyebrow">LINEUP</p><h2>Actual vs optimal</h2><div id="weekly-switches" class="weekly-list"></div><p class="eyebrow weekly-subhead">RISKS</p><div id="weekly-risks" class="weekly-list"></div></section>
+          <section class="panel"><p class="eyebrow">ACTIVITY LOG</p><h2>Adds, drops, trades, waivers</h2><div id="weekly-transactions" class="weekly-list"></div></section>
+          <section class="panel"><p class="eyebrow">SOURCE EVIDENCE</p><h2>Per-league calculation</h2><div id="weekly-evidence" class="weekly-list"></div></section>
+        </div>
+        <div class="weekly-bottom-actions"><button id="weekly-import-another" type="button" class="ghost">Import revised snapshot</button></div>
+      </section>
     </section>
   </main>
   <dialog id="league-dialog" class="league-dialog" aria-labelledby="league-dialog-title">

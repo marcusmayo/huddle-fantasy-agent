@@ -2,7 +2,11 @@
 
 const FLEX_POSITIONS = {
   'W/T': ['WR', 'TE'],
-  'W/R': ['WR', 'RB']
+  'W/R': ['WR', 'RB'],
+  'R/W/T': ['RB', 'WR', 'TE'],
+  FLEX: ['RB', 'WR', 'TE'],
+  'Q/W/R/T': ['QB', 'WR', 'RB', 'TE'],
+  SUPERFLEX: ['QB', 'WR', 'RB', 'TE']
 };
 
 function validateLeagueConfig(config) {

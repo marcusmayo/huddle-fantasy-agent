@@ -134,6 +134,36 @@ test('multi-league APIs keep sessions isolated and expose an Aegis manifest', as
   }
 });
 
+test('one corrupt league state is quarantined without preventing healthy league startup', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'huddle-quarantine-'));
+  const input = runtime(tempDir);
+  fs.writeFileSync(input.leagues[1].stateFile, '{not valid json');
+  const app = buildApp(input);
+  const base = await listen(app);
+  try {
+    const manifest = await fetchJson(`${base}/api/fleet/manifest`);
+    const healthy = manifest.body.leagues.find((item) => item.id === 'example-primary');
+    const quarantined = manifest.body.leagues.find((item) => item.id === 'secondary-22');
+    assert.equal(healthy.availability, 'available');
+    assert.equal(quarantined.availability, 'quarantined');
+    assert.equal(quarantined.stateError.code, 'LEAGUE_STATE_UNAVAILABLE');
+
+    const healthySessions = await fetchJson(`${base}/api/leagues/example-primary/draft/sessions`);
+    assert.equal(healthySessions.status, 200);
+    const unavailable = await fetchJson(`${base}/api/leagues/secondary-22/draft/sessions`);
+    assert.equal(unavailable.status, 503);
+    assert.equal(unavailable.body.error, 'LEAGUE_STATE_UNAVAILABLE');
+
+    const readiness = await fetchJson(`${base}/health/readiness`);
+    assert.equal(readiness.status, 503);
+    assert.equal(readiness.body.status, 'degraded');
+    assert.equal(readiness.body.leagueState.available, 1);
+    assert.equal(readiness.body.leagueState.quarantined, 1);
+  } finally {
+    await close(app);
+  }
+});
+
 test('Aegis WebSocket relay accepts allowlisted read commands only', async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'huddle-ws-'));
   const app = buildApp(runtime(tempDir), { storeFactory: () => new MemoryStateStore() });
@@ -151,6 +181,12 @@ test('Aegis WebSocket relay accepts allowlisted read commands only', async () =>
     assert.equal(boardValue.leagueId, 'example-primary');
     assert.equal(boardValue.board.length, 12);
     assert.equal(boardValue.execution, 'recommendation-only');
+
+    const weekly = await wsCommand(base, 'weekly example-primary');
+    const weeklyValue = JSON.parse(weekly.find((frame) => frame.type === 'token').text);
+    assert.equal(weeklyValue.leagueId, 'example-primary');
+    assert.equal(weeklyValue.review, null);
+    assert.equal(weeklyValue.status.storedWeeks, 0);
 
     const denied = await wsCommand(base, 'drop player-1');
     assert.match(denied.find((frame) => frame.type === 'error').text, /COMMAND_NOT_ALLOWED/);

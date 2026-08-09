@@ -51,6 +51,26 @@ class YahooReadOnlyClient {
     return { payload, picks: extractDraftResults(payload) };
   }
 
+  async scoreboard(leagueKey, week) {
+    return this.get(`/league/${encodeURIComponent(leagueKey)}/scoreboard;week=${Number(week)}`);
+  }
+
+  async standings(leagueKey) {
+    return this.get(`/league/${encodeURIComponent(leagueKey)}/standings`);
+  }
+
+  async transactions(leagueKey, { start = 0, count = 100 } = {}) {
+    return this.get(`/league/${encodeURIComponent(leagueKey)}/transactions;start=${Number(start)};count=${Number(count)}`);
+  }
+
+  async roster(teamKey, week) {
+    return this.get(`/team/${encodeURIComponent(teamKey)}/roster;week=${Number(week)}`);
+  }
+
+  async availablePlayers(leagueKey, { start = 0, count = 100, status = 'A' } = {}) {
+    return this.get(`/league/${encodeURIComponent(leagueKey)}/players;status=${encodeURIComponent(status)};start=${Number(start)};count=${Number(count)}`);
+  }
+
   async get(endpoint) {
     if (!this.accessToken) {
       const error = new Error('Yahoo access token is not configured');

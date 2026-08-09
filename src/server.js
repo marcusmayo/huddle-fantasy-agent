@@ -16,6 +16,7 @@ const { DraftService } = require('./services/draft-service');
 const { FantasyProsRefreshController } = require('./services/fantasypros-refresh');
 const { LeagueOnboardingService } = require('./services/league-onboarding');
 const { reconcilePlayerEvidence } = require('./services/player-evidence');
+const { WeeklyFleetRunner, WeeklyManagementService } = require('./services/weekly-management-service');
 const { JsonStateStore } = require('./storage/json-state-store');
 
 const PUBLIC_DIR = path.resolve(__dirname, '../public');
@@ -84,7 +85,14 @@ function leagueEntry(runtime, leagueId) {
 
 function serviceFor(runtime, draftServices, leagueId) {
   const entry = leagueEntry(runtime, leagueId);
-  return { entry, service: draftServices.get(entry.id) };
+  const service = draftServices.get(entry.id);
+  if (!service) {
+    const failure = (runtime.leagueErrors || []).find((item) => item.leagueId === entry.id);
+    const error = new Error(failure?.message || `League state is unavailable: ${entry.id}`);
+    error.code = 'LEAGUE_STATE_UNAVAILABLE';
+    throw error;
+  }
+  return { entry, service };
 }
 
 function availablePlayers(runtime, service, sessionId) {
@@ -149,6 +157,44 @@ async function handleDraftRoutes(request, response, service, parts, { visionClie
   return false;
 }
 
+async function handleWeeklyRoutes(request, response, service, parts, url) {
+  if (!service) throw Object.assign(new Error('Weekly service is unavailable for this league'), { code: 'LEAGUE_STATE_UNAVAILABLE' });
+  if (!parts.length && request.method === 'GET') {
+    json(response, 200, service.status());
+    return true;
+  }
+  if (parts[0] === 'weeks' && parts.length === 1 && request.method === 'GET') {
+    json(response, 200, { weeks: service.listWeeks() });
+    return true;
+  }
+  if (parts[0] === 'latest' && request.method === 'GET') {
+    json(response, 200, { review: service.latest() });
+    return true;
+  }
+  if (parts[0] !== 'weeks' || !parts[1]) return false;
+  const week = Number(parts[1]);
+  const season = Number(url.searchParams.get('season') || new Date().getFullYear());
+  if (parts.length === 2 && request.method === 'GET') {
+    json(response, 200, service.getWeek(week, season));
+    return true;
+  }
+  if (parts[2] === 'import' && request.method === 'POST') {
+    const body = await readBody(request, 3_000_000);
+    const snapshot = body.snapshot || body;
+    json(response, 200, service.importSnapshot({ ...snapshot, week, season: snapshot.season || season }, {
+      expectedWeek: week,
+      eventId: body.snapshot ? body.eventId : body.eventId,
+      source: body.snapshot ? body.source : snapshot.source
+    }));
+    return true;
+  }
+  if (parts[2] === 'run' && request.method === 'POST') {
+    json(response, 200, service.rerun(week, season));
+    return true;
+  }
+  return false;
+}
+
 async function syncFantasyPros(runtime, fantasyProsClient, input = {}, { tank01Client, sleeperClient } = {}) {
   const rawPool = await fantasyProsClient.loadDraftPool({
     season: input.season || runtime.season,
@@ -195,7 +241,7 @@ async function syncFantasyPros(runtime, fantasyProsClient, input = {}, { tank01C
   };
 }
 
-function createHandler({ runtime, draftServices, fantasyProsClient, fantasyProsRefresh, tank01Client, sleeperClient, visionClient, leagueOnboarding }) {
+function createHandler({ runtime, draftServices, weeklyServices, weeklyFleetRunner, fantasyProsClient, fantasyProsRefresh, tank01Client, sleeperClient, visionClient, leagueOnboarding }) {
   return async function handler(request, response) {
     const url = new URL(request.url, 'http://huddle.local');
     const segments = url.pathname.split('/').filter(Boolean).map(decodeURIComponent);
@@ -204,7 +250,7 @@ function createHandler({ runtime, draftServices, fantasyProsClient, fantasyProsR
         return json(response, 200, { status: 'ok', service: 'huddle', instance: runtime.instanceName, mode: 'recommendation-only' });
       }
       if (request.method === 'GET' && url.pathname === '/health/readiness') {
-        const status = fleetStatus(runtime, draftServices);
+        const status = fleetStatus(runtime, draftServices, weeklyServices);
         return json(response, status.status === 'ready' ? 200 : 503, status);
       }
       if (request.method === 'GET' && url.pathname === '/color') return json(response, 200, colorContract());
@@ -213,19 +259,29 @@ function createHandler({ runtime, draftServices, fantasyProsClient, fantasyProsR
       }
       if (request.method === 'GET' && url.pathname === '/model') return json(response, 200, explanationRoute('routine'));
       if (request.method === 'GET' && url.pathname === '/pending') {
-        const items = [...draftServices.entries()].flatMap(([leagueId, service]) =>
+        const drafts = [...draftServices.entries()].flatMap(([leagueId, service]) =>
           service.listSessions().filter((session) => session.status === 'active').map((session) => ({ leagueId, sessionId: session.id }))
         );
+        const weekly = [...weeklyServices.entries()].flatMap(([leagueId, service]) => {
+          const latest = service.latest();
+          return latest?.waiver?.recommendation?.action === 'ADD_DROP'
+            ? [{ leagueId, season: latest.season, week: latest.week, action: 'review-waiver-recommendation' }]
+            : [];
+        });
+        const items = [...drafts, ...weekly];
         return json(response, 200, { count: items.length, items });
       }
       if (request.method === 'GET' && url.pathname === '/api/fleet/manifest') {
-        return json(response, 200, fleetManifest(runtime, draftServices));
+        return json(response, 200, fleetManifest(runtime, draftServices, weeklyServices));
       }
       if (request.method === 'GET' && url.pathname === '/api/fleet/status') {
-        return json(response, 200, fleetStatus(runtime, draftServices));
+        return json(response, 200, fleetStatus(runtime, draftServices, weeklyServices));
+      }
+      if (request.method === 'POST' && url.pathname === '/api/fleet/weekly/run') {
+        return json(response, 200, await weeklyFleetRunner.run(await readBody(request, 10_000_000)));
       }
       if (request.method === 'GET' && url.pathname === '/api/leagues') {
-        const manifest = fleetManifest(runtime, draftServices);
+        const manifest = fleetManifest(runtime, draftServices, weeklyServices);
         return json(response, 200, { defaultLeagueId: runtime.defaultLeagueId, leagues: manifest.leagues });
       }
       if (request.method === 'GET' && url.pathname === '/api/leagues/onboarding') {
@@ -233,7 +289,7 @@ function createHandler({ runtime, draftServices, fantasyProsClient, fantasyProsR
       }
       if (request.method === 'POST' && url.pathname === '/api/leagues') {
         const added = leagueOnboarding.add(await readBody(request));
-        const manifest = fleetManifest(runtime, draftServices);
+        const manifest = fleetManifest(runtime, draftServices, weeklyServices);
         return json(response, 201, {
           league: manifest.leagues.find((league) => league.id === added.entry.id),
           config: added.entry.config,
@@ -248,6 +304,7 @@ function createHandler({ runtime, draftServices, fantasyProsClient, fantasyProsR
           return json(response, 200, availablePlayers(runtime, service, url.searchParams.get('sessionId')));
         }
         if (tail[0] === 'draft' && await handleDraftRoutes(request, response, service, tail.slice(1), { visionClient, league: entry.config })) return;
+        if (tail[0] === 'weekly' && await handleWeeklyRoutes(request, response, weeklyServices.get(entry.id), tail.slice(1), url)) return;
       }
 
       // Backward-compatible single-league routes resolve to the configured default.
@@ -258,6 +315,8 @@ function createHandler({ runtime, draftServices, fantasyProsClient, fantasyProsR
       }
       if (segments[0] === 'api' && segments[1] === 'draft'
         && await handleDraftRoutes(request, response, defaultContext.service, segments.slice(2), { visionClient, league: defaultContext.entry.config })) return;
+      if (segments[0] === 'api' && segments[1] === 'weekly'
+        && await handleWeeklyRoutes(request, response, weeklyServices.get(runtime.defaultLeagueId), segments.slice(2), url)) return;
 
       if (request.method === 'GET' && url.pathname === '/api/provider-status') {
         return json(response, 200, {
@@ -292,7 +351,9 @@ function createHandler({ runtime, draftServices, fantasyProsClient, fantasyProsR
           yahoo: {
             credentialsConfigured: Boolean(process.env.YAHOO_CLIENT_ID && process.env.YAHOO_CLIENT_SECRET),
             oauthAccessRequired: true,
-            mode: 'read-only'
+            mode: 'read-only',
+            weeklyReadMethods: ['scoreboard', 'standings', 'transactions', 'roster', 'availablePlayers'],
+            normalizedWeeklyAdapterReady: false
           },
           leagueCount: runtime.leagues.length,
           activePlayerSource: runtime.playerPool.source,
@@ -319,7 +380,8 @@ function createHandler({ runtime, draftServices, fantasyProsClient, fantasyProsR
       if (request.method === 'GET' && serveStatic(url.pathname, response)) return;
       return json(response, 404, { error: 'NOT_FOUND', message: 'Route not found' });
     } catch (error) {
-      const status = ['SESSION_NOT_FOUND', 'LEAGUE_NOT_FOUND'].includes(error.code) ? 404
+      const status = ['SESSION_NOT_FOUND', 'LEAGUE_NOT_FOUND', 'WEEK_NOT_FOUND'].includes(error.code) ? 404
+        : error.code === 'LEAGUE_STATE_UNAVAILABLE' ? 503
         : error.code === 'LEAGUE_ALREADY_EXISTS' ? 409
           : error.code === 'LEAGUE_ONBOARDING_DISABLED' ? 403
         : error.code === 'FANTASYPROS_REQUEST_FAILED' ? 502
@@ -355,6 +417,7 @@ function normalizeRuntime(runtime) {
   runtime.leagueManagedRegistryPath ||= path.join(runtime.leagueOnboardingDir, 'registry.managed.json');
   runtime.leagueOnboardingEnabled ??= false;
   runtime.sourceSyncStatus ||= null;
+  runtime.leagueErrors ||= [];
   runtime.playerHeadshots = headshotPolicy(runtime.playerHeadshots);
   runtime.playerPool = sanitizePlayerPool(runtime.playerPool, runtime.playerHeadshots);
   return runtime;
@@ -363,15 +426,28 @@ function normalizeRuntime(runtime) {
 function buildApp(inputRuntime = loadRuntimeConfig(), options = {}) {
   const runtime = normalizeRuntime(inputRuntime);
   const storeFactory = options.storeFactory || ((entry) => new JsonStateStore(entry.stateFile));
-  const draftServices = new Map(runtime.leagues.map((entry) => [
-    entry.id,
-    new DraftService({ league: entry.config, playerPool: runtime.playerPool, store: storeFactory(entry) })
-  ]));
+  const draftServices = new Map();
+  const weeklyServices = new Map();
+  runtime.leagueErrors = [];
+  for (const entry of runtime.leagues) {
+    try {
+      const draftService = new DraftService({ league: entry.config, playerPool: runtime.playerPool, store: storeFactory(entry) });
+      draftServices.set(entry.id, draftService);
+      weeklyServices.set(entry.id, new WeeklyManagementService({ league: entry.config, playerPool: runtime.playerPool, draftService }));
+    } catch (error) {
+      runtime.leagueErrors.push({
+        leagueId: entry.id,
+        code: 'LEAGUE_STATE_UNAVAILABLE',
+        message: `League ${entry.id} was quarantined because its state could not be loaded: ${error.message}`
+      });
+    }
+  }
+  const weeklyFleetRunner = new WeeklyFleetRunner({ weeklyServices });
   const fantasyProsClient = options.fantasyProsClient || new FantasyProsClient({ cacheDir: runtime.fantasyProsCacheDir });
   const tank01Client = options.tank01Client || new Tank01Client({ cacheDir: runtime.tank01CacheDir });
   const sleeperClient = options.sleeperClient || new SleeperClient({ cacheDir: runtime.sleeperCacheDir });
   const visionClient = options.visionClient || new OpenRouterVisionClient();
-  const leagueOnboarding = new LeagueOnboardingService({ runtime, draftServices, storeFactory });
+  const leagueOnboarding = new LeagueOnboardingService({ runtime, draftServices, weeklyServices, storeFactory });
   const fantasyProsRefresh = new FantasyProsRefreshController({
     enabled: runtime.fantasyProsSyncEnabled && runtime.fantasyProsAutoRefreshEnabled,
     configured: fantasyProsClient.configured,
@@ -382,6 +458,8 @@ function buildApp(inputRuntime = loadRuntimeConfig(), options = {}) {
   const server = http.createServer(createHandler({
     runtime,
     draftServices,
+    weeklyServices,
+    weeklyFleetRunner,
     fantasyProsClient,
     fantasyProsRefresh,
     tank01Client,
@@ -389,12 +467,15 @@ function buildApp(inputRuntime = loadRuntimeConfig(), options = {}) {
     visionClient,
     leagueOnboarding
   }));
-  const commandRelay = attachReadOnlyCommandRelay(server, { runtime, draftServices });
+  const commandRelay = attachReadOnlyCommandRelay(server, { runtime, draftServices, weeklyServices });
   return {
     server,
     runtime,
     draftServices,
     draftService: draftServices.get(runtime.defaultLeagueId),
+    weeklyServices,
+    weeklyService: weeklyServices.get(runtime.defaultLeagueId),
+    weeklyFleetRunner,
     commandRelay,
     fantasyProsRefresh,
     tank01Client,
@@ -414,4 +495,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { buildApp, createHandler, handleDraftRoutes, normalizeRuntime, readBody, syncFantasyPros };
+module.exports = { buildApp, createHandler, handleDraftRoutes, handleWeeklyRoutes, normalizeRuntime, readBody, syncFantasyPros };
