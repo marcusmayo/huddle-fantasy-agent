@@ -27,12 +27,20 @@ function manualPlayer(input) {
 }
 
 class DraftService {
-  constructor({ league, playerPool, store }) {
+  constructor({ league, playerPool, store, evidenceRetentionDays = 30, now = () => new Date() }) {
     this.league = league;
     this.playerPool = playerPool;
     this.store = store;
+    this.evidenceRetentionDays = Math.max(1, Math.min(30, Number(evidenceRetentionDays) || 30));
+    this.now = now;
     this.state = store.load();
     this.state.sessions ||= {};
+    const pruned = this.pruneExpiredEvidence({ persist: false });
+    if (pruned.deletedReviews || pruned.deletedSessions) this.persist();
+  }
+
+  currentIso() {
+    return this.now().toISOString();
   }
 
   createSession({ draftSlot, sourceMode = 'manual', playerSource = this.playerPool.source }) {
@@ -47,7 +55,7 @@ class DraftService {
       throw error;
     }
     const id = crypto.randomUUID();
-    const now = new Date().toISOString();
+    const now = this.currentIso();
     const session = {
       id,
       leagueId: this.league.id,
@@ -118,11 +126,11 @@ class DraftService {
       position: player.position,
       teamId: input.teamId || null,
       isMine: Boolean(input.isMine),
-      observedAt: input.observedAt || new Date().toISOString(),
+      observedAt: input.observedAt || this.currentIso(),
       source: input.source || session.sourceMode
     });
     session.appliedEventIds.push(eventId);
-    session.updatedAt = new Date().toISOString();
+    session.updatedAt = this.currentIso();
     this.persist();
     return { applied: true, reason: null, session: this.decorate(session) };
   }
@@ -170,14 +178,15 @@ class DraftService {
         status: conflictsWithDraft ? 'conflict-drafted' : player ? 'confirmed' : 'unresolved-player'
       };
     });
-    const now = new Date().toISOString();
+    const now = this.currentIso();
     const review = {
       id: crypto.randomUUID(),
       eventId,
       purpose,
       source: String(input.source || 'openrouter-screenshot').slice(0, 50),
       observations,
-      createdAt: now
+      createdAt: now,
+      expiresAt: new Date(this.now().getTime() + this.evidenceRetentionDays * 24 * 60 * 60 * 1_000).toISOString()
     };
     session.evidenceReviews.push(review);
     session.evidenceReviews = session.evidenceReviews.slice(-20);
@@ -186,6 +195,90 @@ class DraftService {
     session.updatedAt = now;
     this.persist();
     return { applied: true, reason: null, review: structuredClone(review), session: this.decorate(session) };
+  }
+
+  deleteEvidenceReviews(id) {
+    const session = this.state.sessions[id];
+    if (!session) return this.getSession(id);
+    const reviews = session.evidenceReviews || [];
+    const removedEventIds = new Set(reviews.map((review) => review.eventId));
+    session.evidenceReviews = [];
+    session.appliedEvidenceEventIds = (session.appliedEvidenceEventIds || []).filter((eventId) => !removedEventIds.has(eventId));
+    session.updatedAt = this.currentIso();
+    this.persist();
+    return { deletedReviews: reviews.length, session: this.decorate(session) };
+  }
+
+  pruneExpiredEvidence({ persist = true } = {}) {
+    const cutoff = this.now().getTime() - this.evidenceRetentionDays * 24 * 60 * 60 * 1_000;
+    let deletedReviews = 0;
+    let deletedSessions = 0;
+    for (const [sessionId, session] of Object.entries(this.state.sessions)) {
+      const hasExpiredVisionPick = (session.picks || []).some((pick) =>
+        pick.source === 'openrouter-screenshot' && Number.isFinite(Date.parse(pick.observedAt)) && Date.parse(pick.observedAt) < cutoff
+      );
+      if (hasExpiredVisionPick) {
+        delete this.state.sessions[sessionId];
+        deletedSessions += 1;
+        continue;
+      }
+      const reviews = session.evidenceReviews || [];
+      const retained = reviews.filter((review) => {
+        const timestamp = Date.parse(review.createdAt);
+        return !Number.isFinite(timestamp) || timestamp >= cutoff;
+      });
+      const removed = reviews.filter((review) => !retained.includes(review));
+      if (!removed.length) continue;
+      deletedReviews += removed.length;
+      const removedEventIds = new Set(removed.map((review) => review.eventId));
+      session.evidenceReviews = retained;
+      session.appliedEvidenceEventIds = (session.appliedEvidenceEventIds || []).filter((eventId) => !removedEventIds.has(eventId));
+      session.updatedAt = this.currentIso();
+    }
+    if (persist && (deletedReviews || deletedSessions)) this.persist();
+    return {
+      leagueId: this.league.id,
+      retentionDays: this.evidenceRetentionDays,
+      deletedReviews,
+      deletedSessions,
+      rawImagesPersisted: false
+    };
+  }
+
+  unresolvedPlayers() {
+    const items = [];
+    for (const session of Object.values(this.state.sessions)) {
+      for (const pick of session.picks || []) {
+        if (!String(pick.playerId).startsWith('manual:')) continue;
+        items.push({
+          leagueId: this.league.id,
+          sessionId: session.id,
+          kind: 'manual-pick',
+          playerId: pick.playerId,
+          playerName: pick.playerName,
+          position: pick.position,
+          observedAt: pick.observedAt,
+          resolution: 'needs-provider-crosswalk'
+        });
+      }
+      for (const review of session.evidenceReviews || []) {
+        for (const observation of review.observations || []) {
+          if (observation.status !== 'unresolved-player') continue;
+          items.push({
+            leagueId: this.league.id,
+            sessionId: session.id,
+            kind: 'screenshot-observation',
+            reviewId: review.id,
+            playerId: null,
+            playerName: observation.playerName,
+            position: observation.position,
+            observedAt: review.createdAt,
+            resolution: 'needs-provider-crosswalk'
+          });
+        }
+      }
+    }
+    return items;
   }
 
   recommendation(id) {
@@ -256,6 +349,11 @@ class DraftService {
           confirmedObservations: session.evidenceReviews.reduce((count, review) =>
             count + (review.observations || []).filter((item) => item.status === 'confirmed').length, 0),
           semantics: 'Positive visible-row evidence only; omitted players remain unknown and rankings are unchanged.'
+        },
+        retention: {
+          screenshotMetadataDays: this.evidenceRetentionDays,
+          rawImagesPersisted: false,
+          providerPayloadsPersisted: false
         },
         warning: this.playerPool.complete === false
           ? 'Player evidence is truncated or incomplete; confirm the preferred player against Yahoo before drafting.'

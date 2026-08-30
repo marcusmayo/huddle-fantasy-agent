@@ -94,6 +94,81 @@ test('dashboard onboarding persists and activates an isolated league without res
     });
     assert.equal(duplicate.status, 409);
     assert.equal(duplicate.body.error, 'LEAGUE_ALREADY_EXISTS');
+
+    const removed = await fetchJson(`${base}/api/leagues/marcus-sunday-league`, { method: 'DELETE' });
+    assert.equal(removed.status, 200);
+    assert.equal(removed.body.removed, true);
+    assert.equal(removed.body.recoverable, true);
+    assert.equal(removed.body.fleet.leagues.length, 1);
+    assert.equal(app.draftServices.has('marcus-sunday-league'), false);
+    assert.equal(app.weeklyServices.has('marcus-sunday-league'), false);
+    const afterDeleteRegistry = JSON.parse(fs.readFileSync(path.join(tempDir, 'leagues', 'registry.managed.json')));
+    assert.deepEqual(afterDeleteRegistry.leagues, []);
+    const archived = fs.readdirSync(path.join(tempDir, 'leagues', 'archive'));
+    assert.equal(archived.length, 1);
+    assert.match(archived[0], /^marcus-sunday-league-/);
+
+    const lastLeague = await fetchJson(`${base}/api/leagues/${encodeURIComponent(baseLeague.id)}`, { method: 'DELETE' });
+    assert.equal(lastLeague.status, 200);
+    assert.equal(lastLeague.body.fleet.leagues.length, 0);
+    assert.equal(lastLeague.body.fleet.deploymentMode, 'empty');
+    assert.equal(lastLeague.body.defaultLeagueId, null);
+    assert.equal(app.runtime.league, null);
+    assert.equal(app.runtime.stateFile, null);
+
+    const providerStatus = await fetchJson(`${base}/api/provider-status`);
+    assert.equal(providerStatus.status, 200);
+    assert.equal(providerStatus.body.leagueCount, 0);
+    const legacyLeague = await fetchJson(`${base}/api/league`);
+    assert.equal(legacyLeague.status, 404);
+
+    const rebuilt = await fetchJson(`${base}/api/leagues`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...newLeague, name: 'Fresh Start League' })
+    });
+    assert.equal(rebuilt.status, 201);
+    assert.equal(app.runtime.leagues.length, 1);
+    assert.equal(app.runtime.defaultLeagueId, 'fresh-start-league');
+    assert.equal(app.runtime.league.id, 'fresh-start-league');
+  } finally {
+    await close(app);
+  }
+});
+
+test('administrator-configured league can be removed without deleting its source files', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'huddle-hide-configured-'));
+  const input = runtime(tempDir);
+  const second = { ...structuredClone(baseLeague), id: 'configured-secondary', name: 'CONFIGURED SECONDARY' };
+  input.leagues.push({ id: second.id, config: second, stateFile: path.join(tempDir, 'secondary.json') });
+  const app = buildApp(input, { storeFactory: () => new MemoryStateStore() });
+  const base = await listen(app);
+  try {
+    const removed = await fetchJson(`${base}/api/leagues/${encodeURIComponent(baseLeague.id)}`, { method: 'DELETE' });
+    assert.equal(removed.status, 200);
+    assert.equal(removed.body.removalMode, 'configured-league-hidden');
+    assert.equal(removed.body.archiveId, null);
+    assert.equal(removed.body.fleet.leagues.length, 1);
+    const overlay = JSON.parse(fs.readFileSync(path.join(tempDir, 'leagues', 'registry.managed.json')));
+    assert.deepEqual(overlay.removedLeagueIds, [baseLeague.id]);
+    assert.equal(fs.existsSync(path.join(tempDir, 'leagues', 'archive')), false);
+  } finally {
+    await close(app);
+  }
+});
+
+test('a quarantined final league can still be removed to recover the dashboard', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'huddle-delete-quarantined-'));
+  const app = buildApp(runtime(tempDir), {
+    storeFactory: () => { throw new Error('corrupt state'); }
+  });
+  const base = await listen(app);
+  try {
+    assert.equal(app.runtime.leagueErrors.length, 1);
+    const removed = await fetchJson(`${base}/api/leagues/${encodeURIComponent(baseLeague.id)}`, { method: 'DELETE' });
+    assert.equal(removed.status, 200);
+    assert.equal(removed.body.fleet.leagues.length, 0);
+    assert.equal(removed.body.defaultLeagueId, null);
   } finally {
     await close(app);
   }

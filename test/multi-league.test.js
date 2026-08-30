@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const { WebSocket } = require('ws');
 const baseLeague = require('../config/leagues/yahoo-example.json');
 const playerPool = require('../config/fixtures/demo-players.json');
-const { loadLeagueRegistry } = require('../src/config');
+const { loadLeagueRegistry, loadRuntimeConfig } = require('../src/config');
 const { buildApp } = require('../src/server');
 const { MemoryStateStore } = require('../src/storage/json-state-store');
 
@@ -95,6 +95,51 @@ test('league registry resolves configs and rejects mismatched ids', () => {
   bad.leagues[1].id = 'wrong';
   fs.writeFileSync(path.join(tempDir, 'bad.json'), JSON.stringify(bad));
   assert.throws(() => loadLeagueRegistry(path.join(tempDir, 'bad.json')), /does not match config id/);
+
+  fs.writeFileSync(path.join(tempDir, 'empty-managed.json'), JSON.stringify({ schemaVersion: 1, defaultLeagueId: null, leagues: [] }));
+  const emptyManaged = loadLeagueRegistry(path.join(tempDir, 'empty-managed.json'), { allowEmpty: true });
+  assert.equal(emptyManaged.defaultLeagueId, null);
+  assert.deepEqual(emptyManaged.leagues, []);
+});
+
+test('runtime can restart with every configured league removed', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'huddle-empty-fleet-'));
+  const configPath = path.join(tempDir, 'league.json');
+  const registryPath = path.join(tempDir, 'registry.json');
+  const managedPath = path.join(tempDir, 'registry.managed.json');
+  fs.writeFileSync(configPath, JSON.stringify(baseLeague));
+  fs.writeFileSync(registryPath, JSON.stringify({
+    schemaVersion: 1,
+    defaultLeagueId: baseLeague.id,
+    leagues: [{ id: baseLeague.id, config: './league.json', stateFile: './state.json' }]
+  }));
+  fs.writeFileSync(managedPath, JSON.stringify({
+    schemaVersion: 1,
+    defaultLeagueId: null,
+    leagues: [],
+    removedLeagueIds: [baseLeague.id]
+  }));
+  const overrides = {
+    HUDDLE_LEAGUE_REGISTRY: registryPath,
+    HUDDLE_MANAGED_LEAGUE_REGISTRY: managedPath,
+    HUDDLE_LEAGUE_ONBOARDING_DIR: tempDir,
+    HUDDLE_PLAYER_FIXTURE: path.resolve(__dirname, '../config/fixtures/demo-players.json'),
+    HUDDLE_PLAYER_SNAPSHOT_FILE: ''
+  };
+  const previous = Object.fromEntries(Object.keys(overrides).map((key) => [key, process.env[key]]));
+  Object.assign(process.env, overrides);
+  try {
+    const empty = loadRuntimeConfig();
+    assert.deepEqual(empty.leagues, []);
+    assert.equal(empty.defaultLeagueId, null);
+    assert.equal(empty.league, null);
+    assert.equal(empty.stateFile, null);
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
 });
 
 test('multi-league APIs keep sessions isolated and expose an Aegis manifest', async () => {

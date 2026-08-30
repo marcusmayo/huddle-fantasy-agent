@@ -77,4 +77,4 @@ Every import is persisted under the league's own state file with a stable event 
 
 ## Current Yahoo boundary
 
-The Yahoo provider exposes read-only scoreboard, standings, transaction, roster, and available-player requests. The OAuth callback/token-refresh lifecycle and Yahoo-payload-to-normalized-snapshot adapter are still required for unattended imports. Until those are connected, use the dashboard or API import. This boundary is explicit so the UI never suggests that a manual snapshot has been verified against live Yahoo data.
+The Yahoo provider exposes read-only scoreboard, standings, transaction, roster, and available-player requests. OAuth callback, encrypted token storage, refresh support, bounded retry, and a non-persisting transient preview boundary are implemented but disabled. Unattended imports still require approved credentials and live validation of the Yahoo-payload-to-normalized-snapshot adapter. Until those gates are cleared, use the dashboard or API import. This boundary is explicit so the UI never suggests that a manual snapshot has been verified against live Yahoo data.

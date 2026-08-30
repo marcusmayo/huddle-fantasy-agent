@@ -13,7 +13,7 @@
       <h1 id="app-title">Make the next pick count.</h1>
     </div>
     <div class="top-actions">
-      <label class="league-picker">League
+      <label id="league-picker" class="league-picker">League
         <select id="league-select" aria-label="Active league"></select>
       </label>
       <div class="status"><span class="pulse"></span><span id="sync-label">Manual mode</span></div>
@@ -24,12 +24,25 @@
     <section id="portfolio-summary" class="portfolio-summary">
       <div class="section-head">
         <div><p class="eyebrow">PORTFOLIO</p><h2>Yahoo league fleet</h2></div>
-        <div class="fleet-actions"><span id="fleet-mode" class="muted"></span><button id="add-league" type="button" class="ghost">+ Add league</button></div>
+        <div class="fleet-actions">
+          <span id="fleet-mode" class="muted"></span>
+          <button id="connect-yahoo" type="button" class="ghost">Connect Yahoo</button>
+          <button id="add-league" type="button" class="ghost">+ Add league</button>
+        </div>
       </div>
       <div id="league-grid" class="league-grid"></div>
+      <section id="fleet-empty" class="panel fleet-empty hidden">
+        <p class="eyebrow">START FROM SCRATCH</p>
+        <h2>No leagues are configured</h2>
+        <p class="muted">Connect Yahoo to discover your leagues automatically, or add one manually as a fallback.</p>
+        <div class="empty-actions">
+          <button id="empty-connect-yahoo" type="button">Connect Yahoo</button>
+          <button id="empty-add-league" type="button" class="ghost">Add manually</button>
+        </div>
+      </section>
     </section>
 
-    <nav class="mode-switch" aria-label="Huddle workspace">
+    <nav id="mode-switch" class="mode-switch" aria-label="Huddle workspace">
       <button id="draft-mode" type="button" class="active">Draft room</button>
       <button id="weekly-mode" type="button" class="ghost">Weekly management</button>
     </nav>
@@ -62,6 +75,11 @@
       </div>
 
       <div id="evidence-warning" class="warning hidden"></div>
+
+      <details id="unresolved-panel" class="panel unresolved-panel hidden">
+        <summary><span id="unresolved-count">0</span> player identities need provider crosswalk review</summary>
+        <div id="unresolved-list" class="unresolved-list"></div>
+      </details>
 
       <details class="panel evidence-panel">
         <summary>What built this draft board?</summary>
@@ -247,6 +265,20 @@
         <button id="close-league-dialog" type="button" class="ghost dialog-close" aria-label="Close league onboarding">×</button>
       </header>
       <p id="league-onboarding-status" class="muted">Loading onboarding status…</p>
+      <section id="yahoo-onboarding" class="yahoo-onboarding">
+        <div>
+          <p class="eyebrow">YAHOO READ-ONLY CONNECTION</p>
+          <h3 id="yahoo-connection-title">Connect your Yahoo account</h3>
+          <p id="yahoo-connection-message" class="muted">Huddle will discover leagues and teams owned by the connected account. It cannot draft, change a lineup, or submit a waiver claim.</p>
+        </div>
+        <div class="yahoo-onboarding-actions">
+          <button id="dialog-connect-yahoo" type="button">Connect Yahoo</button>
+          <button id="discover-yahoo-leagues" type="button" class="ghost hidden">Discover leagues</button>
+        </div>
+        <p id="yahoo-discovery-message" class="message" role="status"></p>
+        <div id="yahoo-league-results" class="yahoo-league-results hidden"></div>
+      </section>
+      <div class="manual-divider"><span>Manual fallback</span></div>
       <div class="form-grid">
         <label>League name <input id="add-league-name" name="name" maxlength="120" placeholder="DR FANTASY FOOTBALL" required></label>
         <label>Your team name <input id="add-target-team" name="targetTeam" maxlength="120" placeholder="BIG BALLERS 4" required></label>
@@ -286,9 +318,13 @@
         <span>Huddle will save this as a separate league now. Yahoo remains authoritative; OAuth import and a settings-diff confirmation are required before it is marked verified.</span>
       </div>
       <p id="league-form-message" class="message" role="status"></p>
-      <div class="dialog-actions"><button id="cancel-league" type="button" class="ghost">Cancel</button><button id="save-league" type="submit">Add league to dashboard</button></div>
+      <div class="dialog-actions"><button id="cancel-league" type="button" class="ghost">Cancel</button><button id="save-league" type="submit">Add manual league</button></div>
     </form>
   </dialog>
+  <footer class="provider-attribution">
+    <span>Fantasy data provided by <a href="https://football.fantasysports.yahoo.com/" target="_blank" rel="noreferrer">Yahoo Fantasy</a>.</span>
+    <span>Huddle is an independent, recommendation-only assistant. Yahoo data is processed through a transient, read-only boundary.</span>
+  </footer>
   <div id="app-toast" class="app-toast hidden" role="status" aria-live="assertive"></div>
   <script src="/app.js" defer></script>
 </body>

@@ -262,6 +262,11 @@ class OpenRouterVisionClient {
       warnings: [...new Set(warnings)],
       candidates,
       imagePersisted: false,
+      retention: {
+        rawImage: 'not-persisted',
+        operatorConfirmedMetadataMaxDays: 30,
+        expiresAtAssignedOnSave: true
+      },
       usage: payload.usage || null
     };
   }

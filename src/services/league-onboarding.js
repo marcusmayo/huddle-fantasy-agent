@@ -157,14 +157,22 @@ class LeagueOnboardingService {
   }
 
   status() {
+    const yahooOAuthReady = Boolean(
+      this.runtime.yahooOAuthEnabled
+      && process.env.YAHOO_CLIENT_ID
+      && process.env.YAHOO_CLIENT_SECRET
+      && process.env.YAHOO_REDIRECT_URI
+    );
     return {
       enabled: Boolean(this.runtime.leagueOnboardingEnabled),
-      mode: 'manual-with-yahoo-verification-pending',
+      mode: yahooOAuthReady ? 'yahoo-account-or-manual' : 'manual-with-yahoo-verification-pending',
       persistence: this.runtime.leagueManagedRegistryPath ? 'managed-registry' : 'disabled',
-      yahooOAuthReady: Boolean(process.env.YAHOO_CLIENT_ID && process.env.YAHOO_CLIENT_SECRET),
-      verificationAvailable: false,
+      yahooOAuthReady,
+      verificationAvailable: yahooOAuthReady,
       message: this.runtime.leagueOnboardingEnabled
-        ? 'Add a manual Yahoo league now. API verification becomes available after Yahoo OAuth is connected.'
+        ? yahooOAuthReady
+          ? 'Connect Yahoo to discover and import owned leagues, or use the manual fallback.'
+          : 'Add a manual Yahoo league now. API verification becomes available after Yahoo OAuth is connected.'
         : 'League onboarding is disabled. Enable it only on loopback or behind authenticated access.'
     };
   }
@@ -174,14 +182,41 @@ class LeagueOnboardingService {
       throw onboardingError('LEAGUE_ONBOARDING_DISABLED', 'Dashboard league onboarding is disabled on this instance');
     }
     const config = buildLeagueConfig(input || {});
+    const yahooLeagueKey = cleanText(input.yahooLeagueKey, 'Yahoo league key', { max: 120, required: false }) || null;
+    const yahooTeamKey = cleanText(input.yahooTeamKey, 'Yahoo team key', { max: 120, required: false }) || null;
+    return this.persist({
+      config,
+      yahooLeagueKey,
+      yahooTeamKey,
+      credentialRef: 'yahoo-primary',
+      verificationStatus: 'unverified'
+    });
+  }
+
+  addVerified({ config, yahooLeagueKey, yahooTeamKey, credentialRef = 'yahoo-primary' } = {}) {
+    if (!this.runtime.leagueOnboardingEnabled) {
+      throw onboardingError('LEAGUE_ONBOARDING_DISABLED', 'Dashboard league onboarding is disabled on this instance');
+    }
+    const verified = validateLeagueConfig(structuredClone(config));
+    const leagueKey = cleanText(yahooLeagueKey, 'Yahoo league key', { max: 120 });
+    const teamKey = cleanText(yahooTeamKey, 'Yahoo team key', { max: 120 });
+    const status = verified.provenance?.verificationStatus || 'verified';
+    return this.persist({
+      config: verified,
+      yahooLeagueKey: leagueKey,
+      yahooTeamKey: teamKey,
+      credentialRef: cleanText(credentialRef, 'Yahoo credential reference', { max: 120 }),
+      verificationStatus: status
+    });
+  }
+
+  persist({ config, yahooLeagueKey, yahooTeamKey, credentialRef, verificationStatus }) {
     if (this.runtime.leagues.some((entry) => entry.id === config.id)) {
       throw onboardingError('LEAGUE_ALREADY_EXISTS', `A league with id ${config.id} already exists`);
     }
     const managedDir = path.resolve(this.runtime.leagueOnboardingDir);
     const configPath = path.join(managedDir, config.id, 'config.json');
     const stateFile = path.join(managedDir, config.id, 'state.json');
-    const yahooLeagueKey = cleanText(input.yahooLeagueKey, 'Yahoo league key', { max: 120, required: false }) || null;
-    const yahooTeamKey = cleanText(input.yahooTeamKey, 'Yahoo team key', { max: 120, required: false }) || null;
     const registryPath = path.resolve(this.runtime.leagueManagedRegistryPath);
     const registry = fs.existsSync(registryPath)
       ? JSON.parse(fs.readFileSync(registryPath, 'utf8'))
@@ -189,6 +224,7 @@ class LeagueOnboardingService {
     if (registry.schemaVersion !== 1 || !Array.isArray(registry.leagues)) {
       throw onboardingError('INVALID_LEAGUE_REGISTRY', 'Managed league registry is invalid');
     }
+    registry.defaultLeagueId ||= config.id;
     atomicWriteJson(configPath, config);
     registry.leagues.push({
       id: config.id,
@@ -197,8 +233,8 @@ class LeagueOnboardingService {
       stateFile: `${config.id}/state.json`,
       yahooLeagueKey,
       yahooTeamKey,
-      credentialRef: 'yahoo-primary',
-      verificationStatus: 'unverified'
+      credentialRef,
+      verificationStatus
     });
     atomicWriteJson(registryPath, registry);
     const entry = {
@@ -208,12 +244,16 @@ class LeagueOnboardingService {
       stateFile,
       yahooLeagueKey,
       yahooTeamKey,
-      credentialRef: 'yahoo-primary',
-      verificationStatus: 'unverified'
+      credentialRef,
+      verificationStatus,
+      managed: true
     };
     const service = new DraftService({ league: config, playerPool: this.runtime.playerPool, store: this.storeFactory(entry) });
     const weeklyService = new WeeklyManagementService({ league: config, playerPool: this.runtime.playerPool, draftService: service });
     this.runtime.leagues.push(entry);
+    this.runtime.defaultLeagueId ||= entry.id;
+    this.runtime.league ||= entry.config;
+    this.runtime.stateFile ||= entry.stateFile;
     this.draftServices.set(entry.id, service);
     this.weeklyServices.set(entry.id, weeklyService);
     return {
@@ -221,10 +261,72 @@ class LeagueOnboardingService {
       service,
       weeklyService,
       verification: {
-        status: 'unverified',
+        status: verificationStatus,
         authority: 'yahoo',
-        nextStep: 'Connect Yahoo OAuth, discover this league, and confirm the imported settings diff.'
+        nextStep: verificationStatus === 'unverified'
+          ? 'Connect Yahoo OAuth, discover this league, and confirm the imported settings diff.'
+          : 'Review any import warnings, then use Yahoo as the read-only league authority.'
       }
+    };
+  }
+
+  remove(leagueId) {
+    if (!this.runtime.leagueOnboardingEnabled) {
+      throw onboardingError('LEAGUE_ONBOARDING_DISABLED', 'Dashboard league management is disabled on this instance');
+    }
+    const id = String(leagueId || '');
+    const entry = this.runtime.leagues.find((candidate) => candidate.id === id);
+    if (!entry) throw onboardingError('LEAGUE_NOT_FOUND', `League not found: ${id}`);
+    const registryPath = path.resolve(this.runtime.leagueManagedRegistryPath);
+    const registry = fs.existsSync(registryPath)
+      ? JSON.parse(fs.readFileSync(registryPath, 'utf8'))
+      : { schemaVersion: 1, defaultLeagueId: null, leagues: [] };
+    if (registry.schemaVersion !== 1 || !Array.isArray(registry.leagues)) {
+      throw onboardingError('INVALID_LEAGUE_REGISTRY', 'Managed league registry is invalid');
+    }
+    registry.removedLeagueIds ||= [];
+    let sourceDirectory = null;
+    let archiveDirectory = null;
+    let archiveId = null;
+    if (entry.managed) {
+      if (!registry.leagues.some((candidate) => String(candidate.id) === id)) {
+        throw onboardingError('LEAGUE_DELETE_NOT_ALLOWED', 'Managed league registry does not contain this league');
+      }
+      const managedRoot = path.resolve(this.runtime.leagueOnboardingDir);
+      sourceDirectory = path.resolve(path.dirname(entry.configPath));
+      if (sourceDirectory === managedRoot || !sourceDirectory.startsWith(`${managedRoot}${path.sep}`)) {
+        throw onboardingError('LEAGUE_ARCHIVE_UNSAFE', 'League files are outside the managed onboarding directory');
+      }
+      const archiveRoot = path.join(managedRoot, 'archive');
+      archiveId = `${id}-${new Date().toISOString().replace(/[:.]/g, '-')}-${crypto.randomUUID().slice(0, 8)}`;
+      archiveDirectory = path.join(archiveRoot, archiveId);
+      fs.mkdirSync(archiveRoot, { recursive: true });
+      if (fs.existsSync(sourceDirectory)) fs.renameSync(sourceDirectory, archiveDirectory);
+    }
+    try {
+      if (entry.managed) registry.leagues = registry.leagues.filter((candidate) => String(candidate.id) !== id);
+      else if (!registry.removedLeagueIds.includes(id)) registry.removedLeagueIds.push(id);
+      if (registry.defaultLeagueId === id) registry.defaultLeagueId = registry.leagues[0]?.id || null;
+      atomicWriteJson(registryPath, registry);
+    } catch (error) {
+      if (archiveDirectory && fs.existsSync(archiveDirectory) && !fs.existsSync(sourceDirectory)) fs.renameSync(archiveDirectory, sourceDirectory);
+      throw error;
+    }
+
+    this.runtime.leagues = this.runtime.leagues.filter((candidate) => candidate.id !== id);
+    this.draftServices.delete(id);
+    this.weeklyServices.delete(id);
+    if (this.runtime.defaultLeagueId === id) this.runtime.defaultLeagueId = this.runtime.leagues[0]?.id || null;
+    const defaultEntry = this.runtime.leagues.find((candidate) => candidate.id === this.runtime.defaultLeagueId);
+    this.runtime.league = defaultEntry?.config || null;
+    this.runtime.stateFile = defaultEntry?.stateFile || null;
+    return {
+      leagueId: id,
+      removed: true,
+      recoverable: true,
+      archiveId,
+      removalMode: entry.managed ? 'managed-league-archived' : 'configured-league-hidden',
+      defaultLeagueId: this.runtime.defaultLeagueId
     };
   }
 }

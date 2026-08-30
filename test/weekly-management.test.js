@@ -245,6 +245,25 @@ test('weekly management controls are present in the Huddle dashboard', () => {
   assert.match(html, /id="weekly-import"/);
   assert.match(html, /HOLD/);
   assert.match(html, /Actual vs optimal/);
+  assert.match(html, /Fantasy data provided by/);
+  assert.match(html, /https:\/\/football\.fantasysports\.yahoo\.com\//);
+  const client = fs.readFileSync(path.resolve(__dirname, '../public/app.js'), 'utf8');
+  assert.match(client, /classList\.toggle\('hidden', state\.mode === 'weekly'\)/);
+  assert.match(client, /data-league-delete/);
+  assert.match(client, /draggable="true"/);
+});
+
+test('dashboard exposes an intentional empty-fleet onboarding state', () => {
+  const html = fs.readFileSync(path.resolve(__dirname, '../public/index.html'), 'utf8');
+  const client = fs.readFileSync(path.resolve(__dirname, '../public/app.js'), 'utf8');
+  assert.match(html, /id="fleet-empty"/);
+  assert.match(html, /id="empty-connect-yahoo"/);
+  assert.match(html, /id="empty-add-league"/);
+  assert.match(html, /id="yahoo-league-results"/);
+  assert.match(client, /function showEmptyFleet\(\)/);
+  assert.match(client, /function discoverYahooLeagues\(\)/);
+  assert.match(client, /\/api\/yahoo\/leagues\/import/);
+  assert.match(client, /else showEmptyFleet\(\)/);
 });
 
 test('the bundled weekly snapshot satisfies the default league contract', () => {
