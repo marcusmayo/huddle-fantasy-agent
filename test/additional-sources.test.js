@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { SleeperClient, normalizeSleeperTrends } = require('../src/providers/sleeper');
+const { SleeperClient, normalizeSleeperPlayerCrosswalk, normalizeSleeperTrends } = require('../src/providers/sleeper');
 const { Tank01Client, normalizeTank01Players, positionFromPosAdp, scoringToAdpType } = require('../src/providers/tank01');
 const { SOURCE_WEIGHTS, reconcilePlayerEvidence } = require('../src/services/player-evidence');
 
@@ -87,8 +87,18 @@ test('Sleeper maps add/drop activity and caches its large player map', async () 
   const second = await client.loadDraftEvidence();
   assert.equal(first.players[0].direction, 'rising');
   assert.equal(first.players[0].net, 17);
+  assert.equal(first.identityPlayers[0].yahooId, '99');
   assert.equal(second.cacheHit, true);
   assert.equal(requests.length, 3);
+});
+
+test('Sleeper player map supplies active Yahoo identity crosswalks independently of trends', () => {
+  const rows = normalizeSleeperPlayerCrosswalk({
+    s1: { full_name: 'Mapped Player', position: 'RB', yahoo_id: 101 },
+    s2: { full_name: 'No Yahoo Player', position: 'WR' },
+    s3: { full_name: 'Unsupported Player', position: 'P', yahoo_id: 303 }
+  });
+  assert.deepEqual(rows, [{ sleeperId: 's1', yahooId: '101', fantasyDataId: null, name: 'Mapped Player', position: 'RB', team: 'FA' }]);
 });
 
 test('Sleeper neutral trends remain a non-ranking signal', () => {

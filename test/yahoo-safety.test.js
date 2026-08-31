@@ -311,7 +311,11 @@ test('Yahoo OAuth HTTP flow is disabled by default and stores one league connect
     leagues: [{ id: league.id, config: league, stateFile: path.join(tempDir, 'state.json'), credentialRef: 'yahoo-primary' }],
     playerPool: structuredClone(playerPool)
   };
-  const app = buildApp(runtime, { storeFactory: () => new MemoryStateStore(), yahooOAuth });
+  const app = buildApp(runtime, {
+    storeFactory: () => new MemoryStateStore(),
+    yahooOAuth,
+    logger: { info() {}, warn() {} }
+  });
   await new Promise((resolve) => app.server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${app.server.address().port}`;
   try {
@@ -368,6 +372,7 @@ test('account-first Yahoo OAuth discovers and imports a league into an empty fle
   const app = buildApp(runtime, {
     storeFactory: () => new MemoryStateStore(),
     yahooOAuth,
+    logger: { info() {}, warn() {} },
     yahooClientFactory: () => ({
       userNflLeagues: async () => extractYahooLeagues(yahooDiscoveryPayload()),
       leagueSettings: async () => yahooSettingsPayload()

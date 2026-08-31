@@ -9,6 +9,9 @@
   },
   "scripts": {
     "start": "node src/server.js",
+    "start:live": "node src/server.js",
+    "preflight": "node scripts/operations-preflight.js",
+    "preflight:json": "node scripts/operations-preflight.js --json",
     "dev": "node --watch src/server.js",
     "test": "node --test",
     "verify:core": "bash scripts/verify-core.sh scripts",

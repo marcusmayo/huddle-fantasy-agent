@@ -4,13 +4,15 @@ Weekly management is isolated by league. Shared FantasyPros, Tank01, and Sleeper
 
 Huddle remains recommendation-only. It does not submit a lineup, add, drop, trade, bid, or waiver claim.
 
+For the dated startup, deployment, and operator checklist, use the [September 8, 2026 operations plan](september-8-operations.md).
+
 ## Dashboard workflow
 
 1. Select the league from the portfolio dashboard.
 2. Choose **Weekly management**.
 3. Set the season and week.
-4. Upload normalized JSON from a Yahoo adapter, paste an export, or choose **Load editable template**.
-5. Select **Import and run this league**.
+4. Click **Refresh from Yahoo** for a live, expiring preview. If live normalization fails, upload normalized JSON, paste an approved export, or choose **Load editable template**.
+5. For manual data, select **Import and run this league**. A Yahoo live preview is intentionally not persisted.
 6. Review the result, standing movement, actual-versus-optimal lineup, risks, transaction log, and waiver decision.
 7. If the result is `ADD_DROP`, confirm availability and waiver state in Yahoo before acting. If it is `HOLD`, preserve FAAB or priority.
 
@@ -75,6 +77,43 @@ Every import is persisted under the league's own state file with a stable event 
 
 `POST .../run` rebuilds the saved review with the current shared evidence. Only explicit `weeklyProjectedPoints`/`projectedPointsWeek` and `remainingProjectedPoints`/`remainingProjection` fields override the saved projections. Generic preseason `projectedPoints` from a draft pool is intentionally not substituted. The evidence block reports how many players received refreshed projections.
 
-## Current Yahoo boundary
+## Live Yahoo preview
 
-The Yahoo provider exposes read-only scoreboard, standings, transaction, roster, and available-player requests. OAuth callback, encrypted token storage, refresh support, bounded retry, and a non-persisting transient preview boundary are implemented but disabled. Unattended imports still require approved credentials and live validation of the Yahoo-payload-to-normalized-snapshot adapter. Until those gates are cleared, use the dashboard or API import. This boundary is explicit so the UI never suggests that a manual snapshot has been verified against live Yahoo data.
+With a connected Yahoo account and a verified imported league, refresh one league:
+
+```bash
+curl -fsS -X POST \
+  'http://127.0.0.1:8787/api/leagues/<league-id>/weekly/yahoo/refresh' \
+  -H 'content-type: application/json' \
+  -d '{"season":2026,"week":1}'
+```
+
+Read it until its expiry:
+
+```bash
+curl -fsS \
+  'http://127.0.0.1:8787/api/leagues/<league-id>/weekly/yahoo/latest'
+```
+
+Refresh every imported league with failure isolation:
+
+```bash
+curl -fsS -X POST \
+  'http://127.0.0.1:8787/api/operations/weekly/refresh' \
+  -H 'content-type: application/json' \
+  -d '{"season":2026,"week":1}'
+```
+
+Inspect the latest scheduled run and each preview state:
+
+```bash
+curl -fsS 'http://127.0.0.1:8787/api/operations/weekly/status'
+```
+
+Huddle automatically refreshes at startup, after OAuth connection, after league import, and every 24 hours while the process stays awake. The default preview expires after 60 minutes. Scheduled results produce structured container log lines and preserve per-league failure isolation.
+
+## Yahoo safety boundary
+
+The Yahoo provider exposes read-only scoreboard, standings, transaction, roster, and available-player requests. OAuth callback, encrypted token storage, refresh support, bounded retry, a versioned weekly normalizer, and a non-persisting transient preview boundary are implemented. Raw responses and normalized Yahoo previews are not written to league state. The first live preview for every league must be compared with Yahoo; team coverage, target roster, opponent links, roster slots, and identity failures are rejected rather than guessed. Until Yahoo confirms permitted retention, use live previews for decisions and the manual import path only for data that is approved for persistence.
+
+A Codespace sleeps and therefore cannot provide unattended schedules. Run `docker compose up -d --build` on an always-on host with managed secrets, HTTPS/private access, and the persistent `huddle-state` volume for continuous weekly refresh.

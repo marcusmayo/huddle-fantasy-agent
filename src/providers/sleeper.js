@@ -36,6 +36,17 @@ function normalizeSleeperTrends({ playerMap = {}, adds = [], drops = [] } = {}) 
   }).filter((row) => row.name && row.position);
 }
 
+function normalizeSleeperPlayerCrosswalk(playerMap = {}) {
+  return Object.entries(playerMap).map(([id, player]) => ({
+    sleeperId: String(id),
+    yahooId: player?.yahoo_id == null ? null : String(player.yahoo_id),
+    fantasyDataId: player?.fantasy_data_id == null ? null : String(player.fantasy_data_id),
+    name: playerName(player),
+    position: normalizePosition(player?.position || player?.fantasy_positions?.[0]),
+    team: String(player?.team || 'FA').toUpperCase()
+  })).filter((row) => row.yahooId && row.name && ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'].includes(row.position));
+}
+
 class SleeperClient {
   constructor({
     enabled = String(process.env.HUDDLE_SLEEPER_TRENDS_ENABLED || 'true').toLowerCase() !== 'false',
@@ -108,9 +119,10 @@ class SleeperClient {
       cacheHit: playerMap.cacheHit && adds.cacheHit && drops.cacheHit,
       lookbackHours: this.lookbackHours,
       attribution: 'Sleeper',
-      players: normalizeSleeperTrends({ playerMap: playerMap.payload, adds: adds.payload, drops: drops.payload })
+      players: normalizeSleeperTrends({ playerMap: playerMap.payload, adds: adds.payload, drops: drops.payload }),
+      identityPlayers: normalizeSleeperPlayerCrosswalk(playerMap.payload)
     };
   }
 }
 
-module.exports = { SleeperClient, normalizeSleeperTrends, playerName };
+module.exports = { SleeperClient, normalizeSleeperPlayerCrosswalk, normalizeSleeperTrends, playerName };

@@ -311,6 +311,9 @@ function buildYahooLeagueConfig({ league, team, settingsPayload, importedAt = ne
       importedAt,
       yahooLeagueKey: league.leagueKey,
       yahooTeamKey: team.teamKey,
+      season: league.season || null,
+      currentWeek: league.currentWeek || null,
+      draftStatus: league.draftStatus || null,
       rawPayloadPersisted: false,
       warnings
     }
