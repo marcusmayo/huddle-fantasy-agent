@@ -243,6 +243,8 @@ test('weekly management controls are present in the Huddle dashboard', () => {
   const html = fs.readFileSync(path.resolve(__dirname, '../public/index.html'), 'utf8');
   assert.match(html, /id="weekly-mode"/);
   assert.match(html, /id="weekly-import"/);
+  assert.match(html, /id="weekly-yahoo-refresh"/);
+  assert.match(html, /id="yahoo-draft-sync"/);
   assert.match(html, /HOLD/);
   assert.match(html, /Actual vs optimal/);
   assert.match(html, /Fantasy data provided by/);
@@ -251,6 +253,8 @@ test('weekly management controls are present in the Huddle dashboard', () => {
   assert.match(client, /classList\.toggle\('hidden', state\.mode === 'weekly'\)/);
   assert.match(client, /data-league-delete/);
   assert.match(client, /draggable="true"/);
+  assert.match(client, /refreshWeeklyFromYahoo/);
+  assert.match(client, /controlYahooDraftSync/);
 });
 
 test('dashboard exposes an intentional empty-fleet onboarding state', () => {

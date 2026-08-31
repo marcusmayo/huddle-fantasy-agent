@@ -76,6 +76,19 @@
 
       <div id="evidence-warning" class="warning hidden"></div>
 
+      <section id="yahoo-draft-sync" class="panel yahoo-operation hidden" aria-live="polite">
+        <div>
+          <p class="eyebrow">YAHOO READ-ONLY DRAFT SYNC</p>
+          <h2 id="yahoo-draft-sync-state">Starting…</h2>
+          <p id="yahoo-draft-sync-detail" class="muted">Completed Yahoo picks will be reconciled automatically. Huddle cannot submit a pick.</p>
+        </div>
+        <div class="operation-actions">
+          <button id="yahoo-draft-sync-once" type="button" class="ghost compact">Sync now</button>
+          <button id="yahoo-draft-sync-start" type="button" class="ghost compact">Start</button>
+          <button id="yahoo-draft-sync-stop" type="button" class="ghost compact">Stop</button>
+        </div>
+      </section>
+
       <details id="unresolved-panel" class="panel unresolved-panel hidden">
         <summary><span id="unresolved-count">0</span> player identities need provider crosswalk review</summary>
         <div id="unresolved-list" class="unresolved-list"></div>
@@ -209,13 +222,14 @@
             <select id="weekly-history"><option value="">Latest</option></select>
           </label>
           <button id="weekly-rerun" type="button" class="ghost">Re-run league</button>
+          <button id="weekly-yahoo-refresh" type="button">Refresh from Yahoo</button>
         </form>
       </div>
 
       <section id="weekly-empty" class="panel weekly-empty">
         <p class="eyebrow">FIRST WEEKLY RUN</p>
         <h2>Import this league’s weekly snapshot</h2>
-        <p class="muted">Yahoo OAuth can later produce this normalized JSON automatically. Today you can upload an adapter export or paste JSON. No add, drop, lineup, or waiver action is submitted to Yahoo.</p>
+        <p class="muted">Use Refresh from Yahoo for a transient read-only review, or import normalized JSON manually. Yahoo previews are held in memory only. No add, drop, lineup, or waiver action is submitted.</p>
         <div class="weekly-import-grid">
           <label class="weekly-file">Snapshot JSON file <input id="weekly-file" type="file" accept="application/json,.json"></label>
           <button id="weekly-template" type="button" class="ghost">Load editable template</button>

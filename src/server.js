@@ -19,6 +19,7 @@ const { LeagueOnboardingService } = require('./services/league-onboarding');
 const { reconcilePlayerEvidence } = require('./services/player-evidence');
 const { WeeklyFleetRunner, WeeklyManagementService } = require('./services/weekly-management-service');
 const { YahooAccountService, YAHOO_ACCOUNT_CREDENTIAL } = require('./services/yahoo-account-service');
+const { YahooOperationsService } = require('./services/yahoo-operations-service');
 const { JsonStateStore } = require('./storage/json-state-store');
 
 const PUBLIC_DIR = path.resolve(__dirname, '../public');
@@ -113,14 +114,28 @@ function availablePlayers(runtime, service, sessionId) {
   };
 }
 
-async function handleDraftRoutes(request, response, service, parts, { visionClient, league } = {}) {
+async function handleDraftRoutes(request, response, service, parts, { visionClient, league, leagueEntry: entry, yahooOperations } = {}) {
   if (parts[0] !== 'sessions') return false;
   if (parts.length === 1 && request.method === 'GET') {
     json(response, 200, { sessions: service.listSessions() });
     return true;
   }
   if (parts.length === 1 && request.method === 'POST') {
-    json(response, 201, service.createSession(await readBody(request)));
+    const session = service.createSession(await readBody(request));
+    let yahooSync = null;
+    if (session.sourceMode === 'yahoo' && yahooOperations && entry) {
+      try {
+        yahooSync = yahooOperations.startDraftSync({ leagueId: entry.id, sessionId: session.id });
+      } catch (error) {
+        yahooSync = {
+          leagueId: entry.id,
+          sessionId: session.id,
+          state: 'blocked',
+          lastError: { code: error.code || 'YAHOO_DRAFT_SYNC_BLOCKED', message: error.message, details: error.details || null }
+        };
+      }
+    }
+    json(response, 201, { ...session, yahooSync });
     return true;
   }
   const sessionId = parts[1];
@@ -128,6 +143,24 @@ async function handleDraftRoutes(request, response, service, parts, { visionClie
   if (parts.length === 2 && request.method === 'GET') {
     json(response, 200, service.getSession(sessionId));
     return true;
+  }
+  if (parts[2] === 'yahoo-sync' && yahooOperations && entry) {
+    if (parts.length === 3 && request.method === 'GET') {
+      json(response, 200, yahooOperations.draftStatus(entry.id, sessionId));
+      return true;
+    }
+    if (parts.length === 3 && request.method === 'POST') {
+      json(response, 200, yahooOperations.startDraftSync({ leagueId: entry.id, sessionId }));
+      return true;
+    }
+    if (parts[3] === 'once' && request.method === 'POST') {
+      json(response, 200, await yahooOperations.syncDraftOnce({ leagueId: entry.id, sessionId }));
+      return true;
+    }
+    if (parts[3] === 'stop' && request.method === 'POST') {
+      json(response, 200, yahooOperations.stopDraftSync({ leagueId: entry.id, sessionId }));
+      return true;
+    }
   }
   if (parts[2] === 'analyze-screenshot' && request.method === 'POST') {
     const body = await readBody(request, 7_500_000);
@@ -252,7 +285,7 @@ async function syncFantasyPros(runtime, fantasyProsClient, input = {}, { tank01C
   };
 }
 
-function createHandler({ runtime, draftServices, weeklyServices, weeklyFleetRunner, fantasyProsClient, fantasyProsRefresh, tank01Client, sleeperClient, visionClient, leagueOnboarding, yahooOAuth, yahooAccount }) {
+function createHandler({ runtime, draftServices, weeklyServices, weeklyFleetRunner, fantasyProsClient, fantasyProsRefresh, tank01Client, sleeperClient, visionClient, leagueOnboarding, yahooOAuth, yahooAccount, yahooOperations }) {
   return async function handler(request, response) {
     const url = new URL(request.url, 'http://huddle.local');
     const segments = url.pathname.split('/').filter(Boolean).map(decodeURIComponent);
@@ -316,6 +349,10 @@ function createHandler({ runtime, draftServices, weeklyServices, weeklyFleetRunn
         if (!code) throw Object.assign(new Error('Yahoo OAuth callback did not include an authorization code'), { code: 'YAHOO_OAUTH_CODE_MISSING' });
         const token = await yahooOAuth.client.exchangeCode({ code });
         yahooOAuth.tokenStore.set(context.credentialRef, token);
+        queueMicrotask(() => {
+          yahooOperations.autoResumeDrafts();
+          yahooOperations.runScheduledWeeklyRefresh('oauth-connected').catch(() => {});
+        });
         const query = new URLSearchParams({ yahoo: 'connected' });
         if (context.leagueId) query.set('leagueId', context.leagueId);
         return redirect(response, `/?${query}`);
@@ -325,6 +362,7 @@ function createHandler({ runtime, draftServices, weeklyServices, weeklyFleetRunn
       }
       if (request.method === 'POST' && url.pathname === '/api/yahoo/leagues/import') {
         const imported = await yahooAccount.importLeague(await readBody(request));
+        queueMicrotask(() => yahooOperations.runScheduledWeeklyRefresh('league-imported').catch(() => {}));
         const manifest = fleetManifest(runtime, draftServices, weeklyServices);
         return json(response, 201, {
           league: manifest.leagues.find((league) => league.id === imported.entry.id),
@@ -360,6 +398,15 @@ function createHandler({ runtime, draftServices, weeklyServices, weeklyFleetRunn
       if (request.method === 'GET' && url.pathname === '/api/fleet/status') {
         return json(response, 200, fleetStatus(runtime, draftServices, weeklyServices));
       }
+      if (request.method === 'GET' && url.pathname === '/api/operations/readiness') {
+        return json(response, 200, yahooOperations.readiness());
+      }
+      if (request.method === 'POST' && url.pathname === '/api/operations/weekly/refresh') {
+        return json(response, 200, await yahooOperations.refreshWeeklyFleet(await readBody(request)));
+      }
+      if (request.method === 'GET' && url.pathname === '/api/operations/weekly/status') {
+        return json(response, 200, yahooOperations.weeklyFleetStatus());
+      }
       if (request.method === 'POST' && url.pathname === '/api/fleet/weekly/run') {
         return json(response, 200, await weeklyFleetRunner.run(await readBody(request, 10_000_000)));
       }
@@ -394,7 +441,23 @@ function createHandler({ runtime, draftServices, weeklyServices, weeklyFleetRunn
         if (tail[0] === 'players' && request.method === 'GET') {
           return json(response, 200, availablePlayers(runtime, service, url.searchParams.get('sessionId')));
         }
-        if (tail[0] === 'draft' && await handleDraftRoutes(request, response, service, tail.slice(1), { visionClient, league: entry.config })) return;
+        if (tail[0] === 'draft' && await handleDraftRoutes(request, response, service, tail.slice(1), { visionClient, league: entry.config, leagueEntry: entry, yahooOperations })) return;
+        if (tail[0] === 'weekly' && tail[1] === 'yahoo') {
+          if (tail[2] === 'status' && request.method === 'GET') {
+            return json(response, 200, yahooOperations.weeklyStatus(entry.id));
+          }
+          if (tail[2] === 'latest' && request.method === 'GET') {
+            return json(response, 200, yahooOperations.weeklyStatus(entry.id, { includeReview: true }));
+          }
+          if (tail[2] === 'refresh' && request.method === 'POST') {
+            const body = await readBody(request);
+            return json(response, 200, await yahooOperations.previewWeekly({
+              leagueId: entry.id,
+              week: body.week || url.searchParams.get('week'),
+              season: body.season || url.searchParams.get('season')
+            }));
+          }
+        }
         if (tail[0] === 'weekly' && await handleWeeklyRoutes(request, response, weeklyServices.get(entry.id), tail.slice(1), url)) return;
       }
 
@@ -409,7 +472,7 @@ function createHandler({ runtime, draftServices, weeklyServices, weeklyFleetRunn
       }
       if (segments[0] === 'api' && segments[1] === 'draft') {
         const defaultContext = serviceFor(runtime, draftServices, runtime.defaultLeagueId);
-        if (await handleDraftRoutes(request, response, defaultContext.service, segments.slice(2), { visionClient, league: defaultContext.entry.config })) return;
+        if (await handleDraftRoutes(request, response, defaultContext.service, segments.slice(2), { visionClient, league: defaultContext.entry.config, leagueEntry: defaultContext.entry, yahooOperations })) return;
       }
       if (segments[0] === 'api' && segments[1] === 'weekly') {
         const defaultContext = serviceFor(runtime, draftServices, runtime.defaultLeagueId);
@@ -457,9 +520,11 @@ function createHandler({ runtime, draftServices, weeklyServices, weeklyFleetRunn
             leagueDiscoveryReady: true,
             operatorConfirmedSettingsImportReady: true,
             weeklyReadMethods: ['scoreboard', 'standings', 'transactions', 'roster', 'availablePlayers'],
-            normalizedWeeklyAdapterReady: false,
+            normalizedWeeklyAdapterReady: true,
             transientIngestionBoundaryReady: true,
-            livePayloadValidationPending: true,
+            livePayloadValidationPending: runtime.leagues.length === 0
+              || !runtime.leagues.every((entry) => yahooOperations.weeklyStatus(entry.id).lastSuccessAt),
+            automation: yahooOperations.readiness().yahooAutomation,
             rawPayloadPersistence: false,
             attribution: 'Fantasy data provided by Yahoo Fantasy'
           },
@@ -535,6 +600,14 @@ function normalizeRuntime(runtime) {
   runtime.leagueOnboardingEnabled ??= false;
   runtime.yahooOAuthEnabled ??= false;
   runtime.yahooTokenFile ||= path.resolve('./data/secrets/yahoo-tokens.enc.json');
+  runtime.yahooDraftAutoSyncEnabled ??= false;
+  runtime.yahooDraftPollIntervalMs = Math.max(5_000, Number(runtime.yahooDraftPollIntervalMs) || 15_000);
+  runtime.yahooDraftMinimumCrosswalkCoverage = Math.max(0.5, Math.min(1, Number(runtime.yahooDraftMinimumCrosswalkCoverage) || 0.8));
+  runtime.yahooWeeklyAutoRefreshEnabled ??= false;
+  runtime.yahooWeeklyRefreshIntervalMs = Math.max(6 * 60 * 60 * 1000, Number(runtime.yahooWeeklyRefreshIntervalMs) || 24 * 60 * 60 * 1000);
+  runtime.yahooWeeklyPreviewTtlMs = Math.max(15 * 60 * 1000, Number(runtime.yahooWeeklyPreviewTtlMs) || 60 * 60 * 1000);
+  runtime.weekOverride = runtime.weekOverride == null ? null : Number(runtime.weekOverride);
+  runtime.operationsMaximumEvidenceAgeHours = Math.max(6, Number(runtime.operationsMaximumEvidenceAgeHours) || 36);
   runtime.yahooEvidenceRetentionDays = Math.max(1, Math.min(30, Number(runtime.yahooEvidenceRetentionDays) || 30));
   runtime.complianceMaintenanceEnabled ??= false;
   runtime.sourceSyncStatus ||= null;
@@ -581,11 +654,27 @@ function buildApp(inputRuntime = loadRuntimeConfig(), options = {}) {
     leagueOnboarding,
     clientFactory: options.yahooClientFactory
   });
+  const yahooOperations = options.yahooOperations || new YahooOperationsService({
+    runtime,
+    yahooAccount,
+    draftServices,
+    weeklyServices,
+    pollerFactory: options.yahooDraftPollerFactory,
+    weeklyAdapterFactory: options.yahooWeeklyAdapterFactory,
+    now: options.now,
+    setIntervalImpl: options.setIntervalImpl,
+    clearIntervalImpl: options.clearIntervalImpl,
+    logger: options.logger
+  });
   const fantasyProsRefresh = new FantasyProsRefreshController({
     enabled: runtime.fantasyProsSyncEnabled && runtime.fantasyProsAutoRefreshEnabled,
     configured: fantasyProsClient.configured,
     intervalMs: runtime.fantasyProsRefreshIntervalMs,
-    sync: (input) => syncFantasyPros(runtime, fantasyProsClient, input, { tank01Client, sleeperClient }),
+    sync: async (input) => {
+      const result = await syncFantasyPros(runtime, fantasyProsClient, input, { tank01Client, sleeperClient });
+      yahooOperations.autoResumeDrafts();
+      return result;
+    },
     quotaStatus: () => fantasyProsClient.quotaStatus()
   });
   const server = http.createServer(createHandler({
@@ -600,7 +689,8 @@ function buildApp(inputRuntime = loadRuntimeConfig(), options = {}) {
     visionClient,
     leagueOnboarding,
     yahooOAuth,
-    yahooAccount
+    yahooAccount,
+    yahooOperations
   }));
   const commandRelay = attachReadOnlyCommandRelay(server, { runtime, draftServices, weeklyServices });
   return {
@@ -618,18 +708,38 @@ function buildApp(inputRuntime = loadRuntimeConfig(), options = {}) {
     visionClient,
     leagueOnboarding,
     yahooOAuth,
-    yahooAccount
+    yahooAccount,
+    yahooOperations
   };
 }
 
-if (require.main === module) {
-  const app = buildApp();
+function startApp(inputRuntime, options = {}) {
+  const app = buildApp(inputRuntime, options);
   app.fantasyProsRefresh.start();
+  app.yahooOperations.start();
   app.server.listen(app.runtime.port, app.runtime.host, () => {
     console.log(`Huddle listening at http://${app.runtime.host}:${app.runtime.port}`);
     console.log(`Leagues: ${app.runtime.leagues.map((entry) => entry.id).join(', ')}`);
     console.log('Mode: read-only recommendations; no draft-pick execution path is present.');
+    console.log('Operational readiness: /api/operations/readiness');
   });
+  let stopping = false;
+  app.shutdown = () => {
+    if (stopping) return;
+    stopping = true;
+    app.fantasyProsRefresh.stop();
+    app.yahooOperations.stop();
+    app.commandRelay.close(() => app.server.close(() => {}));
+  };
+  if (options.handleSignals !== false) {
+    process.once('SIGINT', app.shutdown);
+    process.once('SIGTERM', app.shutdown);
+  }
+  return app;
 }
 
-module.exports = { buildApp, createHandler, handleDraftRoutes, handleWeeklyRoutes, normalizeRuntime, readBody, syncFantasyPros };
+if (require.main === module) {
+  startApp();
+}
+
+module.exports = { buildApp, createHandler, handleDraftRoutes, handleWeeklyRoutes, normalizeRuntime, readBody, startApp, syncFantasyPros };

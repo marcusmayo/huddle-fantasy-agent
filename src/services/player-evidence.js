@@ -85,16 +85,20 @@ function reconcilePlayerEvidence(primaryPool, { tank01 = null, sleeper = null, e
   const primaryPlayers = primaryPool.players || [];
   const tankPlayers = tank01?.players || [];
   const sleeperPlayers = sleeper?.players || [];
+  const sleeperIdentityPlayers = sleeper?.identityPlayers || sleeperPlayers;
   const tankIndex = evidenceIndex(tankPlayers);
   const sleeperIndex = evidenceIndex(sleeperPlayers);
+  const sleeperIdentityIndex = evidenceIndex(sleeperIdentityPlayers);
   const primaryPositionScores = positionalScores(primaryPlayers, (player) => Number(player.expertRank ?? player.adp));
   const tankPositionScores = positionalScores(tankPlayers, (player) => Number(player.rank));
   let tankMatched = 0;
   let sleeperMatched = 0;
+  let sleeperCrosswalkMatched = 0;
 
   const players = primaryPlayers.map((player) => {
     const tankPlayer = matchEvidence(player, tankIndex);
     const sleeperPlayer = matchEvidence(player, sleeperIndex);
+    const sleeperIdentity = matchEvidence(player, sleeperIdentityIndex);
     const fantasyProsNormalized = primaryPositionScores.get(player) ?? 0.5;
     const tank01Normalized = tankPlayer ? tankPositionScores.get(tankPlayer) ?? 0.5 : null;
     const sourceConsensus = tank01Normalized == null
@@ -102,6 +106,7 @@ function reconcilePlayerEvidence(primaryPool, { tank01 = null, sleeper = null, e
       : fantasyProsNormalized * SOURCE_WEIGHTS.fantasyPros + tank01Normalized * SOURCE_WEIGHTS.tank01;
     if (tankPlayer) tankMatched += 1;
     if (sleeperPlayer) sleeperMatched += 1;
+    if (sleeperIdentity?.yahooId) sleeperCrosswalkMatched += 1;
     const primaryRank = Number(player.expertRank ?? player.adp);
     const secondaryRank = Number(tankPlayer?.rank);
     const disagreementSlots = Number.isFinite(primaryRank) && Number.isFinite(secondaryRank)
@@ -109,6 +114,7 @@ function reconcilePlayerEvidence(primaryPool, { tank01 = null, sleeper = null, e
       : null;
     return {
       ...player,
+      yahooPlayerKey: player.yahooPlayerKey || (sleeperIdentity?.yahooId ? String(sleeperIdentity.yahooId) : null),
       sourceConsensus: Math.round(sourceConsensus * 1000) / 1000,
       sourceRanks: {
         fantasyPros: Number.isFinite(primaryRank) ? primaryRank : null,
@@ -135,7 +141,8 @@ function reconcilePlayerEvidence(primaryPool, { tank01 = null, sleeper = null, e
   if (sleeperPlayers.length) activeSources.push('sleeper');
   const warnings = [
     ['tank01', tankIndex],
-    ['sleeper', sleeperIndex]
+    ['sleeper', sleeperIndex],
+    ['sleeper-crosswalk', sleeperIdentityIndex]
   ].flatMap(([provider, index]) => {
     const ambiguousYahooIds = [...index.ambiguousYahooIds].sort();
     const ambiguousIdentities = [...index.ambiguousIdentities].sort();
@@ -162,6 +169,7 @@ function reconcilePlayerEvidence(primaryPool, { tank01 = null, sleeper = null, e
         primaryPlayers: primaryPlayers.length,
         tank01Matched: tankMatched,
         sleeperMatched,
+        sleeperCrosswalkMatched,
         ambiguousTank01: tankIndex.ambiguousYahooIds.size + tankIndex.ambiguousIdentities.size,
         ambiguousSleeper: sleeperIndex.ambiguousYahooIds.size + sleeperIndex.ambiguousIdentities.size
       },

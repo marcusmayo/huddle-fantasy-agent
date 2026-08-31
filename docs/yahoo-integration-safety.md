@@ -1,6 +1,6 @@
 # Yahoo integration safety gate
 
-Huddle's Yahoo path is deliberately fail-closed unless approved OAuth credentials are configured. The current code provides account-first authorization, league/team discovery, operator-confirmed settings import, state validation, encrypted token storage, a read-only HTTP client, retry/backoff behavior, attribution, evidence expiry, and a transient weekly-ingestion boundary. It does **not** claim that live weekly payload normalization has been validated.
+Huddle's Yahoo path is deliberately fail-closed unless approved OAuth credentials are configured. The current code provides account-first authorization, league/team discovery, operator-confirmed settings import, state validation, encrypted token storage, a read-only HTTP client, retry/backoff behavior, attribution, evidence expiry, draft-result polling, a versioned weekly normalizer, and a transient weekly-ingestion boundary. Synthetic contracts are tested, but Huddle does **not** claim that a league's first production draft or weekly payload has been validated until the operator compares it with Yahoo.
 
 ## Enablement checklist
 
@@ -11,7 +11,7 @@ Do not set `HUDDLE_YAHOO_OAUTH_ENABLED=true` until all of these are complete:
 3. Register the exact HTTPS callback URL. Localhost is for development only.
 4. Validate synthetic OAuth and retry tests with `npm run check`.
 5. Validate discovery and settings import against the connected account. Huddle returns only normalized metadata and persists only the operator-confirmed Huddle profile.
-6. Capture representative, non-production Yahoo responses for scoreboard, standings, transactions, roster, and available players, then implement and fixture-test the versioned weekly adapter. Raw response fixtures must be sanitized and kept out of Git unless Yahoo explicitly permits storage.
+6. Compare the versioned adapter's first live scoreboard, standings, transactions, roster, and available-player preview with Yahoo. Preserve only sanitized error structure unless Yahoo explicitly permits storing a raw fixture.
 7. Confirm the retention interpretation for normalized weekly history with Yahoo before enabling unattended persistence.
 8. Put the application behind authenticated HTTPS access and verify the delete/disconnect workflow.
 
@@ -36,10 +36,16 @@ Do not set `HUDDLE_YAHOO_OAUTH_ENABLED=true` until all of these are complete:
 | `HUDDLE_YAHOO_OAUTH_ENABLED` | `false` | Prevents OAuth use before approval |
 | `HUDDLE_TOKEN_ENCRYPTION_KEY` | unset | Required to store OAuth tokens |
 | `HUDDLE_YAHOO_TOKEN_FILE` | `./data/secrets/yahoo-tokens.enc.json` | Encrypted token envelope |
+| `HUDDLE_YAHOO_DRAFT_AUTO_SYNC_ENABLED` | `true` | Starts/resumes completed-pick reads for Yahoo-source sessions |
+| `HUDDLE_YAHOO_DRAFT_POLL_SECONDS` | `15` | Completed-pick cadence; must be confirmed with Yahoo |
+| `HUDDLE_YAHOO_DRAFT_MINIMUM_CROSSWALK_COVERAGE` | `0.80` | Fail-closed Yahoo player-key threshold |
+| `HUDDLE_YAHOO_WEEKLY_AUTO_REFRESH_ENABLED` | `true` | Enables startup and interval fleet previews |
+| `HUDDLE_YAHOO_WEEKLY_REFRESH_HOURS` | `24` | Scheduled preview interval while the process is awake |
+| `HUDDLE_YAHOO_WEEKLY_PREVIEW_TTL_MINUTES` | `60` | In-memory normalized preview lifetime |
 | `HUDDLE_YAHOO_EVIDENCE_RETENTION_DAYS` | `30` | Metadata retention ceiling |
 | `HUDDLE_COMPLIANCE_MAINTENANCE_ENABLED` | local only | Enables purge and disconnect endpoints |
 
-Readiness is visible at `GET /api/yahoo/oauth/status` and `GET /api/provider-status`. A disabled or incomplete OAuth setup is reported as such; Huddle does not silently fall back to claiming Yahoo verification.
+Readiness is visible at `GET /api/yahoo/oauth/status`, `GET /api/operations/readiness`, `GET /api/operations/weekly/status`, and `GET /api/provider-status`. `npm run preflight` exits nonzero when the live-draft gate fails. A disabled or incomplete OAuth setup is reported as such; Huddle does not silently fall back to claiming Yahoo verification.
 
 ## Deletion and unresolved-data workflows
 

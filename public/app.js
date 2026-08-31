@@ -25,6 +25,8 @@ const state = {
   mode: localStorage.getItem('huddle-mode') === 'weekly' ? 'weekly' : 'draft',
   weeklyReview: null,
   weeklyWeeks: [],
+  yahooDraftSync: null,
+  yahooWeeklyStatus: null,
   unresolvedPlayers: []
 };
 const $ = (selector) => document.querySelector(selector);
@@ -627,7 +629,14 @@ function renderWeekly(review) {
   const hasReview = Boolean(review);
   $('#weekly-empty').classList.toggle('hidden', hasReview);
   $('#weekly-review').classList.toggle('hidden', !hasReview);
-  if (!review) return;
+  if (!review) {
+    $('#weekly-rerun').disabled = false;
+    $('#weekly-rerun').title = '';
+    return;
+  }
+  const transientYahoo = review.persistence?.persisted === false && review.source === 'yahoo-live-transient-v1';
+  $('#weekly-rerun').disabled = transientYahoo;
+  $('#weekly-rerun').title = transientYahoo ? 'Yahoo previews are recalculated with Refresh from Yahoo and are not persisted.' : '';
   $('#weekly-season').value = review.season;
   $('#weekly-week').value = review.week;
   $('#weekly-history').value = weeklyKey(review);
@@ -679,10 +688,19 @@ function renderWeekly(review) {
 }
 
 async function loadWeekly(reviewKey) {
-  const result = await api(scoped('/weekly/weeks'));
+  const [result, yahoo] = await Promise.all([
+    api(scoped('/weekly/weeks')),
+    reviewKey ? Promise.resolve(null) : api(scoped('/weekly/yahoo/latest')).catch(() => null)
+  ]);
   state.weeklyWeeks = result.weeks;
+  state.yahooWeeklyStatus = yahoo;
   $('#weekly-history').innerHTML = '<option value="">Latest</option>' + result.weeks.map((week) =>
     `<option value="${week.season}:${week.week}">${week.season} · Week ${week.week} · ${escapeHtml(week.waiverAction)}</option>`).join('');
+  if (!reviewKey && yahoo?.review) {
+    renderWeekly(yahoo.review);
+    $('#weekly-message').textContent = `Live Yahoo Week ${yahoo.week} preview · transient until ${new Date(yahoo.expiresAt).toLocaleString()}`;
+    return;
+  }
   if (!result.weeks.length) {
     renderWeekly(null);
     return;
@@ -691,6 +709,29 @@ async function loadWeekly(reviewKey) {
   const [season, week] = selected.split(':').map(Number);
   const review = await api(scoped(`/weekly/weeks/${week}?season=${season}`));
   renderWeekly(review);
+}
+
+async function refreshWeeklyFromYahoo() {
+  const button = $('#weekly-yahoo-refresh');
+  button.disabled = true;
+  $('#weekly-message').textContent = 'Reading Yahoo standings, matchup, roster, transactions, and available players…';
+  try {
+    const result = await api(scoped('/weekly/yahoo/refresh'), {
+      method: 'POST',
+      body: JSON.stringify({
+        week: Number($('#weekly-week').value),
+        season: Number($('#weekly-season').value)
+      })
+    });
+    state.yahooWeeklyStatus = result;
+    renderWeekly(result.review);
+    $('#weekly-message').textContent = `Yahoo Week ${result.week} review ready. It is transient and expires ${new Date(result.expiresAt).toLocaleString()}.`;
+    showToast(`Yahoo Week ${result.week} refreshed. Review the lineup and ${result.review.waiver.recommendation.action} guidance; make all changes in Yahoo.`);
+  } catch (error) {
+    $('#weekly-message').textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
 }
 
 async function importWeekly() {
@@ -738,6 +779,7 @@ async function createSession(event) {
     body: JSON.stringify({ draftSlot: Number($('#draft-slot').value), sourceMode: $('#source-mode').value })
   });
   localStorage.setItem(sessionKey(), session.id);
+  state.yahooDraftSync = session.yahooSync || null;
   state.session = session;
   showDraftRoom();
   await refresh();
@@ -760,6 +802,9 @@ function showDraftRoom() {
   $('#setup').classList.add('hidden');
   $('#draft-room').classList.remove('hidden');
   $('#sync-label').textContent = `${state.session.sourceMode} sync · ${state.league.name}`;
+  const yahooMode = state.session.sourceMode === 'yahoo';
+  $('#yahoo-draft-sync').classList.toggle('hidden', !yahooMode);
+  if (yahooMode) renderYahooDraftSync(state.yahooDraftSync);
   const screenshotMode = state.session.sourceMode === 'screenshot';
   $('#screenshot-assistant').classList.toggle('hidden', !screenshotMode);
   $('#reconcile-help').textContent = screenshotMode
@@ -772,6 +817,43 @@ function showDraftRoom() {
       ? 'Choose a Yahoo screenshot and its purpose. It is sent transiently to OpenRouter only after you click Analyze screenshot.'
       : 'Preview only: set OPENROUTER_API_KEY and restart Huddle to enable screenshot analysis.';
     updateScreenshotPurpose({ resetAnalysis: false });
+  }
+}
+
+function renderYahooDraftSync(status) {
+  if (!status || state.session?.sourceMode !== 'yahoo') return;
+  state.yahooDraftSync = status;
+  const panel = $('#yahoo-draft-sync');
+  panel.classList.remove('sync-ready', 'sync-degraded', 'sync-blocked');
+  const stateName = status.state || 'stopped';
+  if (stateName === 'running') panel.classList.add('sync-ready');
+  if (['degraded', 'blocked'].includes(stateName)) panel.classList.add(`sync-${stateName}`);
+  $('#yahoo-draft-sync-state').textContent = stateName === 'running'
+    ? `Running · ${status.observedPicks || 0} picks observed`
+    : stateName.charAt(0).toUpperCase() + stateName.slice(1);
+  $('#yahoo-draft-sync-detail').textContent = status.lastError
+    ? `${status.lastError.code}: ${status.lastError.message}. Use manual entry while resolving this.`
+    : status.lastSuccessAt
+      ? `Last Yahoo read ${new Date(status.lastSuccessAt).toLocaleTimeString()} · every ${status.configuredIntervalSeconds || 15}s · recommendation only.`
+      : `Waiting for the first Yahoo read · every ${status.configuredIntervalSeconds || 15}s · recommendation only.`;
+  $('#yahoo-draft-sync-start').disabled = ['running', 'starting'].includes(stateName);
+  $('#yahoo-draft-sync-stop').disabled = stateName === 'stopped';
+}
+
+async function controlYahooDraftSync(action) {
+  if (!state.session || state.session.sourceMode !== 'yahoo') return;
+  const suffix = action === 'start' ? '' : `/${action}`;
+  try {
+    const status = await api(scoped(`/draft/sessions/${state.session.id}/yahoo-sync${suffix}`), { method: 'POST', body: '{}' });
+    renderYahooDraftSync(status);
+    if (action === 'once') await refresh();
+  } catch (error) {
+    renderYahooDraftSync({
+      leagueId: state.leagueId,
+      sessionId: state.session.id,
+      state: 'blocked',
+      lastError: { code: 'YAHOO_SYNC_FAILED', message: error.message }
+    });
   }
 }
 
@@ -1103,18 +1185,22 @@ function renderPlayerPicker(players) {
 async function refresh() {
   if (!state.session) return;
   const shouldRefreshProviderStatus = Date.now() - state.providerStatusAt > 30_000;
-  const [session, card, pool, providerStatus, unresolved] = await Promise.all([
+  const [session, card, pool, providerStatus, unresolved, yahooSync] = await Promise.all([
     api(scoped(`/draft/sessions/${state.session.id}`)),
     api(scoped(`/draft/sessions/${state.session.id}/recommendation`)),
     api(scoped(`/players?sessionId=${state.session.id}`)),
     shouldRefreshProviderStatus ? api('/api/provider-status') : Promise.resolve(null),
-    api(scoped('/unresolved-players'))
+    api(scoped('/unresolved-players')),
+    state.session.sourceMode === 'yahoo'
+      ? api(scoped(`/draft/sessions/${state.session.id}/yahoo-sync`)).catch((error) => ({ state: 'degraded', lastError: { code: 'YAHOO_SYNC_STATUS_FAILED', message: error.message } }))
+      : Promise.resolve(null)
   ]);
   if (providerStatus) {
     state.providerStatus = providerStatus;
     state.providerStatusAt = Date.now();
   }
   state.session = session;
+  if (yahooSync) renderYahooDraftSync(yahooSync);
   renderUnresolvedPlayers(unresolved);
   renderRecommendation(card);
   renderPlayerPicker(pool.players);
@@ -1178,6 +1264,7 @@ async function resetSession() {
   clearInterval(state.timer);
   localStorage.removeItem(sessionKey());
   state.session = null;
+  state.yahooDraftSync = null;
   if (state.screenshotObjectUrl) URL.revokeObjectURL(state.screenshotObjectUrl);
   state.screenshotObjectUrl = null;
   state.screenshotFile = null;
@@ -1204,6 +1291,7 @@ async function init() {
   $('#weekly-template').addEventListener('click', () => { $('#weekly-json').value = JSON.stringify(weeklyTemplate(), null, 2); });
   $('#weekly-import').addEventListener('click', importWeekly);
   $('#weekly-rerun').addEventListener('click', rerunWeekly);
+  $('#weekly-yahoo-refresh').addEventListener('click', refreshWeeklyFromYahoo);
   $('#weekly-import-another').addEventListener('click', () => {
     $('#weekly-review').classList.add('hidden');
     $('#weekly-empty').classList.remove('hidden');
@@ -1230,6 +1318,9 @@ async function init() {
   });
   $('#add-team-count').addEventListener('input', (event) => { $('#add-draft-slot').max = event.target.value; });
   $('#session-form').addEventListener('submit', createSession);
+  $('#yahoo-draft-sync-once').addEventListener('click', () => controlYahooDraftSync('once'));
+  $('#yahoo-draft-sync-start').addEventListener('click', () => controlYahooDraftSync('start'));
+  $('#yahoo-draft-sync-stop').addEventListener('click', () => controlYahooDraftSync('stop'));
   $('#pick-form').addEventListener('submit', recordPick);
   $('#new-session').addEventListener('click', resetSession);
   $('#league-select').addEventListener('change', (event) => selectLeague(event.target.value));

@@ -19,7 +19,7 @@ class YahooTransientWeeklyAdapter {
     return Boolean(this.client && typeof this.normalizer === 'function');
   }
 
-  async preview({ leagueKey, teamKey, week, weeklyService }) {
+  async preview({ leagueKey, teamKey, week, season, weeklyService }) {
     if (!this.ready) throw transientError('YAHOO_WEEKLY_ADAPTER_PENDING', 'Yahoo weekly normalization awaits live payload validation');
     if (!leagueKey || !teamKey) throw transientError('YAHOO_IDENTIFIERS_MISSING', 'Yahoo league and team keys are required');
     const [scoreboard, standings, transactions, roster, availablePlayers] = await Promise.all([
@@ -29,8 +29,21 @@ class YahooTransientWeeklyAdapter {
       this.client.roster(teamKey, week),
       this.client.availablePlayers(leagueKey)
     ]);
-    const snapshot = await this.normalizer({ scoreboard, standings, transactions, roster, availablePlayers }, { week });
-    const review = weeklyService.previewSnapshot({ ...snapshot, source: 'yahoo-transient' }, { expectedWeek: week });
+    const snapshot = await this.normalizer(
+      { scoreboard, standings, transactions, roster, availablePlayers },
+      {
+        league: weeklyService.league,
+        leagueKey,
+        teamKey,
+        week,
+        season,
+        previousReview: weeklyService.latest()
+      }
+    );
+    const review = weeklyService.previewSnapshot(
+      { ...snapshot, source: 'yahoo-live-transient-v1' },
+      { expectedWeek: week, preferSharedProjections: true }
+    );
     return {
       review,
       provenance: {

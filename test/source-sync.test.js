@@ -35,13 +35,15 @@ test('source sync enriches FantasyPros with Tank01 and Sleeper without changing 
     },
     sleeperClient: {
       enabled: true,
-      loadDraftEvidence: async () => ({ lookbackHours: 24, attribution: 'Sleeper', players: [{ name: 'Player One', position: 'RB', direction: 'rising', adds: 5, drops: 0, net: 5 }] })
+      loadDraftEvidence: async () => ({ lookbackHours: 24, attribution: 'Sleeper', players: [{ name: 'Player One', position: 'RB', yahooId: '1001', direction: 'rising', adds: 5, drops: 0, net: 5 }] })
     }
   });
+  assert.equal(result.players, 2);
   assert.equal(result.source, 'fantasypros+tank01+sleeper');
   assert.equal(value.playerPool.players[0].id, 'fantasypros:1');
   assert.equal(value.playerPool.players[0].sourceConsensus, 0.675);
   assert.equal(value.playerPool.players[0].sleeperTrend.direction, 'rising');
+  assert.equal(value.playerPool.players[0].yahooPlayerKey, '1001');
 });
 
 test('optional source failure degrades to primary evidence instead of blocking the draft', async () => {
