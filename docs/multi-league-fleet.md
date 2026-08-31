@@ -18,7 +18,9 @@ Multiple containers on one VM are feasible because Huddle is a small Node servic
 
 On loopback instances, click **+ Add league** above the fleet cards. Enter the league name, target team, team count, scoring preset, draft slot, and roster slots. Huddle validates the profile, creates an isolated state file, writes only to the ignored managed registry under `data/leagues`, adds the league to the running dashboard immediately, and reloads it on the next restart.
 
-Dashboard-created profiles remain **unverified**. Yahoo OAuth league discovery and the local-versus-Yahoo settings diff are not implemented yet, so the operator must compare the new profile against Yahoo's Scoring & Settings page. FantasyPros, Tank01, and Sleeper provide player evidence; none of them can verify Yahoo league identity or rules.
+Dashboard-created profiles remain **unverified**. The fail-closed OAuth callback and encrypted token lifecycle are implemented, but Yahoo league discovery and the local-versus-Yahoo settings diff require approved live payloads and are not enabled yet. The operator must compare the new profile against Yahoo's Scoring & Settings page. FantasyPros, Tank01, and Sleeper provide player evidence; none of them can verify Yahoo league identity or rules.
+
+League cards can be reordered by dragging them or with their arrow controls; the order is retained in that browser. **Delete** removes a card from the active fleet but uses recoverable behavior. Dashboard-created leagues are moved under the managed `archive/` directory, while administrator-configured or bundled leagues are added to `removedLeagueIds` in the ignored managed registry and their source configuration remains untouched. Every league can be removed, leaving an intentional empty fleet that can be rebuilt with **Add league**.
 
 For a hosted container, league onboarding is disabled by default. Enable it only behind authenticated access:
 
@@ -86,6 +88,9 @@ Create one untracked env file per league, for example `data/secrets/primary.env`
 FANTASYPROS_API_KEY=replace-locally
 YAHOO_CLIENT_ID=replace-locally
 YAHOO_CLIENT_SECRET=replace-locally
+YAHOO_REDIRECT_URI=https://huddle-primary.example.com/auth/yahoo/callback
+HUDDLE_YAHOO_OAUTH_ENABLED=false
+HUDDLE_TOKEN_ENCRYPTION_KEY=replace-with-32-byte-base64-key
 YAHOO_LEAGUE_KEY=replace-after-oauth
 YAHOO_TEAM_KEY=replace-after-oauth
 ```

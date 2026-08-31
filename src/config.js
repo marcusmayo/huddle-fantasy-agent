@@ -27,7 +27,7 @@ function parseBoolean(value, defaultValue = false) {
   return ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase());
 }
 
-function loadLeagueRegistry(registryPath) {
+function loadLeagueRegistry(registryPath, { allowEmpty = false } = {}) {
   const absoluteRegistryPath = path.resolve(registryPath);
   const registry = readJson(absoluteRegistryPath);
   if (registry.schemaVersion !== 1 || !Array.isArray(registry.leagues)) {
@@ -37,7 +37,7 @@ function loadLeagueRegistry(registryPath) {
   }
   const baseDir = path.dirname(absoluteRegistryPath);
   const enabled = registry.leagues.filter((entry) => entry.enabled !== false);
-  if (!enabled.length) {
+  if (!enabled.length && !allowEmpty) {
     const error = new Error('League registry has no enabled leagues');
     error.code = 'EMPTY_LEAGUE_REGISTRY';
     throw error;
@@ -68,8 +68,8 @@ function loadLeagueRegistry(registryPath) {
       verificationStatus: entry.verificationStatus || config.provenance?.verificationStatus || 'unverified'
     };
   });
-  const defaultLeagueId = String(registry.defaultLeagueId || leagues[0].id);
-  if (!ids.has(defaultLeagueId)) {
+  const defaultLeagueId = leagues.length ? String(registry.defaultLeagueId || leagues[0].id) : null;
+  if (defaultLeagueId && !ids.has(defaultLeagueId)) {
     const error = new Error(`Default league ${defaultLeagueId} is not enabled`);
     error.code = 'INVALID_DEFAULT_LEAGUE';
     throw error;
@@ -97,14 +97,20 @@ function loadRuntimeConfig() {
           yahooLeagueKey: process.env.YAHOO_LEAGUE_KEY || null,
           yahooTeamKey: process.env.YAHOO_TEAM_KEY || null,
           credentialRef: 'yahoo-primary'
-        }]
+      }]
       };
+  for (const entry of registry.leagues) entry.id ||= String(entry.config.id);
+  registry.defaultLeagueId ||= registry.leagues[0]?.id || null;
   const leagueOnboardingDir = path.resolve(process.env.HUDDLE_LEAGUE_ONBOARDING_DIR || './data/leagues');
   const leagueManagedRegistryPath = path.resolve(
     process.env.HUDDLE_MANAGED_LEAGUE_REGISTRY || path.join(leagueOnboardingDir, 'registry.managed.json')
   );
   if (fs.existsSync(leagueManagedRegistryPath)) {
-    const managed = loadLeagueRegistry(leagueManagedRegistryPath);
+    const managedOverlay = readJson(leagueManagedRegistryPath);
+    const removedLeagueIds = new Set((managedOverlay.removedLeagueIds || []).map(String));
+    registry.leagues = registry.leagues.filter((entry) => !removedLeagueIds.has(String(entry.id)));
+    if (removedLeagueIds.has(String(registry.defaultLeagueId))) registry.defaultLeagueId = registry.leagues[0]?.id || null;
+    const managed = loadLeagueRegistry(leagueManagedRegistryPath, { allowEmpty: true });
     const ids = new Set(registry.leagues.map((entry) => String(entry.id || entry.config.id)));
     for (const entry of managed.leagues) {
       if (ids.has(entry.id)) {
@@ -113,11 +119,10 @@ function loadRuntimeConfig() {
         throw error;
       }
       ids.add(entry.id);
-      registry.leagues.push(entry);
+      registry.leagues.push({ ...entry, managed: true });
     }
   }
-  for (const entry of registry.leagues) entry.id ||= String(entry.config.id);
-  registry.defaultLeagueId ||= registry.leagues[0].id;
+  registry.defaultLeagueId ||= registry.leagues[0]?.id || null;
   const defaultEntry = registry.leagues.find((entry) => entry.id === registry.defaultLeagueId);
   const playerHeadshots = {
     enabled: parseBoolean(process.env.HUDDLE_PLAYER_IMAGES_ENABLED, false),
@@ -142,9 +147,16 @@ function loadRuntimeConfig() {
       process.env.HUDDLE_LEAGUE_ONBOARDING_ENABLED,
       ['127.0.0.1', 'localhost', '::1'].includes(process.env.HUDDLE_HOST || '127.0.0.1')
     ),
+    yahooOAuthEnabled: parseBoolean(process.env.HUDDLE_YAHOO_OAUTH_ENABLED, false),
+    yahooTokenFile: path.resolve(process.env.HUDDLE_YAHOO_TOKEN_FILE || './data/secrets/yahoo-tokens.enc.json'),
+    yahooEvidenceRetentionDays: Math.max(1, Math.min(30, Number(process.env.HUDDLE_YAHOO_EVIDENCE_RETENTION_DAYS || 30))),
+    complianceMaintenanceEnabled: parseBoolean(
+      process.env.HUDDLE_COMPLIANCE_MAINTENANCE_ENABLED,
+      ['127.0.0.1', 'localhost', '::1'].includes(process.env.HUDDLE_HOST || '127.0.0.1')
+    ),
     season: Number(process.env.HUDDLE_SEASON || new Date().getFullYear()),
-    league: defaultEntry.config,
-    stateFile: defaultEntry.stateFile,
+    league: defaultEntry?.config || null,
+    stateFile: defaultEntry?.stateFile || null,
     leagues: registry.leagues,
     defaultLeagueId: registry.defaultLeagueId,
     leagueRegistryPath: registry.registryPath,

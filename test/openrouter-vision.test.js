@@ -41,6 +41,7 @@ test('OpenRouter vision extracts review candidates without applying picks', asyn
   assert.equal(request.body.messages[0].content[1].type, 'image_url');
   assert.equal(analysis.provider, 'openrouter');
   assert.equal(analysis.imagePersisted, false);
+  assert.equal(analysis.retention.operatorConfirmedMetadataMaxDays, 30);
   assert.equal(analysis.candidates[0].playerId, 'demo-rb-1');
   assert.equal(analysis.candidates[0].actionable, true);
 });

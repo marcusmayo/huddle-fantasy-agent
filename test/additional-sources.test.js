@@ -128,3 +128,53 @@ test('source reconciliation applies the configured 67.5/32.5 blend and Sleeper b
   assert.equal(pool.sourceEvidence.coverage.tank01Matched, 2);
   assert.equal(pool.sourceEvidence.coverage.sleeperMatched, 1);
 });
+
+test('ambiguous secondary identities are excluded instead of resolving by input order', () => {
+  const primary = {
+    source: 'fantasypros-api',
+    players: [
+      { id: 'fp:1', name: 'Same Player', position: 'RB', expertRank: 1 },
+      { id: 'fp:2', name: 'Other Player', position: 'RB', expertRank: 2 }
+    ]
+  };
+  const first = reconcilePlayerEvidence(primary, {
+    tank01: { players: [
+      { name: 'Same Player', position: 'RB', rank: 1 },
+      { name: 'Same Player', position: 'RB', rank: 99 }
+    ] }
+  });
+  const second = reconcilePlayerEvidence(primary, {
+    tank01: { players: [
+      { name: 'Same Player', position: 'RB', rank: 99 },
+      { name: 'Same Player', position: 'RB', rank: 1 }
+    ] }
+  });
+
+  assert.equal(first.players[0].sourceRanks.tank01, null);
+  assert.equal(second.players[0].sourceRanks.tank01, null);
+  assert.equal(first.players[0].sourceConsensus, second.players[0].sourceConsensus);
+  assert.equal(first.sourceEvidence.coverage.tank01Matched, 0);
+  assert.equal(first.sourceEvidence.coverage.ambiguousTank01, 1);
+  assert.equal(first.sourceEvidence.warnings[0].code, 'AMBIGUOUS_PLAYER_EVIDENCE');
+  assert.deepEqual(first.sourceEvidence.warnings[0].ambiguousIdentities, ['sameplayer|RB']);
+});
+
+test('duplicate Yahoo IDs quarantine every contradictory secondary row', () => {
+  const pool = reconcilePlayerEvidence({
+    source: 'fantasypros-api',
+    players: [
+      { id: 'fp:1', yahooId: '42', name: 'First Identity', position: 'RB', expertRank: 1 },
+      { id: 'fp:2', name: 'Second Identity', position: 'WR', expertRank: 1 }
+    ]
+  }, {
+    tank01: { players: [
+      { yahooId: '42', name: 'First Identity', position: 'RB', rank: 1 },
+      { yahooId: '42', name: 'Second Identity', position: 'WR', rank: 1 }
+    ] }
+  });
+
+  assert.equal(pool.sourceEvidence.coverage.tank01Matched, 0);
+  assert.deepEqual(pool.sourceEvidence.warnings[0].ambiguousYahooIds, ['42']);
+  assert.equal(pool.players[0].sourceRanks.tank01, null);
+  assert.equal(pool.players[1].sourceRanks.tank01, null);
+});

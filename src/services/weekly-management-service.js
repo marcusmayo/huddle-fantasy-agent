@@ -41,6 +41,25 @@ class WeeklyManagementService {
     return first ? this.getWeek(first.week, first.season) : null;
   }
 
+  previewSnapshot(snapshot, { expectedWeek, source, preferSharedProjections = false } = {}) {
+    const normalized = { ...structuredClone(snapshot), source: source || snapshot?.source || 'transient-preview' };
+    const review = buildWeeklyReview({
+      snapshot: normalized,
+      league: this.league,
+      playerPool: this.playerPool,
+      expectedWeek,
+      preferSharedProjections
+    });
+    return {
+      ...review,
+      persistence: {
+        persisted: false,
+        rawProviderPayloadPersisted: false,
+        commitRequired: true
+      }
+    };
+  }
+
   importSnapshot(snapshot, { expectedWeek, eventId, source, preferSharedProjections = false } = {}) {
     const now = new Date().toISOString();
     const stableEventId = String(eventId || snapshot?.eventId || `weekly:${crypto.randomUUID()}`);
@@ -49,13 +68,7 @@ class WeeklyManagementService {
       return { applied: false, reason: 'duplicate-event', review: prior ? structuredClone(prior.review) : null };
     }
     const normalized = { ...structuredClone(snapshot), source: source || snapshot?.source || 'normalized-import' };
-    const review = buildWeeklyReview({
-      snapshot: normalized,
-      league: this.league,
-      playerPool: this.playerPool,
-      expectedWeek,
-      preferSharedProjections
-    });
+    const review = buildWeeklyReview({ snapshot: normalized, league: this.league, playerPool: this.playerPool, expectedWeek, preferSharedProjections });
     const key = this.key(review.season, review.week);
     const existing = this.state.weekly.weeks[key];
     const run = {

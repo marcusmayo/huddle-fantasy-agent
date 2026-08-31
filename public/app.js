@@ -18,15 +18,19 @@ const state = {
   screenshotReviewEventId: null,
   providerStatus: null,
   leagueOnboarding: null,
+  yahooOAuth: null,
+  yahooLeagues: [],
   providerStatusAt: 0,
   timer: null,
   mode: localStorage.getItem('huddle-mode') === 'weekly' ? 'weekly' : 'draft',
   weeklyReview: null,
-  weeklyWeeks: []
+  weeklyWeeks: [],
+  unresolvedPlayers: []
 };
 const $ = (selector) => document.querySelector(selector);
 let toastTimer = null;
 const BOARD_HEIGHT_KEY = 'huddle-best-available-height';
+const LEAGUE_ORDER_KEY = 'huddle-league-card-order';
 const SCREENSHOT_PURPOSE_COPY = {
   draft_picks: {
     help: 'Use a Yahoo Draft Results or Draft Log image. Only confirmed rows become pick events.',
@@ -113,6 +117,118 @@ async function api(path, options = {}) {
   return body;
 }
 
+function yahooReady() {
+  return Boolean(
+    state.yahooOAuth?.enabled
+    && state.yahooOAuth?.clientConfigured
+    && state.yahooOAuth?.encryptedTokenStorageConfigured
+  );
+}
+
+function renderYahooConnection() {
+  const ready = yahooReady();
+  const connected = Boolean(state.yahooOAuth?.connected);
+  const topButton = $('#connect-yahoo');
+  const emptyButton = $('#empty-connect-yahoo');
+  const dialogConnect = $('#dialog-connect-yahoo');
+  const discover = $('#discover-yahoo-leagues');
+  topButton.disabled = !ready;
+  emptyButton.disabled = !ready;
+  topButton.textContent = connected ? 'Import Yahoo league' : 'Connect Yahoo';
+  emptyButton.textContent = connected ? 'Import from Yahoo' : 'Connect Yahoo';
+  dialogConnect.classList.toggle('hidden', connected);
+  discover.classList.toggle('hidden', !connected);
+  $('#yahoo-connection-title').textContent = connected ? 'Yahoo account connected' : 'Connect your Yahoo account';
+  $('#yahoo-connection-message').textContent = !ready
+    ? 'Yahoo OAuth is not fully configured in this Huddle environment.'
+    : connected
+      ? `Read-only token connected${state.yahooOAuth.expiresAt ? ` · current access expires ${new Date(state.yahooOAuth.expiresAt).toLocaleString()}` : ''}. Discover leagues to import one.`
+      : 'Authorize read-only access. Huddle cannot draft, change a lineup, or submit a waiver claim.';
+}
+
+function startYahooOAuth() {
+  if (!yahooReady()) {
+    showToast('Yahoo OAuth is not fully configured in this Huddle environment.');
+    return;
+  }
+  window.location.assign('/auth/yahoo/start');
+}
+
+function renderYahooLeagues(leagues) {
+  state.yahooLeagues = leagues;
+  const container = $('#yahoo-league-results');
+  const owned = leagues.map((league) => ({
+    ...league,
+    teams: league.teams.filter((team) => team.ownedByCurrentUser)
+  })).filter((league) => league.teams.length);
+  container.innerHTML = owned.map((league) => `
+    <article class="yahoo-discovered-league">
+      <header>
+        <div><h4>${escapeHtml(league.name)}</h4><small>${escapeHtml(String(league.season || 'Current season'))} · ${league.numTeams || '—'} teams · ${escapeHtml(league.leagueKey)}</small></div>
+        <span class="badge">YAHOO READ</span>
+      </header>
+      ${league.teams.map((team) => `
+        <div class="yahoo-team-choice">
+          <div><strong>${escapeHtml(team.name)}</strong><small>${team.draftPosition ? `Draft position ${team.draftPosition}` : 'Draft position pending'} · ${escapeHtml(team.teamKey)}</small></div>
+          <button type="button" data-yahoo-import data-league-key="${escapeHtml(league.leagueKey)}" data-team-key="${escapeHtml(team.teamKey)}">Import this league</button>
+        </div>`).join('')}
+    </article>`).join('');
+  container.classList.toggle('hidden', !owned.length);
+  $('#yahoo-discovery-message').textContent = owned.length
+    ? `${owned.length} Yahoo league${owned.length === 1 ? '' : 's'} with an owned team found. Choose one to import its rules.`
+    : 'Yahoo returned no NFL leagues owned by this account.';
+  document.querySelectorAll('[data-yahoo-import]').forEach((button) => button.addEventListener('click', () => importYahooLeague(button)));
+}
+
+async function discoverYahooLeagues() {
+  if (!state.yahooOAuth?.connected) {
+    startYahooOAuth();
+    return;
+  }
+  const button = $('#discover-yahoo-leagues');
+  button.disabled = true;
+  $('#yahoo-discovery-message').textContent = 'Reading owned Yahoo Fantasy football leagues…';
+  try {
+    const result = await api('/api/yahoo/leagues');
+    renderYahooLeagues(result.leagues || []);
+  } catch (error) {
+    $('#yahoo-discovery-message').textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function importYahooLeague(button) {
+  button.disabled = true;
+  const original = button.textContent;
+  button.textContent = 'Importing rules…';
+  $('#yahoo-discovery-message').textContent = 'Reading and normalizing the selected league settings without retaining the raw Yahoo response…';
+  try {
+    const result = await api('/api/yahoo/leagues/import', {
+      method: 'POST',
+      body: JSON.stringify({
+        leagueKey: button.dataset.leagueKey,
+        teamKey: button.dataset.teamKey,
+        confirm: true
+      })
+    });
+    await loadFleet();
+    closeLeagueDialog();
+    const warnings = result.yahoo?.warnings?.length || 0;
+    showToast(`${result.league.name} imported from Yahoo${warnings ? ` with ${warnings} setting warning${warnings === 1 ? '' : 's'}` : ' and verified'}.`);
+    await selectLeague(result.league.id);
+  } catch (error) {
+    $('#yahoo-discovery-message').textContent = error.message;
+    button.disabled = false;
+    button.textContent = original;
+  }
+}
+
+async function openYahooOnboarding() {
+  openLeagueDialog();
+  if (state.yahooOAuth?.connected) await discoverYahooLeagues();
+}
+
 function scoped(path = '') {
   return `/api/leagues/${encodeURIComponent(state.leagueId)}${path}`;
 }
@@ -183,38 +299,150 @@ function escapeHtml(value) {
   return String(value).replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
 }
 
+function applySavedLeagueOrder(leagues) {
+  let saved = [];
+  try { saved = JSON.parse(localStorage.getItem(LEAGUE_ORDER_KEY) || '[]'); } catch { saved = []; }
+  const positions = new Map(saved.map((id, index) => [String(id), index]));
+  return [...leagues].sort((left, right) => {
+    const leftPosition = positions.has(left.id) ? positions.get(left.id) : Number.MAX_SAFE_INTEGER;
+    const rightPosition = positions.has(right.id) ? positions.get(right.id) : Number.MAX_SAFE_INTEGER;
+    return leftPosition - rightPosition;
+  });
+}
+
+function saveLeagueOrder() {
+  localStorage.setItem(LEAGUE_ORDER_KEY, JSON.stringify(state.leagues.map((league) => league.id)));
+}
+
+function moveLeagueCard(leagueId, direction) {
+  const index = state.leagues.findIndex((league) => league.id === leagueId);
+  const next = index + direction;
+  if (index < 0 || next < 0 || next >= state.leagues.length) return;
+  [state.leagues[index], state.leagues[next]] = [state.leagues[next], state.leagues[index]];
+  saveLeagueOrder();
+  renderLeagueSelector();
+  renderLeagueFleet();
+}
+
+function placeLeagueCard(sourceId, targetId) {
+  if (!sourceId || sourceId === targetId) return;
+  const sourceIndex = state.leagues.findIndex((league) => league.id === sourceId);
+  if (sourceIndex < 0) return;
+  const [source] = state.leagues.splice(sourceIndex, 1);
+  const targetIndex = state.leagues.findIndex((league) => league.id === targetId);
+  state.leagues.splice(targetIndex < 0 ? state.leagues.length : targetIndex, 0, source);
+  saveLeagueOrder();
+  renderLeagueSelector();
+  renderLeagueFleet();
+}
+
 function renderLeagueFleet() {
   $('#fleet-mode').textContent = `${state.leagues.length} active league${state.leagues.length === 1 ? '' : 's'} · isolated state`;
-  $('#league-grid').innerHTML = state.leagues.map((league) => `
-    <button class="league-card ${league.id === state.leagueId ? 'active' : ''}" data-league-id="${escapeHtml(league.id)}">
-      <span class="league-state"><i></i>${league.activeSessions ? `${league.activeSessions} active draft` : 'ready'}</span>
-      <strong>${escapeHtml(league.name)}</strong>
-      <span>${escapeHtml(league.targetTeam)} · ${league.teamCount} teams</span>
-      <small>Yahoo ${escapeHtml(league.id)} · ${league.sessions} draft session${league.sessions === 1 ? '' : 's'} · ${league.weekly?.storedWeeks || 0} weekly review${league.weekly?.storedWeeks === 1 ? '' : 's'} · ${escapeHtml(league.verificationStatus || 'unverified')}</small>
-    </button>`).join('');
+  $('#fleet-empty').classList.toggle('hidden', state.leagues.length > 0);
+  $('#league-grid').innerHTML = state.leagues.map((league, index) => `
+    <article class="league-card ${league.id === state.leagueId ? 'active' : ''}" data-league-id="${escapeHtml(league.id)}" draggable="true">
+      <button class="league-card-select" type="button" data-league-select="${escapeHtml(league.id)}">
+        <span class="league-state"><i></i>${league.activeSessions ? `${league.activeSessions} active draft` : 'ready'}</span>
+        <strong>${escapeHtml(league.name)}</strong>
+        <span>${escapeHtml(league.targetTeam)} · ${league.teamCount} teams</span>
+        <small>Yahoo ${escapeHtml(league.id)} · ${league.sessions} draft session${league.sessions === 1 ? '' : 's'} · ${league.weekly?.storedWeeks || 0} weekly review${league.weekly?.storedWeeks === 1 ? '' : 's'} · ${escapeHtml(league.verificationStatus || 'unverified')}</small>
+      </button>
+      <div class="league-card-actions" aria-label="Arrange ${escapeHtml(league.name)}">
+        <button type="button" class="ghost compact" data-league-move="-1" ${index === 0 ? 'disabled' : ''} aria-label="Move ${escapeHtml(league.name)} left">←</button>
+        <button type="button" class="ghost compact" data-league-move="1" ${index === state.leagues.length - 1 ? 'disabled' : ''} aria-label="Move ${escapeHtml(league.name)} right">→</button>
+        ${league.deletable ? `<button type="button" class="ghost compact league-delete" data-league-delete aria-label="Delete ${escapeHtml(league.name)}">Delete</button>` : ''}
+      </div>
+    </article>`).join('');
+  document.querySelectorAll('[data-league-select]').forEach((button) => {
+    button.addEventListener('click', () => selectLeague(button.dataset.leagueSelect));
+  });
   document.querySelectorAll('.league-card').forEach((card) => {
-    card.addEventListener('click', () => selectLeague(card.dataset.leagueId));
+    card.querySelectorAll('[data-league-move]').forEach((button) => button.addEventListener('click', () =>
+      moveLeagueCard(card.dataset.leagueId, Number(button.dataset.leagueMove))));
+    card.querySelector('[data-league-delete]')?.addEventListener('click', () => removeLeague(card.dataset.leagueId));
+    card.addEventListener('dragstart', (event) => {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', card.dataset.leagueId);
+      card.classList.add('dragging');
+    });
+    card.addEventListener('dragend', () => card.classList.remove('dragging'));
+    card.addEventListener('dragover', (event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; });
+    card.addEventListener('drop', (event) => {
+      event.preventDefault();
+      placeLeagueCard(event.dataTransfer.getData('text/plain'), card.dataset.leagueId);
+    });
   });
 }
 
 function renderLeagueSelector() {
-  $('#league-select').innerHTML = state.leagues.map((league) =>
-    `<option value="${escapeHtml(league.id)}">${escapeHtml(league.name)} · ${escapeHtml(league.targetTeam)}</option>`
-  ).join('');
+  $('#league-select').innerHTML = state.leagues.length
+    ? state.leagues.map((league) =>
+      `<option value="${escapeHtml(league.id)}">${escapeHtml(league.name)} · ${escapeHtml(league.targetTeam)}</option>`
+    ).join('')
+    : '<option value="">No leagues configured</option>';
+  $('#league-select').disabled = state.leagues.length === 0;
   if (state.leagueId) $('#league-select').value = state.leagueId;
+}
+
+function showEmptyFleet() {
+  clearInterval(state.timer);
+  state.leagueId = null;
+  state.league = null;
+  state.session = null;
+  state.weeklyReview = null;
+  localStorage.removeItem('huddle-active-league');
+  $('#league-picker').classList.add('hidden');
+  $('#mode-switch').classList.add('hidden');
+  $('#setup').classList.add('hidden');
+  $('#draft-room').classList.add('hidden');
+  $('#weekly-room').classList.add('hidden');
+  $('#app-context').textContent = 'HUDDLE / LEAGUE SETUP';
+  $('#app-title').textContent = 'Build your fantasy league fleet.';
+  $('#sync-label').textContent = 'No leagues configured';
 }
 
 async function loadFleet() {
   const fleet = await api('/api/leagues');
-  state.leagues = fleet.leagues;
+  state.leagues = applySavedLeagueOrder(fleet.leagues);
   state.defaultLeagueId = fleet.defaultLeagueId;
   const saved = localStorage.getItem('huddle-active-league');
   const selected = state.leagues.some((league) => league.id === saved) ? saved : state.defaultLeagueId;
   renderLeagueSelector();
-  await selectLeague(selected);
+  renderLeagueFleet();
+  if (selected) await selectLeague(selected);
+  else showEmptyFleet();
+}
+
+async function removeLeague(leagueId) {
+  const league = state.leagues.find((candidate) => candidate.id === leagueId);
+  if (!league?.deletable) return;
+  if (!window.confirm(`Delete ${league.name} from the active Huddle fleet? Dashboard-created data will be archived; configured presets will be hidden without deleting their source files.`)) return;
+  try {
+    const result = await api(`/api/leagues/${encodeURIComponent(leagueId)}`, { method: 'DELETE' });
+    localStorage.removeItem(`huddle-session-id:${leagueId}`);
+    state.defaultLeagueId = result.defaultLeagueId;
+    state.leagues = applySavedLeagueOrder(result.fleet.leagues);
+    saveLeagueOrder();
+    renderLeagueSelector();
+    renderLeagueFleet();
+    showToast(result.removalMode === 'managed-league-archived'
+      ? `${league.name} deleted from the active fleet. Its files were archived for recovery.`
+      : `${league.name} removed from the active fleet. Its configured source files were left unchanged.`);
+    const nextLeagueId = state.leagues.some((candidate) => candidate.id === state.leagueId)
+      ? state.leagueId
+      : state.defaultLeagueId || state.leagues[0]?.id;
+    if (nextLeagueId) await selectLeague(nextLeagueId);
+    else showEmptyFleet();
+  } catch (error) {
+    showToast(error.message);
+  }
 }
 
 function showMode(mode) {
+  if (!state.leagues.length) {
+    showEmptyFleet();
+    return;
+  }
   state.mode = mode;
   localStorage.setItem('huddle-mode', mode);
   const weekly = mode === 'weekly';
@@ -286,7 +514,9 @@ async function addLeague(event) {
         yahooTeamKey: $('#add-yahoo-team-key').value
       })
     });
-    state.leagues = (await api('/api/leagues')).leagues;
+    const fleet = await api('/api/leagues');
+    state.leagues = applySavedLeagueOrder(fleet.leagues);
+    state.defaultLeagueId = fleet.defaultLeagueId;
     renderLeagueSelector();
     renderLeagueFleet();
     closeLeagueDialog();
@@ -302,6 +532,8 @@ async function addLeague(event) {
 
 async function selectLeague(leagueId) {
   if (!state.leagues.some((league) => league.id === leagueId)) return;
+  $('#league-picker').classList.remove('hidden');
+  $('#mode-switch').classList.remove('hidden');
   clearInterval(state.timer);
   state.leagueId = leagueId;
   state.session = null;
@@ -312,7 +544,7 @@ async function selectLeague(leagueId) {
   $('#weekly-league-name').textContent = `${state.league.name} · ${state.league.targetTeam}`;
   $('#draft-slot').max = state.league.teamCount;
   $('#draft-room').classList.add('hidden');
-  $('#setup').classList.remove('hidden');
+  $('#setup').classList.toggle('hidden', state.mode === 'weekly');
   $('#sync-label').textContent = state.mode === 'weekly' ? `Weekly review · ${state.league.name}` : 'Ready · recommendation only';
   renderLeagueFleet();
 
@@ -619,6 +851,16 @@ function renderRecommendation(card) {
   renderBoardRows();
 }
 
+function renderUnresolvedPlayers(payload) {
+  state.unresolvedPlayers = payload?.players || [];
+  const panel = $('#unresolved-panel');
+  panel.classList.toggle('hidden', !state.unresolvedPlayers.length);
+  $('#unresolved-count').textContent = state.unresolvedPlayers.length;
+  $('#unresolved-list').innerHTML = state.unresolvedPlayers.map((item) => `
+    <article><strong>${escapeHtml(item.playerName || 'Unknown player')} · ${escapeHtml(item.position || '—')}</strong><small>${escapeHtml(item.kind.replaceAll('-', ' '))} · ${escapeHtml(item.resolution)}</small></article>
+  `).join('');
+}
+
 function renderBoardEvidence(card) {
   const evidence = card.evidence || {};
   const league = evidence.league || {};
@@ -861,17 +1103,19 @@ function renderPlayerPicker(players) {
 async function refresh() {
   if (!state.session) return;
   const shouldRefreshProviderStatus = Date.now() - state.providerStatusAt > 30_000;
-  const [session, card, pool, providerStatus] = await Promise.all([
+  const [session, card, pool, providerStatus, unresolved] = await Promise.all([
     api(scoped(`/draft/sessions/${state.session.id}`)),
     api(scoped(`/draft/sessions/${state.session.id}/recommendation`)),
     api(scoped(`/players?sessionId=${state.session.id}`)),
-    shouldRefreshProviderStatus ? api('/api/provider-status') : Promise.resolve(null)
+    shouldRefreshProviderStatus ? api('/api/provider-status') : Promise.resolve(null),
+    api(scoped('/unresolved-players'))
   ]);
   if (providerStatus) {
     state.providerStatus = providerStatus;
     state.providerStatusAt = Date.now();
   }
   state.session = session;
+  renderUnresolvedPlayers(unresolved);
   renderRecommendation(card);
   renderPlayerPicker(pool.players);
   $('#recent-picks').innerHTML = session.picks.slice(-6).reverse().map((pick) =>
@@ -919,7 +1163,8 @@ async function recordPick(event) {
 
 async function refreshFleetSummary() {
   const fleet = await api('/api/leagues');
-  state.leagues = fleet.leagues;
+  state.leagues = applySavedLeagueOrder(fleet.leagues);
+  state.defaultLeagueId = fleet.defaultLeagueId;
   renderLeagueSelector();
   renderLeagueFleet();
 }
@@ -972,6 +1217,11 @@ async function init() {
   });
   $('#weekly-season').value = new Date().getFullYear();
   $('#add-league').addEventListener('click', openLeagueDialog);
+  $('#empty-add-league').addEventListener('click', openLeagueDialog);
+  $('#connect-yahoo').addEventListener('click', openYahooOnboarding);
+  $('#empty-connect-yahoo').addEventListener('click', openYahooOnboarding);
+  $('#dialog-connect-yahoo').addEventListener('click', startYahooOAuth);
+  $('#discover-yahoo-leagues').addEventListener('click', discoverYahooLeagues);
   $('#league-form').addEventListener('submit', addLeague);
   $('#close-league-dialog').addEventListener('click', closeLeagueDialog);
   $('#cancel-league').addEventListener('click', closeLeagueDialog);
@@ -1020,16 +1270,25 @@ async function init() {
       syncPlayerHighlights();
     }
   });
-  [state.providerStatus, state.leagueOnboarding] = await Promise.all([
+  [state.providerStatus, state.leagueOnboarding, state.yahooOAuth] = await Promise.all([
     api('/api/provider-status'),
-    api('/api/leagues/onboarding')
+    api('/api/leagues/onboarding'),
+    api('/api/yahoo/oauth/status')
   ]);
+  renderYahooConnection();
   $('#league-onboarding-status').textContent = state.leagueOnboarding.message;
   $('#add-league').disabled = !state.leagueOnboarding.enabled;
+  $('#empty-add-league').disabled = !state.leagueOnboarding.enabled;
   $('#add-league').title = state.leagueOnboarding.enabled ? 'Add a league to this Huddle fleet' : state.leagueOnboarding.message;
   state.providerStatusAt = Date.now();
   await loadFleet();
   showMode(state.mode);
+  const callback = new URLSearchParams(window.location.search);
+  if (callback.get('yahoo') === 'connected') {
+    history.replaceState({}, '', window.location.pathname);
+    showToast('Yahoo account connected with read-only access. Discovering your leagues…');
+    await openYahooOnboarding();
+  }
 }
 
 init().catch((error) => { document.body.innerHTML = `<pre>${escapeHtml(error.message)}</pre>`; });

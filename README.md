@@ -13,8 +13,8 @@ The public example profile is a six-team, two-quarterback, full-PPR Yahoo league
 | Draft recommendations | Implemented with FantasyPros/Tank01 consensus, Sleeper tie-breaks, Yahoo-authoritative filters, and completion-safe roster constraints |
 | Weekly management | Implemented per league with scores, standings, actual-versus-optimal lineup, risks, transactions, and add/drop-or-HOLD guidance |
 | Fleet resilience | Invalid weekly imports and damaged league state are isolated from healthy leagues |
-| Yahoo OAuth | Pending Yahoo approval/integration; unattended imports and API verification remain disabled |
-| Verification | `npm run check` passes 68 tests, including three complete drafts and 54 isolated weekly reviews |
+| Yahoo OAuth | Account-first callback, encrypted token refresh, owned-league discovery, and operator-confirmed settings import implemented; live weekly normalization remains gated |
+| Verification | `npm run check` passes 87 tests, including three complete drafts, 54 isolated weekly reviews, and zero-league Yahoo onboarding |
 
 Until Yahoo OAuth is connected, the supported workflow is fully usable in recommendation-only mode: record draft picks manually or through confirmed screenshots, and import normalized weekly JSON through the dashboard or league-scoped API. Huddle never represents these manual inputs as Yahoo-verified data.
 
@@ -22,6 +22,7 @@ Until Yahoo OAuth is connected, the supported workflow is fully usable in recomm
 
 - Persistent draft sessions with snake-draft turn calculation.
 - Native multi-league registry with league-scoped state, sessions, settings, and dashboard selection.
+- Drag-and-drop and keyboard-accessible league card ordering persisted in the browser, plus recoverable removal of every league: managed leagues are archived, configured presets are hidden without deleting repository files, and the empty fleet can be rebuilt from the dashboard.
 - Manual completed-pick entry, including an explicit unresolved-player path when a player is absent from the loaded pool.
 - Purpose-aware screenshot analysis through OpenRouter for completed picks, available players, team rosters, and waiver/free-agent pages, with a browser preview and mandatory operator confirmation before any state change.
 - Balanced, safe, and upside recommendations after every reconciled pick.
@@ -30,7 +31,10 @@ Until Yahoo OAuth is connected, the supported workflow is fully usable in recomm
 - Sleeper-value flags based on Expert Consensus Rank versus ADP and ceiling, plus separately attributed Sleeper add/drop trend badges.
 - Cached FantasyPros rankings/projection adapter with explicit truncated-response warnings and an optional Tank01 second-opinion adapter.
 - Transparent source reconciliation: FantasyPros 67.5% and Tank01 32.5% within the normalized source-consensus factor; Sleeper trends only break close ties.
-- Read-only Yahoo settings, teams, and draft-results adapter plus an idempotent polling loop.
+- Read-only Yahoo settings, teams, and draft-results adapter plus an idempotent polling loop, bounded 429/5xx backoff, and token-provider support.
+- Account-first Yahoo OAuth with single-use state, AES-256-GCM token storage, owned-league/team discovery, operator-confirmed settings import, and account-scoped disconnect controls.
+- Transient Yahoo weekly-ingestion boundary: raw provider payloads remain in process memory and preview calculations cannot persist state.
+- Automatic 30-day-or-less screenshot evidence expiry, manual purge/delete APIs, visible unresolved-player queue, and page-level Yahoo attribution.
 - Agent-core model routing with an integrity check. Models can explain a computed card but cannot reorder it.
 - Aegis-compatible health, color, manifest, status, and allowlisted read-only WebSocket command contracts.
 - Huddle-owned Aegis fleet dashboard with target-locked league, session, board, and recommendation controls.
@@ -54,7 +58,7 @@ Choose **Weekly management** in the dashboard, select a league, then upload or p
 
 Shared provider evidence is cached once, but each league recalculates independently using its own scoring, roster, visible free-agent pool, waiver rules, budget, and priority. A rerun refreshes only explicit current-week or remaining-season projection fields from that shared pool; it does not mistake preseason totals for weekly projections. The fleet endpoint uses failure isolation so bad data in one league does not block successful reviews in the others. There is no hard-coded league-count limit. The repository regression suite completes a full draft and 18 weekly reviews for three differently configured leagues; commercial multi-user concurrency still requires a production database, tenancy controls, and deployment load testing.
 
-The Yahoo client now exposes read-only scoreboard, standings, transactions, roster, and available-player methods. Unattended Yahoo weekly imports still require the OAuth callback/token-refresh lifecycle and a Yahoo-to-normalized-snapshot adapter. Until that is connected, the dashboard JSON/file import and league-scoped API are the supported ingestion paths. See the [weekly management runbook](docs/weekly-management-runbook.md) and [example weekly snapshot](config/fixtures/weekly-snapshot.example.json).
+The Yahoo client exposes read-only discovery, settings, scoreboard, standings, transactions, roster, draft-result, and available-player methods. OAuth callback, encrypted token storage, refresh, owned-league discovery, and selected-league settings import are implemented. Unattended Yahoo weekly imports still require live validation of the Yahoo-to-normalized-snapshot adapter. Until that gate is cleared, the dashboard JSON/file import and league-scoped API are the supported weekly ingestion paths. See the [weekly management runbook](docs/weekly-management-runbook.md) and [example weekly snapshot](config/fixtures/weekly-snapshot.example.json).
 
 ## Quick start
 
@@ -80,16 +84,25 @@ TANK01_API_KEY=...
 OPENROUTER_API_KEY=...
 YAHOO_CLIENT_ID=...
 YAHOO_CLIENT_SECRET=...
+YAHOO_REDIRECT_URI=https://your-host/auth/yahoo/callback
+HUDDLE_TOKEN_ENCRYPTION_KEY=... # openssl rand -base64 32
+HUDDLE_YAHOO_OAUTH_ENABLED=true
 ```
 
 Do not paste API keys into issues, commits, screenshots, or chat messages.
+
+### Connect a Yahoo league
+
+With the five Yahoo variables configured, open Huddle and select **Connect Yahoo**. The callback stores the account token in the encrypted token envelope, then Huddle discovers NFL leagues and teams owned by that account. Select **Import this league** to read the league settings transiently and create a minimal operator-confirmed Huddle profile. The raw discovery and settings responses are neither returned to the browser nor written to league state.
+
+The importer supports snake drafts, common offensive scoring, standard/flex/superflex roster positions, waiver timing, and playoff size. It fails closed for auction/salary-cap drafts and surfaces unsupported custom scoring categories as verification warnings. Weekly Yahoo normalization and unattended polling remain gated until live payloads are validated; manual and screenshot-assisted weekly workflows remain available.
 
 Player images are disabled by default. [FantasyPros states that its Sportradar-licensed player image URLs are not included in the API license](https://support.fantasypros.com/hc/en-us/articles/49749297704475-How-do-I-request-access-to-the-FantasyPros-API), so Huddle strips those fields before caching and never displays them. To connect a separately licensed image provider, follow the [player media policy](docs/player-media-policy.md); adding a host without documented display rights is not sufficient.
 
 ## How live draft recommendations work
 
 1. **Before the draft:** The evidence leader refreshes FantasyPros rankings and projections, optionally requests one Tank01 ADP snapshot, and loads cached Sleeper add/drop trends. It reconciles player identities before computing league-specific replacement levels from the Yahoo roster/scoring configuration. The daily schedule and evidence cache are shared across every league in the process.
-2. **Observe:** During the draft, the Yahoo read-only poller requests completed draft results every five seconds. Until OAuth is available, the operator records each completed pick in the dashboard. Screenshot analysis can post the same normalized pick events through the import endpoint.
+2. **Observe:** The Yahoo provider boundary can read completed draft results through an idempotent poller, but the dashboard does not start unattended Yahoo polling until live identity coverage is validated. The operator can record each completed pick manually or through confirmed screenshot evidence in the meantime.
 3. **Reconcile:** Every pick event has a stable event ID. Replayed Yahoo responses are ignored, drafted players are removed, and Huddle updates the target roster only when the Yahoo team key matches the configured target team.
 4. **Re-rank:** The deterministic engine recalculates the available board from the reconciled source consensus, projection value, replacement value, positional scarcity, roster need, risk, and the probability each player survives to the next snake turn. FantasyPros supplies 67.5% and Tank01 32.5% of the source-consensus component when both match; if Tank01 is unavailable, the UI discloses an effective 100% FantasyPros fallback. Sleeper rising/falling activity contributes at most a one-point tie-break and never overrides Yahoo availability.
    Preferred, safe, and upside choices must also pass completion constraints: the pick cannot exceed the league's configured/default position maximum or make it impossible to fill all required starter slots with the remaining selections. Manual pick recording remains available because Yahoo is authoritative, but Huddle labels blocked board rows instead of recommending them.
@@ -129,12 +142,22 @@ OpenRouter documents base64 image inputs through the OpenAI-compatible [`/api/v1
 | `GET` | `/api/leagues` | League fleet and active-session summary |
 | `GET` | `/api/leagues/:leagueId` | One normalized league profile |
 | `POST` | `/api/leagues/:leagueId/draft/sessions` | Start a league-scoped draft session |
+| `DELETE` | `/api/leagues/:leagueId` | Remove one league from the active fleet; managed data is archived and configured source files remain unchanged |
 | `GET` | `/api/leagues/:leagueId/weekly/weeks` | List persisted weekly reviews for one league |
 | `POST` | `/api/leagues/:leagueId/weekly/weeks/:week/import` | Import and calculate one normalized league snapshot |
 | `GET` | `/api/leagues/:leagueId/weekly/weeks/:week` | Read scores, standings, lineup review, risks, activity, and waiver decision |
 | `POST` | `/api/leagues/:leagueId/weekly/weeks/:week/run` | Recalculate the saved week with current shared evidence and league rules |
 | `POST` | `/api/fleet/weekly/run` | Run multiple league snapshots with per-league failure isolation |
-| `GET` | `/api/provider-status` | Credential readiness and evidence coverage |
+| `GET` | `/api/provider-status` | Credential readiness, evidence coverage, and compliance controls |
+| `GET` | `/api/yahoo/oauth/status` | Account-scoped OAuth enablement, encrypted storage, and connection status |
+| `GET` | `/auth/yahoo/start` | Begin account-first Yahoo OAuth, including from an empty fleet |
+| `GET` | `/auth/yahoo/callback` | Validate single-use state, exchange code, and encrypt tokens |
+| `GET` | `/api/yahoo/leagues` | Discover normalized NFL leagues and teams owned by the connected account |
+| `POST` | `/api/yahoo/leagues/import` | Confirm and import one selected league's normalized settings |
+| `DELETE` | `/api/yahoo/connection` | Remove the account-scoped encrypted Yahoo token |
+| `GET` | `/api/leagues/:leagueId/unresolved-players` | Review unmatched/manual player identities |
+| `DELETE` | `/api/leagues/:leagueId/draft/sessions/:id/evidence-reviews` | Delete one session's screenshot review metadata |
+| `POST` | `/api/compliance/purge-expired` | Purge expired screenshot review metadata across leagues |
 | `POST` | `/api/draft/sessions` | Start a draft session with `draftSlot` and `sourceMode` |
 | `GET` | `/api/draft/sessions/:id/recommendation` | Current decision card and board |
 | `POST` | `/api/draft/sessions/:id/picks` | Record one completed pick |
@@ -184,9 +207,10 @@ The suite includes a deterministic three-league season pressure regression: full
 
 ## Next product increments
 
-1. Complete Yahoo OAuth callback/token refresh and verify every league registry entry against the API.
-2. Add Yahoo/FantasyPros player-ID crosswalk coverage tests and a visible unresolved-player queue.
-3. Add encrypted image-analysis audit metadata and provider retention controls before multi-user production use.
-4. Complete the Yahoo weekly payload adapter and scheduled per-league ingestion so normalized snapshots no longer require dashboard/API upload.
-5. Add weekly screenshot normalization for matchup, standings, roster, and transaction pages with the same mandatory review semantics used by the draft room.
-6. Add multi-user tenancy, encrypted secret storage, observability, notifications, licensing controls, and paid-source entitlement checks before commercial release.
+1. Validate OAuth, token refresh, rate limits, and league identifiers with approved Yahoo credentials.
+2. Complete the versioned Yahoo weekly payload normalizer using provider-approved live fixtures; the transient fetch/preview boundary is already implemented.
+3. Confirm with Yahoo whether normalized weekly history may be retained and for how long before enabling unattended imports.
+4. Add weekly screenshot normalization for matchup, standings, roster, and transaction pages with the same mandatory review semantics used by the draft room.
+5. Add multi-user tenancy, authenticated administration, managed secrets, observability, notifications, licensing controls, and paid-source entitlement checks before commercial release.
+
+See the [Yahoo integration safety gate](docs/yahoo-integration-safety.md) and [security incident response runbook](docs/security-incident-response.md) before enabling live access.
