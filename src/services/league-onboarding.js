@@ -103,7 +103,7 @@ function buildLeagueConfig(input) {
   };
   return validateLeagueConfig({
     id,
-    platform: 'yahoo',
+    platform: 'manual',
     name,
     targetTeam,
     teamCount,
@@ -208,6 +208,26 @@ class LeagueOnboardingService {
       credentialRef: cleanText(credentialRef, 'Yahoo credential reference', { max: 120 }),
       verificationStatus: status
     });
+  }
+
+  updateDraftSlot(leagueId, draftSlot, { source = 'operator-confirmed' } = {}) {
+    const id = String(leagueId || '');
+    const entry = this.runtime.leagues.find((candidate) => candidate.id === id);
+    if (!entry) throw onboardingError('LEAGUE_NOT_FOUND', `League not found: ${id}`);
+    if (!entry.managed) {
+      throw onboardingError('LEAGUE_UPDATE_NOT_ALLOWED', 'Draft-slot updates are available only for imported or dashboard-managed leagues');
+    }
+    const resolved = integer(draftSlot, 'Draft slot', { min: 1, max: entry.config.teamCount });
+    entry.config.draft.draftSlot = resolved;
+    entry.config.provenance ||= {};
+    entry.config.provenance.draftSlotSource = source;
+    entry.config.provenance.draftSlotUpdatedAt = new Date().toISOString();
+    if (source === 'yahoo') {
+      entry.config.provenance.warnings = (entry.config.provenance.warnings || [])
+        .filter((warning) => !String(warning).includes('confirmed draft position'));
+    }
+    atomicWriteJson(entry.configPath, entry.config);
+    return { leagueId: id, draftSlot: resolved, source, updatedAt: entry.config.provenance.draftSlotUpdatedAt };
   }
 
   persist({ config, yahooLeagueKey, yahooTeamKey, credentialRef, verificationStatus }) {

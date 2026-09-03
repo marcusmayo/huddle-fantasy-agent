@@ -301,6 +301,14 @@ function escapeHtml(value) {
   return String(value).replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
 }
 
+function selectedLeagueSummary() {
+  return state.leagues.find((league) => league.id === state.leagueId) || null;
+}
+
+function yahooSyncEligible() {
+  return Boolean(selectedLeagueSummary()?.yahooSyncEligible);
+}
+
 function applySavedLeagueOrder(leagues) {
   let saved = [];
   try { saved = JSON.parse(localStorage.getItem(LEAGUE_ORDER_KEY) || '[]'); } catch { saved = []; }
@@ -341,20 +349,25 @@ function placeLeagueCard(sourceId, targetId) {
 function renderLeagueFleet() {
   $('#fleet-mode').textContent = `${state.leagues.length} active league${state.leagues.length === 1 ? '' : 's'} · isolated state`;
   $('#fleet-empty').classList.toggle('hidden', state.leagues.length > 0);
-  $('#league-grid').innerHTML = state.leagues.map((league, index) => `
+  $('#league-grid').innerHTML = state.leagues.map((league, index) => {
+    const sourceLabel = league.connectionType === 'yahoo'
+      ? 'Yahoo source'
+      : league.connectionType === 'demo' ? 'Demo profile' : 'Manual profile';
+    return `
     <article class="league-card ${league.id === state.leagueId ? 'active' : ''}" data-league-id="${escapeHtml(league.id)}" draggable="true">
       <button class="league-card-select" type="button" data-league-select="${escapeHtml(league.id)}">
         <span class="league-state"><i></i>${league.activeSessions ? `${league.activeSessions} active draft` : 'ready'}</span>
         <strong>${escapeHtml(league.name)}</strong>
         <span>${escapeHtml(league.targetTeam)} · ${league.teamCount} teams</span>
-        <small>Yahoo ${escapeHtml(league.id)} · ${league.sessions} draft session${league.sessions === 1 ? '' : 's'} · ${league.weekly?.storedWeeks || 0} weekly review${league.weekly?.storedWeeks === 1 ? '' : 's'} · ${escapeHtml(league.verificationStatus || 'unverified')}</small>
+        <small>${sourceLabel} · ${league.sessions} draft session${league.sessions === 1 ? '' : 's'} · ${league.weekly?.storedWeeks || 0} weekly review${league.weekly?.storedWeeks === 1 ? '' : 's'} · ${escapeHtml(league.verificationStatus || 'unverified')}</small>
       </button>
       <div class="league-card-actions" aria-label="Arrange ${escapeHtml(league.name)}">
         <button type="button" class="ghost compact" data-league-move="-1" ${index === 0 ? 'disabled' : ''} aria-label="Move ${escapeHtml(league.name)} left">←</button>
         <button type="button" class="ghost compact" data-league-move="1" ${index === state.leagues.length - 1 ? 'disabled' : ''} aria-label="Move ${escapeHtml(league.name)} right">→</button>
         ${league.deletable ? `<button type="button" class="ghost compact league-delete" data-league-delete aria-label="Delete ${escapeHtml(league.name)}">Delete</button>` : ''}
       </div>
-    </article>`).join('');
+    </article>`;
+  }).join('');
   document.querySelectorAll('[data-league-select]').forEach((button) => {
     button.addEventListener('click', () => selectLeague(button.dataset.leagueSelect));
   });
@@ -544,7 +557,29 @@ async function selectLeague(leagueId) {
   state.league = await api(scoped());
   $('#league-name').textContent = `${state.league.name} · ${state.league.targetTeam}`;
   $('#weekly-league-name').textContent = `${state.league.name} · ${state.league.targetTeam}`;
+  const verificationWarnings = state.league.provenance?.warnings || [];
+  $('#league-verification-warning').classList.toggle('hidden', !verificationWarnings.length);
+  $('#league-verification-warning').textContent = verificationWarnings.length
+    ? `Yahoo verification warnings: ${verificationWarnings.join(' ')}`
+    : '';
   $('#draft-slot').max = state.league.teamCount;
+  $('#draft-slot').value = state.league.draft?.draftSlot || '';
+  const yahooEligible = yahooSyncEligible();
+  const yahooOption = $('#source-mode').querySelector('option[value="yahoo"]');
+  yahooOption.disabled = !yahooEligible;
+  if (!yahooEligible && $('#source-mode').value === 'yahoo') $('#source-mode').value = 'manual';
+  $('#session-help').textContent = yahooEligible
+    ? 'Huddle checks Yahoo for your confirmed draft slot before opening the room. It recommends; you make every pick in Yahoo.'
+    : 'This is a demo or manual profile. Choose its draft slot and use Manual or Screenshot mode; Yahoo synchronization does not apply.';
+  $('#draft-slot-status').textContent = state.league.draft?.draftSlot
+    ? `${yahooEligible ? 'Yahoo/imported' : 'Configured'} draft position ${state.league.draft.draftSlot}.`
+    : yahooEligible ? 'Yahoo has not published a draft position yet; refresh later or enter the confirmed slot.' : 'Enter the demo/manual snake-draft position.';
+  $('#refresh-yahoo-draft-slot').classList.toggle('hidden', !yahooEligible);
+  $('#refresh-yahoo-draft-slot').disabled = !state.yahooOAuth?.connected;
+  $('#weekly-yahoo-refresh').disabled = !yahooEligible || !state.yahooOAuth?.connected;
+  $('#weekly-yahoo-refresh').title = yahooEligible
+    ? state.yahooOAuth?.connected ? 'Refresh this league from Yahoo' : 'Connect Yahoo before refreshing'
+    : 'Yahoo refresh does not apply to demo or manual leagues';
   $('#draft-room').classList.add('hidden');
   $('#setup').classList.toggle('hidden', state.mode === 'weekly');
   $('#sync-label').textContent = state.mode === 'weekly' ? `Weekly review · ${state.league.name}` : 'Ready · recommendation only';
@@ -562,6 +597,33 @@ async function selectLeague(leagueId) {
     if (sessionId) localStorage.setItem(sessionKey(), sessionId);
   }
   if (sessionId) await resumeSession(sessionId);
+  else if (yahooEligible && state.yahooOAuth?.connected) await refreshYahooDraftPosition({ silent: true });
+}
+
+async function refreshYahooDraftPosition({ silent = false } = {}) {
+  if (!yahooSyncEligible()) return null;
+  const button = $('#refresh-yahoo-draft-slot');
+  button.disabled = true;
+  if (!silent) $('#draft-slot-status').textContent = 'Checking Yahoo for the latest draft position…';
+  try {
+    const result = await api(scoped('/yahoo/draft-position/refresh'), { method: 'POST', body: '{}' });
+    if (result.draftSlot) {
+      state.league.draft.draftSlot = result.draftSlot;
+      $('#draft-slot').value = result.draftSlot;
+      state.league.provenance.warnings = (state.league.provenance?.warnings || [])
+        .filter((warning) => !String(warning).includes('confirmed draft position'));
+      const warnings = state.league.provenance.warnings;
+      $('#league-verification-warning').classList.toggle('hidden', !warnings.length);
+      $('#league-verification-warning').textContent = warnings.length ? `Yahoo verification warnings: ${warnings.join(' ')}` : '';
+    }
+    $('#draft-slot-status').textContent = result.message;
+    return result;
+  } catch (error) {
+    if (!silent) $('#draft-slot-status').textContent = error.message;
+    return null;
+  } finally {
+    button.disabled = !state.yahooOAuth?.connected;
+  }
 }
 
 function weeklyKey(review) {
@@ -712,6 +774,10 @@ async function loadWeekly(reviewKey) {
 }
 
 async function refreshWeeklyFromYahoo() {
+  if (!yahooSyncEligible()) {
+    $('#weekly-message').textContent = 'This is a demo or manual league. Use the normalized JSON workflow; Yahoo refresh does not apply.';
+    return;
+  }
   const button = $('#weekly-yahoo-refresh');
   button.disabled = true;
   $('#weekly-message').textContent = 'Reading Yahoo standings, matchup, roster, transactions, and available players…';
@@ -774,17 +840,27 @@ async function rerunWeekly() {
 
 async function createSession(event) {
   event.preventDefault();
-  const session = await api(scoped('/draft/sessions'), {
-    method: 'POST',
-    body: JSON.stringify({ draftSlot: Number($('#draft-slot').value), sourceMode: $('#source-mode').value })
-  });
-  localStorage.setItem(sessionKey(), session.id);
-  state.yahooDraftSync = session.yahooSync || null;
-  state.session = session;
-  showDraftRoom();
-  await refresh();
-  startPolling();
-  await refreshFleetSummary();
+  const button = event.submitter;
+  button.disabled = true;
+  try {
+    const sourceMode = $('#source-mode').value;
+    if (sourceMode === 'yahoo') await refreshYahooDraftPosition({ silent: true });
+    const session = await api(scoped('/draft/sessions'), {
+      method: 'POST',
+      body: JSON.stringify({ draftSlot: Number($('#draft-slot').value), sourceMode })
+    });
+    localStorage.setItem(sessionKey(), session.id);
+    state.yahooDraftSync = session.yahooSync || null;
+    state.session = session;
+    showDraftRoom();
+    await refresh();
+    startPolling();
+    await refreshFleetSummary();
+  } catch (error) {
+    $('#draft-slot-status').textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
 }
 
 async function resumeSession(id) {
@@ -801,8 +877,10 @@ async function resumeSession(id) {
 function showDraftRoom() {
   $('#setup').classList.add('hidden');
   $('#draft-room').classList.remove('hidden');
-  $('#sync-label').textContent = `${state.session.sourceMode} sync · ${state.league.name}`;
-  const yahooMode = state.session.sourceMode === 'yahoo';
+  const yahooMode = state.session.sourceMode === 'yahoo' && yahooSyncEligible();
+  $('#sync-label').textContent = yahooMode
+    ? `Yahoo sync · ${state.league.name}`
+    : `${selectedLeagueSummary()?.connectionType === 'demo' ? 'Demo' : state.session.sourceMode} session · ${state.league.name}`;
   $('#yahoo-draft-sync').classList.toggle('hidden', !yahooMode);
   if (yahooMode) renderYahooDraftSync(state.yahooDraftSync);
   const screenshotMode = state.session.sourceMode === 'screenshot';
@@ -1318,6 +1396,7 @@ async function init() {
   });
   $('#add-team-count').addEventListener('input', (event) => { $('#add-draft-slot').max = event.target.value; });
   $('#session-form').addEventListener('submit', createSession);
+  $('#refresh-yahoo-draft-slot').addEventListener('click', () => refreshYahooDraftPosition());
   $('#yahoo-draft-sync-once').addEventListener('click', () => controlYahooDraftSync('once'));
   $('#yahoo-draft-sync-start').addEventListener('click', () => controlYahooDraftSync('start'));
   $('#yahoo-draft-sync-stop').addEventListener('click', () => controlYahooDraftSync('stop'));

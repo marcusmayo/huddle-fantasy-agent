@@ -30,6 +30,13 @@ function closestWritableDirectory(targetPath) {
   }
 }
 
+function yahooLeagueEntries(runtime) {
+  return runtime.leagues.filter((entry) => entry.config.platform === 'yahoo'
+    && entry.yahooLeagueKey
+    && entry.yahooTeamKey
+    && String(entry.verificationStatus || '').startsWith('verified'));
+}
+
 class YahooOperationsService {
   constructor({
     runtime,
@@ -96,7 +103,8 @@ class YahooOperationsService {
     const crosswalk = this.crosswalk();
     const blockers = [];
     const warnings = [];
-    const leagueReadiness = this.runtime.leagues.map((entry) => {
+    const yahooLeagues = yahooLeagueEntries(this.runtime);
+    const leagueReadiness = yahooLeagues.map((entry) => {
       const problems = [];
       if (!entry.yahooLeagueKey) problems.push('Yahoo league key is missing');
       if (!entry.yahooTeamKey) problems.push('Yahoo target-team key is missing');
@@ -216,7 +224,11 @@ class YahooOperationsService {
           current.state = 'running';
           current.lastSuccessAt = this.iso();
           current.observedPicks = event.observedPicks;
+          current.draftSlot = service.getSession(sessionId).draftSlot;
           current.lastError = null;
+        } else if (event.code === 'DRAFT_SLOT_RECONCILED') {
+          current.draftSlot = event.draftSlot;
+          current.draftSlotSource = 'yahoo-draft-result';
         } else if (event.level === 'warning') {
           current.state = 'degraded';
           current.lastError = { code: event.code, message: event.message || 'A Yahoo player could not be matched', pick: event.pick || null };
@@ -331,21 +343,28 @@ class YahooOperationsService {
       scheduled: this.runtime.yahooWeeklyAutoRefreshEnabled,
       refreshHours: this.runtime.yahooWeeklyRefreshIntervalMs / 3_600_000,
       latestRun: structuredClone(this.weeklyRuns.at(-1) || null),
-      leagues: this.runtime.leagues.map((entry) => this.weeklyStatus(entry.id))
+      leagues: yahooLeagueEntries(this.runtime).map((entry) => this.weeklyStatus(entry.id))
     };
   }
 
   async refreshWeeklyFleet({ week, season, trigger = 'manual' } = {}) {
-    let discovered = [];
-    try {
-      discovered = (await this.yahooAccount.discoverLeagues()).leagues;
-    } catch (error) {
-      const run = { observedAt: this.iso(), trigger, complete: false, succeeded: 0, failed: this.runtime.leagues.length, error: { code: error.code || 'YAHOO_DISCOVERY_FAILED', message: error.message }, results: [] };
+    const yahooLeagues = yahooLeagueEntries(this.runtime);
+    if (!yahooLeagues.length) {
+      const run = { observedAt: this.iso(), trigger, complete: true, succeeded: 0, failed: 0, results: [] };
       this.weeklyRuns.push(run);
       this.weeklyRuns = this.weeklyRuns.slice(-50);
       return run;
     }
-    const results = await Promise.all(this.runtime.leagues.map(async (entry) => {
+    let discovered = [];
+    try {
+      discovered = (await this.yahooAccount.discoverLeagues()).leagues;
+    } catch (error) {
+      const run = { observedAt: this.iso(), trigger, complete: false, succeeded: 0, failed: yahooLeagues.length, error: { code: error.code || 'YAHOO_DISCOVERY_FAILED', message: error.message }, results: [] };
+      this.weeklyRuns.push(run);
+      this.weeklyRuns = this.weeklyRuns.slice(-50);
+      return run;
+    }
+    const results = await Promise.all(yahooLeagues.map(async (entry) => {
       const liveLeague = discovered.find((candidate) => candidate.leagueKey === entry.yahooLeagueKey);
       const resolvedWeek = Number(week || this.runtime.weekOverride || liveLeague?.currentWeek || 1);
       try {
@@ -396,7 +415,9 @@ class YahooOperationsService {
 
   autoResumeDrafts() {
     if (!this.runtime.yahooDraftAutoSyncEnabled || !this.yahooAccount.status().connected) return;
+    const eligible = new Set(yahooLeagueEntries(this.runtime).map((entry) => entry.id));
     for (const [leagueId, service] of this.draftServices) {
+      if (!eligible.has(leagueId)) continue;
       for (const session of service.listSessions().filter((item) => item.status === 'active' && item.sourceMode === 'yahoo')) {
         try { this.startDraftSync({ leagueId, sessionId: session.id }); } catch (error) {
           this.draftStatuses.set(this.key(leagueId, session.id), {

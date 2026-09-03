@@ -185,6 +185,40 @@ test('Yahoo weekly operations return an expiring transient review and never save
   assert.equal(JSON.stringify(store.load()), before);
 });
 
+test('demo profiles are excluded from Yahoo draft and scheduled weekly operations', async () => {
+  const demo = { ...structuredClone(league), platform: 'demo', id: 'demo-only', name: 'Demo Only' };
+  let discoveries = 0;
+  const operations = new YahooOperationsService({
+    runtime: {
+      season: 2026,
+      playerPool: structuredClone(pool),
+      leagues: [{ id: demo.id, config: demo, stateFile: '/tmp/demo-only.json', yahooLeagueKey: null, yahooTeamKey: null, verificationStatus: 'unverified' }],
+      yahooDraftAutoSyncEnabled: true,
+      yahooDraftPollIntervalMs: 15_000,
+      yahooDraftMinimumCrosswalkCoverage: 0.8,
+      yahooWeeklyAutoRefreshEnabled: true,
+      yahooWeeklyRefreshIntervalMs: 86_400_000,
+      yahooWeeklyPreviewTtlMs: 3_600_000,
+      operationsMaximumEvidenceAgeHours: 36,
+      leagueErrors: []
+    },
+    yahooAccount: {
+      status: () => ({ enabled: true, clientConfigured: true, encryptedTokenStorageConfigured: true, connected: true }),
+      discoverLeagues: async () => { discoveries += 1; throw new Error('demo must not call Yahoo'); }
+    },
+    draftServices: new Map(),
+    weeklyServices: new Map(),
+    now: () => new Date('2026-09-08T12:30:00.000Z')
+  });
+  const readiness = operations.readiness();
+  assert.deepEqual(readiness.leagues, []);
+  assert.equal(readiness.blockers.includes('No Yahoo league is imported'), true);
+  const run = await operations.refreshWeeklyFleet({ trigger: 'test' });
+  assert.deepEqual(run.results, []);
+  assert.equal(run.complete, true);
+  assert.equal(discoveries, 0);
+});
+
 test('operational HTTP routes expose readiness, draft sync control, and transient weekly refresh', async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'huddle-ops-http-'));
   const calls = [];

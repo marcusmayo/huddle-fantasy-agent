@@ -12,6 +12,7 @@ test('demo registry exposes three valid, distinct league experiences', () => {
   const registry = loadLeagueRegistry(path.join(root, 'config/leagues/registry.example.json'));
   assert.equal(registry.leagues.length, 3);
   assert.equal(new Set(registry.leagues.map((league) => league.id)).size, 3);
+  assert.equal(registry.leagues.every((league) => league.config.platform === 'demo'), true);
   assert.deepEqual(registry.leagues.map((league) => league.config.teamCount), [6, 10, 12]);
   assert.deepEqual(registry.leagues.map((league) => league.config.scoring.offense.reception), [1, 0.5, 0]);
 });
@@ -28,6 +29,8 @@ test('draft room includes fast search, a position filter, and a resizable board'
   assert.match(html, /id="board-shorter"/);
   assert.match(html, /id="board-taller"/);
   assert.match(html, /id="board-fit"/);
+  assert.match(html, /id="refresh-yahoo-draft-slot"/);
+  assert.match(html, /id="league-verification-warning"/);
   assert.match(html, /id="screenshot-file"[^>]+type="file"/);
   assert.match(html, /id="screenshot-purpose"/);
   assert.match(html, /value="available_players"/);
@@ -50,6 +53,8 @@ test('draft room includes fast search, a position filter, and a resizable board'
   assert.match(client, /function finishScreenshotReview\(/);
   assert.match(client, /function renderBoardRows\(/);
   assert.match(client, /function setBoardHeight\(/);
+  assert.match(client, /function yahooSyncEligible\(/);
+  assert.match(client, /Yahoo refresh does not apply to demo or manual leagues/);
   assert.match(client, /evidence-reviews/);
   assert.match(client, /makePlayerSelectable\(document\.querySelector\('\.hero-card'\)/);
   assert.match(styles, /\.board-scroll \{[^}]*overflow: auto/);

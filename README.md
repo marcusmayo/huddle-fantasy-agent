@@ -2,7 +2,7 @@
 
 Huddle is a read-only fantasy football decision agent for league-specific drafting and weekly team management. The MVP provides a multi-league portfolio dashboard, live draft rooms, persisted weekly result reviews, optimal-lineup analysis, and add/drop-or-HOLD waiver guidance. It never submits a Yahoo draft pick, lineup change, transaction, bid, or waiver claim.
 
-The public example profile is a six-team, two-quarterback, full-PPR Yahoo league with six-point passing touchdowns. Real league IDs, team names, OAuth references, and commissioner settings belong only in untracked local configuration or a secret manager. Every profile remains configurable and can be verified against Yahoo once OAuth access is approved.
+The public example profile is a synthetic six-team, two-quarterback, full-PPR demo with six-point passing touchdowns. It never attempts Yahoo synchronization. Real league IDs, team names, OAuth references, and commissioner settings belong only in untracked local configuration or a secret manager.
 
 ## Current MVP status
 
@@ -15,7 +15,7 @@ The public example profile is a six-team, two-quarterback, full-PPR Yahoo league
 | Fleet resilience | Invalid weekly imports and damaged league state are isolated from healthy leagues |
 | Yahoo OAuth | Account-first callback, encrypted token refresh, owned-league discovery, operator-confirmed settings import, draft polling, and transient weekly previews are implemented |
 | Operations | Fail-closed preflight, draft auto-resume, scheduled failure-isolated weekly refresh, expiring previews, structured status, and container health checks are implemented |
-| Verification | `npm run check` passes 92 tests covering complete drafts, 54 isolated weekly reviews, zero-league Yahoo onboarding, OAuth safety, live-sync idempotency, and transient normalization |
+| Verification | `npm run check` passes 95 tests covering complete drafts, 54 isolated weekly reviews, demo/Yahoo isolation, draft-slot reconciliation, zero-league Yahoo onboarding, OAuth safety, live-sync idempotency, and transient normalization |
 
 Until Yahoo OAuth is connected, the supported workflow is fully usable in recommendation-only mode: record draft picks manually or through confirmed screenshots, and import normalized weekly JSON through the dashboard or league-scoped API. Huddle never represents these manual inputs as Yahoo-verified data.
 
@@ -34,6 +34,7 @@ Until Yahoo OAuth is connected, the supported workflow is fully usable in recomm
 - Transparent source reconciliation: FantasyPros 67.5% and Tank01 32.5% within the normalized source-consensus factor; Sleeper trends only break close ties.
 - Read-only Yahoo settings, teams, and draft-results adapter plus an idempotent polling loop, bounded 429/5xx backoff, and token-provider support.
 - Automatic Yahoo draft-result polling for Yahoo-source sessions, with restart recovery, dashboard controls, readiness blocking, and a manual-entry fallback.
+- Yahoo draft-position refresh when Yahoo publishes the order, imported-position prefilling, and automatic session-slot reconciliation from the target team's first observed draft result.
 - Account-first Yahoo OAuth with single-use state, AES-256-GCM token storage, owned-league/team discovery, operator-confirmed settings import, and account-scoped disconnect controls.
 - Versioned Yahoo weekly normalization and scheduled multi-league previews: raw provider payloads remain in process memory, previews expire, and one league's failure cannot block another.
 - Full Sleeper player-map identity crosswalk for Yahoo player keys, independent of the smaller trend feed, with ambiguous identities quarantined.
@@ -52,9 +53,9 @@ Until Yahoo OAuth is connected, the supported workflow is fully usable in recomm
 
 ## Draft-room preview
 
-![Huddle live draft room showing the resizable best-available board, player search, evidence confirmation, and recent picks](docs/assets/huddle-draft-room-preview.png)
+![Huddle connected to a read-only Yahoo league and preparing a league-specific draft session](docs/assets/huddle-draft-room-preview.png)
 
-The board can be filtered by position and resized vertically. Draft-pick entry and Recent Picks remain above the screenshot assistant, while confirmed availability evidence is shown as a tag and does not silently change a player's ranking score.
+Yahoo-imported leagues prefill the draft position when Yahoo returns it and offer a refresh while the order is pending. Demo/manual profiles use Manual or Screenshot mode and never display a Yahoo-identifier error. In the live room, the board can be filtered by position and resized vertically; draft-pick entry and Recent Picks remain above the screenshot assistant.
 
 ## Weekly management
 

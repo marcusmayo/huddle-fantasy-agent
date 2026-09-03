@@ -121,7 +121,14 @@ async function handleDraftRoutes(request, response, service, parts, { visionClie
     return true;
   }
   if (parts.length === 1 && request.method === 'POST') {
-    const session = service.createSession(await readBody(request));
+    const input = await readBody(request);
+    if (input.sourceMode === 'yahoo' && (!entry?.yahooLeagueKey
+      || !entry?.yahooTeamKey
+      || entry.config.platform !== 'yahoo'
+      || !String(entry.verificationStatus || '').startsWith('verified'))) {
+      throw Object.assign(new Error('Yahoo sync is available only for a verified Yahoo-imported league; use Manual or Screenshot mode for this demo/profile'), { code: 'YAHOO_SOURCE_NOT_AVAILABLE' });
+    }
+    const session = service.createSession(input);
     let yahooSync = null;
     if (session.sourceMode === 'yahoo' && yahooOperations && entry) {
       try {
@@ -434,6 +441,9 @@ function createHandler({ runtime, draftServices, weeklyServices, weeklyFleetRunn
           const result = leagueOnboarding.remove(entry.id);
           return json(response, 200, { ...result, fleet: fleetManifest(runtime, draftServices, weeklyServices) });
         }
+        if (tail[0] === 'yahoo' && tail[1] === 'draft-position' && tail[2] === 'refresh' && request.method === 'POST') {
+          return json(response, 200, await yahooAccount.refreshDraftPosition({ leagueId: entry.id }));
+        }
         const { service } = serviceFor(runtime, draftServices, entry.id);
         if (tail[0] === 'unresolved-players' && request.method === 'GET') {
           return json(response, 200, { leagueId: entry.id, players: service.unresolvedPlayers() });
@@ -481,6 +491,10 @@ function createHandler({ runtime, draftServices, weeklyServices, weeklyFleetRunn
 
       if (request.method === 'GET' && url.pathname === '/api/provider-status') {
         const yahooStatus = yahooAccount.status();
+        const yahooLeagues = runtime.leagues.filter((entry) => entry.config.platform === 'yahoo'
+          && entry.yahooLeagueKey
+          && entry.yahooTeamKey
+          && String(entry.verificationStatus || '').startsWith('verified'));
         return json(response, 200, {
           fantasyPros: {
             configured: fantasyProsClient.configured,
@@ -522,8 +536,8 @@ function createHandler({ runtime, draftServices, weeklyServices, weeklyFleetRunn
             weeklyReadMethods: ['scoreboard', 'standings', 'transactions', 'roster', 'availablePlayers'],
             normalizedWeeklyAdapterReady: true,
             transientIngestionBoundaryReady: true,
-            livePayloadValidationPending: runtime.leagues.length === 0
-              || !runtime.leagues.every((entry) => yahooOperations.weeklyStatus(entry.id).lastSuccessAt),
+            livePayloadValidationPending: yahooLeagues.length === 0
+              || !yahooLeagues.every((entry) => yahooOperations.weeklyStatus(entry.id).lastSuccessAt),
             automation: yahooOperations.readiness().yahooAutomation,
             rawPayloadPersistence: false,
             attribution: 'Fantasy data provided by Yahoo Fantasy'

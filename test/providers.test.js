@@ -8,7 +8,11 @@ const test = require('node:test');
 const { isTruncated, normalizeRankedPlayer, stripPlayerImageFields } = require('../src/providers/fantasypros');
 const { FantasyProsClient } = require('../src/providers/fantasypros');
 const { sanitizePlayerPool } = require('../src/media/player-headshots');
-const { YahooReadOnlyClient, extractDraftResults } = require('../src/providers/yahoo');
+const { YahooDraftPoller, YahooReadOnlyClient, extractDraftResults } = require('../src/providers/yahoo');
+const { DraftService } = require('../src/services/draft-service');
+const { MemoryStateStore } = require('../src/storage/json-state-store');
+const demoLeague = require('../config/leagues/yahoo-example.json');
+const demoPlayers = require('../config/fixtures/demo-players.json');
 
 test('FantasyPros truncated responses are surfaced', () => {
   assert.equal(isTruncated({ meta: { truncated: true } }), true);
@@ -117,6 +121,33 @@ test('Yahoo draft results extract from nested API JSON', () => {
     { overallPick: 1, round: 1, teamKey: '461.l.1.t.1', yahooPlayerKey: '461.p.11' },
     { overallPick: 2, round: 1, teamKey: '461.l.1.t.2', yahooPlayerKey: '461.p.22' }
   ]);
+});
+
+test('Yahoo draft results reconcile the target session slot from an owned pick', async () => {
+  const league = structuredClone(demoLeague);
+  league.platform = 'yahoo';
+  const playerPool = structuredClone(demoPlayers);
+  playerPool.players.slice(0, 3).forEach((player, index) => { player.yahooPlayerKey = `999.p.${index + 1}`; });
+  const drafts = new DraftService({ league, playerPool, store: new MemoryStateStore() });
+  const session = drafts.createSession({ draftSlot: 1, sourceMode: 'yahoo' });
+  const events = [];
+  const poller = new YahooDraftPoller({
+    client: { draftResults: async () => ({ picks: [
+      { overallPick: 1, teamKey: '999.l.1.t.1', yahooPlayerKey: '999.p.1' },
+      { overallPick: 2, teamKey: '999.l.1.t.2', yahooPlayerKey: '999.p.2' },
+      { overallPick: 3, teamKey: '999.l.1.t.3', yahooPlayerKey: '999.p.3' }
+    ] }) },
+    leagueKey: '999.l.1',
+    sessionId: session.id,
+    draftService: drafts,
+    playerPool,
+    targetTeamKey: '999.l.1.t.3',
+    onStatus: (event) => events.push(event)
+  });
+  await poller.syncOnce();
+  assert.equal(drafts.getSession(session.id).draftSlot, 3);
+  assert.equal(drafts.getSession(session.id).picks[2].isMine, true);
+  assert.equal(events.some((event) => event.code === 'DRAFT_SLOT_RECONCILED'), true);
 });
 
 test('Yahoo provider exposes GET-only league methods', () => {

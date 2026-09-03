@@ -151,6 +151,16 @@ test('multi-league APIs keep sessions isolated and expose an Aegis manifest', as
     assert.equal(fleet.status, 200);
     assert.equal(fleet.body.leagues.length, 2);
     assert.equal(fleet.body.defaultLeagueId, 'example-primary');
+    assert.equal(fleet.body.leagues[0].connectionType, 'demo');
+    assert.equal(fleet.body.leagues[0].yahooSyncEligible, false);
+
+    const invalidYahooSession = await fetchJson(`${base}/api/leagues/example-primary/draft/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ draftSlot: 3, sourceMode: 'yahoo' })
+    });
+    assert.equal(invalidYahooSession.status, 400);
+    assert.equal(invalidYahooSession.body.error, 'YAHOO_SOURCE_NOT_AVAILABLE');
 
     const created = await fetchJson(`${base}/api/leagues/secondary-22/draft/sessions`, {
       method: 'POST',

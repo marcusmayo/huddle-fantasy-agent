@@ -1,7 +1,7 @@
 {
   "id": "example-primary",
-  "platform": "yahoo",
-  "name": "EXAMPLE YAHOO LEAGUE",
+  "platform": "demo",
+  "name": "HUDDLE DEMO LEAGUE",
   "targetTeam": "MY TEAM",
   "teamCount": 6,
   "scoringType": "head-to-head",

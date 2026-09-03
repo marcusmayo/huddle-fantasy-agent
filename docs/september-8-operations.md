@@ -20,7 +20,7 @@ The 2026 NFL season opens on Wednesday, September 9. September 8 is therefore th
 ## Manual gates that cannot be automated
 
 1. Approve Yahoo's browser consent screen and confirm the correct Yahoo account.
-2. Confirm the exact draft time, draft slot, league, target team, scoring, roster slots, and waiver rules in Yahoo.
+2. Confirm the exact draft time, league, target team, scoring, roster slots, and waiver rules in Yahoo. Huddle refreshes the draft slot automatically when Yahoo publishes it, but the operator must compare the displayed position with Yahoo before relying on turn calculations.
 3. Confirm the 15-second polling interval is permitted by Yahoo. Yahoo's public developer portal does not state a numeric Fantasy Sports request ceiling.
 4. Compare Huddle's first live draft result and first live weekly preview with Yahoo. Synthetic contract tests cannot prove that Yahoo has not changed a production payload shape.
 5. Make every fantasy action in Yahoo. Huddle intentionally has no write client.
@@ -158,7 +158,7 @@ Before the real draft:
 ### 15 minutes before the draft
 
 1. Select the exact real league.
-2. Confirm the draft slot again in Yahoo.
+2. Select **Refresh slot from Yahoo**, then confirm the returned draft slot against the Yahoo room. If Yahoo still reports it as pending, enter the confirmed slot manually.
 3. Create one session in **Yahoo** source mode.
 4. Confirm **Yahoo draft sync: Running**.
 5. Confirm Huddle shows zero picks before Yahoo records the first pick.

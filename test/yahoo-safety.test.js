@@ -408,6 +408,14 @@ test('account-first Yahoo OAuth discovers and imports a league into an empty fle
     const persisted = fs.readFileSync(path.join(tempDir, 'leagues', 'yahoo-999-l-12345', 'config.json'), 'utf8');
     assert.doesNotMatch(persisted, /RAW_YAHOO_SETTINGS_MUST_NOT_PERSIST|access-account-code|refresh-account/);
 
+    const draftPositionResponse = await fetch(`${base}/api/leagues/yahoo-999-l-12345/yahoo/draft-position/refresh`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}'
+    });
+    assert.equal(draftPositionResponse.status, 200);
+    const draftPosition = await draftPositionResponse.json();
+    assert.equal(draftPosition.state, 'confirmed');
+    assert.equal(draftPosition.draftSlot, 7);
+
     const status = await (await fetch(`${base}/api/yahoo/oauth/status`)).json();
     assert.equal(status.account.connected, true);
     assert.equal(status.connections.length, 1);

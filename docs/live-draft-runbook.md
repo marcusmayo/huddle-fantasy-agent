@@ -5,7 +5,7 @@ For the dated Codespaces checklist, exact preflight commands, attended-draft pro
 ## The day before
 
 1. Connect Yahoo, import the real league, and confirm the league and target team shown in `/api/league`.
-2. Verify the draft slot in Yahoo. The commissioner screenshots did not contain this value.
+2. Use **Refresh slot from Yahoo** after Yahoo publishes the draft order. If Yahoo still reports it as pending, verify and enter the slot from the Yahoo draft room.
 3. Put the FantasyPros key in `.env`. Add `TANK01_API_KEY` only if the optional RapidAPI second opinion is enabled; never put either key in a request body or repository file. Sleeper trends require no key.
 4. Start Huddle and call `/api/data/sources/sync` once. Confirm `complete: true`, review Tank01/Sleeper match coverage, or inspect the disclosed primary-only fallback.
 5. Run `npm run preflight`. Do not use live Yahoo mode unless it returns `READY`.
@@ -14,7 +14,7 @@ For the dated Codespaces checklist, exact preflight commands, attended-draft pro
 ## Draft-day startup
 
 1. Start Huddle at least 15 minutes before the room opens.
-2. Create a session using the confirmed draft slot.
+2. Create a session using the Yahoo-confirmed draft slot. Huddle refreshes it before opening Yahoo mode and reconciles it from the target team's first observed completed pick if Yahoo changes or delays the team metadata.
 3. Use Yahoo source mode only when `npm run preflight` reports `READY`. Creating the session starts the completed-pick poller automatically; active Yahoo sessions resume after a process restart.
 4. Keep Yahoo and the Huddle dashboard side by side. Huddle is advisory; submit every selection in Yahoo.
 

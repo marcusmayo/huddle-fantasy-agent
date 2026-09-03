@@ -47,6 +47,15 @@ test('invalid draft slot fails closed', () => {
   assert.throws(() => service().createSession({ draftSlot: 7 }), /between 1 and 6/);
 });
 
+test('an authoritative Yahoo observation can correct a saved session draft slot', () => {
+  const drafts = service();
+  const session = drafts.createSession({ draftSlot: 1, sourceMode: 'yahoo' });
+  const updated = drafts.updateDraftSlot(session.id, 3, { source: 'yahoo-draft-result' });
+  assert.equal(updated.draftSlot, 3);
+  assert.equal(updated.draftSlotSource, 'yahoo-draft-result');
+  assert.equal(drafts.recommendation(session.id).draftSlot, 3);
+});
+
 test('an unlisted player can be recorded with operator-supplied identity', () => {
   const drafts = service();
   const session = drafts.createSession({ draftSlot: 1 });

@@ -89,6 +89,22 @@ class DraftService {
     return this.decorate(session);
   }
 
+  updateDraftSlot(id, draftSlot, { source = 'operator-confirmed' } = {}) {
+    const session = this.state.sessions[id];
+    if (!session) return this.getSession(id);
+    if (!Number.isInteger(draftSlot) || draftSlot < 1 || draftSlot > this.league.teamCount) {
+      const error = new Error(`draftSlot must be between 1 and ${this.league.teamCount}`);
+      error.code = 'INVALID_DRAFT_SLOT';
+      throw error;
+    }
+    if (session.draftSlot === draftSlot) return this.decorate(session);
+    session.draftSlot = draftSlot;
+    session.draftSlotSource = source;
+    session.updatedAt = this.currentIso();
+    this.persist();
+    return this.decorate(session);
+  }
+
   recordPick(id, input) {
     const session = this.state.sessions[id];
     if (!session) return this.getSession(id);

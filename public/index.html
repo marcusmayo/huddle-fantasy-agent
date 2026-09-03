@@ -23,7 +23,7 @@
   <main class="shell">
     <section id="portfolio-summary" class="portfolio-summary">
       <div class="section-head">
-        <div><p class="eyebrow">PORTFOLIO</p><h2>Yahoo league fleet</h2></div>
+        <div><p class="eyebrow">PORTFOLIO</p><h2>Fantasy league fleet</h2></div>
         <div class="fleet-actions">
           <span id="fleet-mode" class="muted"></span>
           <button id="connect-yahoo" type="button" class="ghost">Connect Yahoo</button>
@@ -51,10 +51,15 @@
       <div>
         <p class="eyebrow">NEW SESSION</p>
         <h2 id="league-name">Loading league…</h2>
-        <p class="muted">Choose your confirmed Yahoo draft slot. Huddle recommends; you make every pick in Yahoo.</p>
+        <p id="session-help" class="muted">Choose your draft slot. Huddle recommends; you make every pick on the league platform.</p>
+        <div id="league-verification-warning" class="warning hidden" role="status"></div>
       </div>
       <form id="session-form">
-        <label>Draft slot <input id="draft-slot" type="number" min="1" value="3" required></label>
+        <label>Draft slot
+          <input id="draft-slot" type="number" min="1" required>
+          <small id="draft-slot-status" class="field-help">Enter the confirmed snake-draft position.</small>
+        </label>
+        <button id="refresh-yahoo-draft-slot" type="button" class="ghost compact hidden">Refresh slot from Yahoo</button>
         <label>Sync source
           <select id="source-mode">
             <option value="manual">Manual now</option>

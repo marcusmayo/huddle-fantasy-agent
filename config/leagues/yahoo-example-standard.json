@@ -1,6 +1,6 @@
 {
   "id": "example-standard",
-  "platform": "yahoo",
+  "platform": "demo",
   "name": "HUDDLE 12-TEAM STANDARD",
   "targetTeam": "GRIDIRON OPERATORS",
   "teamCount": 12,

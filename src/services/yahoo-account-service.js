@@ -101,6 +101,36 @@ class YahooAccountService {
     };
   }
 
+  async refreshDraftPosition({ leagueId } = {}) {
+    const entry = this.runtime.leagues.find((candidate) => candidate.id === String(leagueId));
+    if (!entry) throw accountError('LEAGUE_NOT_FOUND', `League not found: ${leagueId}`);
+    if (entry.config.platform !== 'yahoo'
+      || !entry.yahooLeagueKey
+      || !entry.yahooTeamKey
+      || !String(entry.verificationStatus || '').startsWith('verified')) {
+      throw accountError('YAHOO_SOURCE_NOT_AVAILABLE', 'This is a demo or manual league; Yahoo draft-position refresh does not apply');
+    }
+    const discovery = await this.discoverLeagues();
+    const league = discovery.leagues.find((candidate) => candidate.leagueKey === entry.yahooLeagueKey);
+    if (!league) throw accountError('YAHOO_LEAGUE_NOT_FOUND', 'Yahoo no longer returns this imported league for the connected account');
+    const team = league.teams.find((candidate) => candidate.teamKey === entry.yahooTeamKey);
+    if (!team || !team.ownedByCurrentUser) {
+      throw accountError('YAHOO_TEAM_NOT_OWNED', 'The connected Yahoo account does not own the imported target team');
+    }
+    const draftSlot = Number(team.draftPosition);
+    if (!Number.isInteger(draftSlot) || draftSlot < 1 || draftSlot > entry.config.teamCount) {
+      return {
+        leagueId: entry.id,
+        draftSlot: null,
+        state: 'pending',
+        source: 'yahoo',
+        message: 'Yahoo has not published a confirmed draft position for this team yet.'
+      };
+    }
+    const updated = this.leagueOnboarding.updateDraftSlot(entry.id, draftSlot, { source: 'yahoo' });
+    return { ...updated, state: 'confirmed', message: `Yahoo confirmed draft position ${draftSlot}.` };
+  }
+
   disconnect() {
     if (!this.yahooOAuth.tokenStore.configured) return false;
     this.client = null;

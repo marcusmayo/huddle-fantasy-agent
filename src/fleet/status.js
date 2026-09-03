@@ -12,6 +12,10 @@ const PALETTE = {
 function leagueSummary(entry, service, weeklyService, runtime) {
   const failure = (runtime?.leagueErrors || []).find((item) => item.leagueId === entry.id);
   const sessions = service ? service.listSessions() : [];
+  const yahooSyncEligible = entry.config.platform === 'yahoo'
+    && Boolean(entry.yahooLeagueKey)
+    && Boolean(entry.yahooTeamKey)
+    && String(entry.verificationStatus || '').startsWith('verified');
   return {
     id: entry.id,
     name: entry.config.name,
@@ -20,6 +24,10 @@ function leagueSummary(entry, service, weeklyService, runtime) {
     teamCount: entry.config.teamCount,
     yahooLeagueKeyConfigured: Boolean(entry.yahooLeagueKey),
     yahooTeamKeyConfigured: Boolean(entry.yahooTeamKey),
+    yahooSyncEligible,
+    connectionType: yahooSyncEligible
+      ? 'yahoo'
+      : entry.config.platform === 'demo' ? 'demo' : 'manual',
     verificationStatus: entry.verificationStatus || 'unverified',
     deletable: Boolean(runtime?.leagueOnboardingEnabled),
     availability: service ? 'available' : 'quarantined',

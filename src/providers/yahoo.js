@@ -1,6 +1,7 @@
 'use strict';
 
 const { extractYahooLeagues } = require('./yahoo-normalizer');
+const { pickOwner } = require('../domain/league');
 
 const DEFAULT_BASE_URL = 'https://fantasysports.yahooapis.com/fantasy/v2';
 
@@ -170,12 +171,20 @@ class YahooDraftPoller {
         this.onStatus({ level: 'warning', code: 'UNRESOLVED_PLAYER', pick });
         break;
       }
+      const isMine = pick.teamKey === this.targetTeamKey;
+      if (isMine) {
+        const observedSlot = pickOwner(pick.overallPick, this.draftService.league.teamCount);
+        if (observedSlot !== this.draftService.getSession(this.sessionId).draftSlot) {
+          this.draftService.updateDraftSlot(this.sessionId, observedSlot, { source: 'yahoo-draft-result' });
+          this.onStatus({ level: 'info', code: 'DRAFT_SLOT_RECONCILED', draftSlot: observedSlot });
+        }
+      }
       this.draftService.recordPick(this.sessionId, {
         eventId: `yahoo:${this.leagueKey}:${pick.overallPick}`,
         overallPick: pick.overallPick,
         playerId: player.id,
         teamId: pick.teamKey,
-        isMine: pick.teamKey === this.targetTeamKey,
+        isMine,
         source: 'yahoo'
       });
     }
