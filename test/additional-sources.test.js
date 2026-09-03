@@ -7,7 +7,7 @@ const path = require('node:path');
 const test = require('node:test');
 const { SleeperClient, normalizeSleeperPlayerCrosswalk, normalizeSleeperTrends } = require('../src/providers/sleeper');
 const { Tank01Client, normalizeTank01Players, positionFromPosAdp, scoringToAdpType } = require('../src/providers/tank01');
-const { SOURCE_WEIGHTS, reconcilePlayerEvidence } = require('../src/services/player-evidence');
+const { SOURCE_WEIGHTS, evidenceIndex, matchEvidence, reconcilePlayerEvidence } = require('../src/services/player-evidence');
 
 test('Tank01 normalizes draft rows and caches one ADP request', async () => {
   const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'huddle-tank01-'));
@@ -99,6 +99,11 @@ test('Sleeper player map supplies active Yahoo identity crosswalks independently
     s3: { full_name: 'Unsupported Player', position: 'P', yahoo_id: 303 }
   });
   assert.deepEqual(rows, [{ sleeperId: 's1', yahooId: '101', fantasyDataId: null, name: 'Mapped Player', position: 'RB', team: 'FA' }]);
+});
+
+test('numeric Yahoo identities are equivalent to season-qualified Yahoo player keys', () => {
+  const numeric = evidenceIndex([{ name: 'Mapped Player', position: 'RB', yahooPlayerKey: '40059' }]);
+  assert.equal(matchEvidence({ name: 'Different Label', position: 'RB', yahooPlayerKey: '461.p.40059' }, numeric)?.name, 'Mapped Player');
 });
 
 test('Sleeper neutral trends remain a non-ranking signal', () => {

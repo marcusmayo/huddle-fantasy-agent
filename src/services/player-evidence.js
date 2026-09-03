@@ -19,7 +19,8 @@ function yahooId(player) {
   const explicit = player?.yahooId;
   if (explicit !== undefined && explicit !== null && explicit !== '') return String(explicit);
   const key = String(player?.yahooPlayerKey || '');
-  return key.includes('.p.') ? key.split('.p.').at(-1) : null;
+  if (!key) return null;
+  return key.includes('.p.') ? key.split('.p.').at(-1) : key;
 }
 
 function identityKey(player) {
