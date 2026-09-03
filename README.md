@@ -15,7 +15,7 @@ The public example profile is a synthetic six-team, two-quarterback, full-PPR de
 | Fleet resilience | Invalid weekly imports and damaged league state are isolated from healthy leagues |
 | Yahoo OAuth | Account-first callback, encrypted token refresh, owned-league discovery, operator-confirmed settings import, draft polling, and transient weekly previews are implemented |
 | Operations | Fail-closed preflight, draft auto-resume, scheduled failure-isolated weekly refresh, expiring previews, structured status, and container health checks are implemented |
-| Verification | `npm run check` passes 97 tests covering complete drafts, 54 isolated weekly reviews, demo/Yahoo isolation, full DR Fantasy scoring normalization, draft-slot reconciliation, zero-league Yahoo onboarding, OAuth safety, live-sync idempotency, and transient normalization |
+| Verification | `npm run check` passes 98 tests covering complete drafts, 54 isolated weekly reviews, demo/Yahoo isolation, FantasyPros/Yahoo identity reconciliation, full DR Fantasy scoring normalization, draft-slot reconciliation, zero-league Yahoo onboarding, OAuth safety, live-sync idempotency, and transient normalization |
 
 Until Yahoo OAuth is connected, the supported workflow is fully usable in recommendation-only mode: record draft picks manually or through confirmed screenshots, and import normalized weekly JSON through the dashboard or league-scoped API. Huddle never represents these manual inputs as Yahoo-verified data.
 
@@ -37,7 +37,7 @@ Until Yahoo OAuth is connected, the supported workflow is fully usable in recomm
 - Yahoo draft-position refresh when Yahoo publishes the order, imported-position prefilling, and automatic session-slot reconciliation from the target team's first observed draft result.
 - Account-first Yahoo OAuth with single-use state, AES-256-GCM token storage, owned-league/team discovery, operator-confirmed settings import, and account-scoped disconnect controls.
 - Versioned Yahoo weekly normalization and scheduled multi-league previews: raw provider payloads remain in process memory, previews expire, and one league's failure cannot block another.
-- Full Sleeper player-map identity crosswalk for Yahoo player keys, independent of the smaller trend feed, with ambiguous identities quarantined.
+- Direct FantasyPros `player_yahoo_id` ingestion with a full Sleeper player-map fallback for Yahoo identities, independent of the smaller trend feed, with ambiguous identities quarantined.
 - `npm run preflight` for account, league, state, evidence freshness, and player-key readiness before a live draft; it refreshes and persists live evidence when the snapshot is missing, stale, or below the Yahoo crosswalk threshold.
 - Automatic 30-day-or-less screenshot evidence expiry, manual purge/delete APIs, visible unresolved-player queue, and page-level Yahoo attribution.
 - Agent-core model routing with an integrity check. Models can explain a computed card but cannot reorder it.

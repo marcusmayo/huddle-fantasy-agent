@@ -23,6 +23,13 @@ function firstNumber(...values) {
   return null;
 }
 
+function firstString(...values) {
+  for (const value of values) {
+    if (value !== undefined && value !== null && String(value).trim()) return String(value).trim();
+  }
+  return null;
+}
+
 function responsePlayers(payload) {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.players)) return payload.players;
@@ -47,7 +54,18 @@ function normalizeRankedPlayer(raw, position) {
   return {
     id: `fantasypros:${id}`,
     fantasyProsId: String(id),
-    yahooPlayerKey: raw.yahoo_player_key || raw.yahooPlayerKey || null,
+    // FantasyPros ranking responses expose Yahoo's numeric player identity as
+    // `player_yahoo_id`; some integrations instead provide a full player key.
+    // The Yahoo draft poller accepts either representation and compares the
+    // numeric suffix when Yahoo returns a season-qualified key.
+    yahooPlayerKey: firstString(
+      raw.yahoo_player_key,
+      raw.yahooPlayerKey,
+      raw.player_yahoo_id,
+      raw.yahoo_player_id,
+      raw.yahoo_id,
+      raw.yahooId
+    ),
     name,
     position: position === 'DST' ? 'DEF' : (raw.player_position_id || raw.position || position),
     team: raw.player_team_id || raw.team || 'FA',

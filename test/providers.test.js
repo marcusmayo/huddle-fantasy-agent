@@ -35,6 +35,13 @@ test('FantasyPros player identity and Yahoo cross-reference normalize', () => {
   assert.equal(player.position, 'RB');
   assert.equal(player.player_image_url, undefined);
   assert.equal(player.media, undefined);
+
+  const documentedId = normalizeRankedPlayer({
+    player_id: 43,
+    player_name: 'Documented Yahoo ID Player',
+    player_yahoo_id: '40059'
+  }, 'RB');
+  assert.equal(documentedId.yahooPlayerKey, '40059');
 });
 
 test('FantasyPros payload cache strips image fields recursively', () => {
