@@ -213,10 +213,43 @@ test('demo profiles are excluded from Yahoo draft and scheduled weekly operation
   const readiness = operations.readiness();
   assert.deepEqual(readiness.leagues, []);
   assert.equal(readiness.blockers.includes('No Yahoo league is imported'), true);
+  assert.equal(readiness.blockers.some((blocker) => blocker.includes('Synthetic demo player evidence')), false);
   const run = await operations.refreshWeeklyFleet({ trigger: 'test' });
   assert.deepEqual(run.results, []);
   assert.equal(run.complete, true);
   assert.equal(discoveries, 0);
+});
+
+test('operational readiness identifies synthetic evidence as a live-draft blocker', () => {
+  const syntheticPool = structuredClone(pool);
+  syntheticPool.source = 'synthetic-demo-data';
+  const operations = new YahooOperationsService({
+    runtime: {
+      season: 2026,
+      playerPool: syntheticPool,
+      leagues: [{
+        id: league.id, config: league, stateFile: '/tmp/live-yahoo.json',
+        yahooLeagueKey: '999.l.1', yahooTeamKey: '999.l.1.t.1', verificationStatus: 'verified'
+      }],
+      yahooDraftAutoSyncEnabled: true,
+      yahooDraftPollIntervalMs: 15_000,
+      yahooDraftMinimumCrosswalkCoverage: 0.8,
+      yahooWeeklyAutoRefreshEnabled: false,
+      yahooWeeklyRefreshIntervalMs: 86_400_000,
+      yahooWeeklyPreviewTtlMs: 3_600_000,
+      operationsMaximumEvidenceAgeHours: 36,
+      leagueErrors: []
+    },
+    yahooAccount: {
+      status: () => ({ enabled: true, clientConfigured: true, encryptedTokenStorageConfigured: true, connected: true })
+    },
+    draftServices: new Map([[league.id, { listSessions: () => [] }]]),
+    weeklyServices: new Map(),
+    now: () => new Date('2026-09-08T12:30:00.000Z')
+  });
+  const readiness = operations.readiness();
+  assert.equal(readiness.readyForLiveDraft, false);
+  assert.match(readiness.blockers.join(' '), /Synthetic demo player evidence.*FANTASYPROS_API_KEY/);
 });
 
 test('operational HTTP routes expose readiness, draft sync control, and transient weekly refresh', async () => {

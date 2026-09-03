@@ -5,10 +5,10 @@ For the dated Codespaces checklist, exact preflight commands, attended-draft pro
 ## The day before
 
 1. Connect Yahoo, import the real league, and confirm the league and target team shown in `/api/league`.
-2. Use **Refresh slot from Yahoo** after Yahoo publishes the draft order. If Yahoo still reports it as pending, verify and enter the slot from the Yahoo draft room.
+2. Use **Refresh league settings** and confirm the roster/scoring warnings are gone or understood. Use **Refresh slot from Yahoo** after Yahoo publishes the draft order. If Yahoo still reports it as pending, verify and enter the slot from the Yahoo draft room.
 3. Put the FantasyPros key in `.env`. Add `TANK01_API_KEY` only if the optional RapidAPI second opinion is enabled; never put either key in a request body or repository file. Sleeper trends require no key.
-4. Start Huddle and call `/api/data/sources/sync` once. Confirm `complete: true`, review Tank01/Sleeper match coverage, or inspect the disclosed primary-only fallback.
-5. Run `npm run preflight`. Do not use live Yahoo mode unless it returns `READY`.
+4. Run `npm run preflight`. It automatically refreshes live provider evidence when the saved snapshot is missing, stale, or below the Yahoo crosswalk threshold. Confirm `complete: true`, review Tank01/Sleeper match coverage, or inspect the disclosed primary-only fallback. Do not use live Yahoo mode unless it returns `READY`.
+5. If preflight reports `FANTASYPROS_KEY_MISSING`, add `FANTASYPROS_API_KEY` to the Codespace secrets/environment, restart the Codespace, and rerun preflight.
 6. Create a practice Yahoo-source session, confirm the sync panel reaches `Running`, use **Sync now**, and rehearse manual pick entry as the fallback.
 
 ## Draft-day startup

@@ -30,6 +30,7 @@ test('draft room includes fast search, a position filter, and a resizable board'
   assert.match(html, /id="board-taller"/);
   assert.match(html, /id="board-fit"/);
   assert.match(html, /id="refresh-yahoo-draft-slot"/);
+  assert.match(html, /id="refresh-yahoo-settings"/);
   assert.match(html, /id="league-verification-warning"/);
   assert.match(html, /id="screenshot-file"[^>]+type="file"/);
   assert.match(html, /id="screenshot-purpose"/);
@@ -54,6 +55,7 @@ test('draft room includes fast search, a position filter, and a resizable board'
   assert.match(client, /function renderBoardRows\(/);
   assert.match(client, /function setBoardHeight\(/);
   assert.match(client, /function yahooSyncEligible\(/);
+  assert.match(client, /async function refreshYahooSettings\(/);
   assert.match(client, /Yahoo refresh does not apply to demo or manual leagues/);
   assert.match(client, /evidence-reviews/);
   assert.match(client, /makePlayerSelectable\(document\.querySelector\('\.hero-card'\)/);

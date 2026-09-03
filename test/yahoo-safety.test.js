@@ -20,6 +20,7 @@ const { YahooTransientWeeklyAdapter } = require('../src/providers/yahoo-transien
 const { buildApp } = require('../src/server');
 const { DraftService } = require('../src/services/draft-service');
 const { WeeklyManagementService } = require('../src/services/weekly-management-service');
+const { scorePlayerStats } = require('../src/domain/weekly-management');
 const { MemoryStateStore } = require('../src/storage/json-state-store');
 
 function yahooDiscoveryPayload() {
@@ -95,6 +96,83 @@ function yahooSettingsPayload({ auction = false } = {}) {
       ]
     }
   };
+}
+
+function drFantasySettingsPayload() {
+  const payload = yahooSettingsPayload();
+  const settings = payload.fantasy_content.league[1].settings;
+  settings[0] = {
+    draft_type: 'live',
+    is_auction_draft: 0,
+    draft_pick_time: 75,
+    scoring_type: 'headpoint',
+    uses_fractional_points: 0,
+    uses_negative_points: 1,
+    waiver_time: 2,
+    num_playoff_teams: 4,
+    playoff_start_week: 16,
+    uses_playoff_reseeding: 1
+  };
+  const roster = [
+    ['QB', 2], ['WR', 4], ['RB', 3], ['TE', 1], ['W/T', 1], ['W/R', 1],
+    ['K', 1], ['DEF', 2], ['BN', 6], ['IR', 2]
+  ];
+  settings[1] = {
+    roster_positions: {
+      ...Object.fromEntries(roster.map(([position, count], index) => [index, { roster_position: { position, count } }])),
+      count: roster.length
+    }
+  };
+  const categories = [
+    ['4', 'Passing Yards', 'Pass Yds', 'O', 0.05],
+    ['5', 'Passing Touchdowns', 'Pass TD', 'O', 6],
+    ['9', 'Interceptions', 'INT', 'O', -2],
+    ['10', 'Rushing Yards', 'Rush Yds', 'O', 0.1],
+    ['11', 'Rushing Touchdowns', 'Rush TD', 'O', 6],
+    ['12', 'Receptions', 'Rec', 'O', 1],
+    ['13', 'Receiving Yards', 'Rec Yds', 'O', 0.1],
+    ['14', 'Receiving Touchdowns', 'Rec TD', 'O', 6],
+    ['15', 'Return Touchdowns', 'Ret TD', 'O', 6],
+    ['16', '2-Point Conversions', '2-PT', 'O', 2],
+    ['17', 'Fumbles Lost', 'Fum Lost', 'O', -2],
+    ['18', 'Offensive Fumble Return TD', 'Fum Ret TD', 'O', 6],
+    ['19', 'Field Goals 0-19 Yards', 'FG 0-19', 'K', 3],
+    ['20', 'Field Goals 20-29 Yards', 'FG 20-29', 'K', 3],
+    ['21', 'Field Goals 30-39 Yards', 'FG 30-39', 'K', 3],
+    ['22', 'Field Goals 40-49 Yards', 'FG 40-49', 'K', 4],
+    ['23', 'Field Goals 50+ Yards', 'FG 50+', 'K', 5],
+    ['24', 'Point After Attempt Made', 'PAT Made', 'K', 1],
+    ['25', 'Sack', 'Sack', 'DT', 2],
+    ['26', 'Interception', 'INT', 'DT', 2],
+    ['27', 'Fumble Recovery', 'Fum Rec', 'DT', 2],
+    ['28', 'Touchdown', 'TD', 'DT', 6],
+    ['29', 'Safety', 'Safety', 'DT', 2],
+    ['30', 'Block Kick', 'Blk Kick', 'DT', 2],
+    ['31', 'Kickoff and Punt Return Touchdowns', 'Ret TD', 'DT', 6],
+    ['32', 'Points Allowed 0 points', 'PA 0', 'DT', 10],
+    ['33', 'Points Allowed 1-6 points', 'PA 1-6', 'DT', 7],
+    ['34', 'Points Allowed 7-13 points', 'PA 7-13', 'DT', 4],
+    ['35', 'Points Allowed 14-20 points', 'PA 14-20', 'DT', 1],
+    ['36', 'Points Allowed 21-27 points', 'PA 21-27', 'DT', 0],
+    ['37', 'Points Allowed 28-34 points', 'PA 28-34', 'DT', -1],
+    ['38', 'Points Allowed 35+ points', 'PA 35+', 'DT', -4],
+    ['39', 'Extra Point Returned', 'XP Ret', 'DT', 2]
+  ];
+  settings[2] = {
+    stat_categories: {
+      stats: Object.fromEntries(categories.map(([statId, name, displayName, positionType], index) => [index, {
+        stat: { stat_id: statId, name, display_name: displayName, position_type: positionType }
+      }]))
+    }
+  };
+  settings[3] = {
+    stat_modifiers: {
+      stats: Object.fromEntries(categories.map(([statId, _name, _displayName, _positionType, value], index) => [index, {
+        stat: { stat_id: statId, value }
+      }]))
+    }
+  };
+  return payload;
 }
 
 test('Yahoo read-only client retries rate limits without exposing a mutation method', async () => {
@@ -181,6 +259,32 @@ test('Yahoo settings create a verified Huddle profile without preserving raw pay
     () => buildYahooLeagueConfig({ league, team: league.teams.find((candidate) => !candidate.ownedByCurrentUser), settingsPayload: yahooSettingsPayload() }),
     (error) => error.code === 'YAHOO_TEAM_NOT_OWNED'
   );
+});
+
+test('DR Fantasy Yahoo settings map every supported offense, kicker, and defense rule without false warnings', () => {
+  const yahooLeague = extractYahooLeagues(yahooDiscoveryPayload())[0];
+  yahooLeague.name = 'DR FANTASY FOOTBALL';
+  yahooLeague.numTeams = 6;
+  const team = yahooLeague.teams.find((candidate) => candidate.ownedByCurrentUser);
+  team.name = 'Blitzkrieg';
+  team.draftPosition = null;
+  const config = buildYahooLeagueConfig({ yahooLeague, league: yahooLeague, team, settingsPayload: drFantasySettingsPayload() });
+
+  assert.deepEqual(config.roster, { QB: 2, WR: 4, RB: 3, TE: 1, 'W/T': 1, 'W/R': 1, K: 1, DEF: 2, BN: 6, IR: 2 });
+  assert.equal(config.draft.secondsPerPick, 75);
+  assert.equal(config.scoring.fractionalPoints, false);
+  assert.equal(config.scoring.offense.passingYardsPerPoint, 20);
+  assert.equal(config.scoring.offense.passingTouchdown, 6);
+  assert.equal(config.scoring.kicking.fieldGoal50Plus, 5);
+  assert.equal(config.scoring.defense.sack, 2);
+  assert.deepEqual(config.scoring.defense.pointsAllowed, {
+    '0': 10, '1-6': 7, '7-13': 4, '14-20': 1, '21-27': 0, '28-34': -1, '35+': -4
+  });
+  assert.deepEqual(config.provenance.warnings, [
+    'Yahoo did not return a confirmed draft position; choose it when the draft order is available.'
+  ]);
+  assert.equal(scorePlayerStats({ passingYards: 319, passingTouchdowns: 2, interceptions: 1 }, config), 25);
+  assert.equal(scorePlayerStats({ sacks: 3, defensiveInterceptions: 1, defensiveTouchdowns: 1, pointsAllowed: 10 }, config), 18);
 });
 
 test('Yahoo OAuth state is expiring and single use', () => {
@@ -361,6 +465,7 @@ test('account-first Yahoo OAuth discovers and imports a league into an empty fle
       refresh: async () => ({ access_token: 'fresh-account' })
     }
   };
+  let settingsPayload = yahooSettingsPayload();
   const runtime = {
     host: '127.0.0.1', port: 0, instanceName: 'yahoo-account-test', fantasyProsSyncEnabled: false,
     complianceMaintenanceEnabled: true, yahooOAuthEnabled: true, defaultLeagueId: null, league: null,
@@ -375,7 +480,7 @@ test('account-first Yahoo OAuth discovers and imports a league into an empty fle
     logger: { info() {}, warn() {} },
     yahooClientFactory: () => ({
       userNflLeagues: async () => extractYahooLeagues(yahooDiscoveryPayload()),
-      leagueSettings: async () => yahooSettingsPayload()
+      leagueSettings: async () => settingsPayload
     })
   });
   await new Promise((resolve) => app.server.listen(0, '127.0.0.1', resolve));
@@ -415,6 +520,23 @@ test('account-first Yahoo OAuth discovers and imports a league into an empty fle
     const draftPosition = await draftPositionResponse.json();
     assert.equal(draftPosition.state, 'confirmed');
     assert.equal(draftPosition.draftSlot, 7);
+
+    settingsPayload = drFantasySettingsPayload();
+    const refreshedResponse = await fetch(`${base}/api/leagues/yahoo-999-l-12345/yahoo/settings/refresh`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}'
+    });
+    assert.equal(refreshedResponse.status, 200);
+    const refreshed = await refreshedResponse.json();
+    assert.equal(refreshed.verificationStatus, 'verified');
+    assert.deepEqual(refreshed.warnings, []);
+    assert.equal(refreshed.config.scoring.offense.passingYardsPerPoint, 20);
+    assert.equal(refreshed.config.scoring.defense.sack, 2);
+    assert.equal(refreshed.config.draft.draftSlot, 7);
+    assert.equal(app.draftServices.get('yahoo-999-l-12345').league.scoring.defense.sack, 2);
+    const refreshedDisk = JSON.parse(fs.readFileSync(path.join(tempDir, 'leagues', 'yahoo-999-l-12345', 'config.json'), 'utf8'));
+    assert.equal(refreshedDisk.provenance.rawPayloadPersisted, false);
+    assert.equal(refreshedDisk.scoring.defense.sack, 2);
+    assert.doesNotMatch(JSON.stringify(refreshedDisk), /RAW_YAHOO_SETTINGS_MUST_NOT_PERSIST/);
 
     const status = await (await fetch(`${base}/api/yahoo/oauth/status`)).json();
     assert.equal(status.account.connected, true);

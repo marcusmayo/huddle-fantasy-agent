@@ -131,6 +131,28 @@ class YahooAccountService {
     return { ...updated, state: 'confirmed', message: `Yahoo confirmed draft position ${draftSlot}.` };
   }
 
+  async refreshLeagueSettings({ leagueId } = {}) {
+    const entry = this.runtime.leagues.find((candidate) => candidate.id === String(leagueId));
+    if (!entry) throw accountError('LEAGUE_NOT_FOUND', `League not found: ${leagueId}`);
+    if (!entry.managed
+      || entry.config.platform !== 'yahoo'
+      || !entry.yahooLeagueKey
+      || !entry.yahooTeamKey
+      || !String(entry.verificationStatus || '').startsWith('verified')) {
+      throw accountError('YAHOO_SOURCE_NOT_AVAILABLE', 'This is a demo or manual league; Yahoo settings refresh does not apply');
+    }
+    const discovery = await this.discoverLeagues();
+    const league = discovery.leagues.find((candidate) => candidate.leagueKey === entry.yahooLeagueKey);
+    if (!league) throw accountError('YAHOO_LEAGUE_NOT_FOUND', 'Yahoo no longer returns this imported league for the connected account');
+    const team = league.teams.find((candidate) => candidate.teamKey === entry.yahooTeamKey);
+    if (!team || !team.ownedByCurrentUser) {
+      throw accountError('YAHOO_TEAM_NOT_OWNED', 'The connected Yahoo account does not own the imported target team');
+    }
+    const settingsPayload = await this.readClient().leagueSettings(league.leagueKey);
+    const config = buildYahooLeagueConfig({ league, team, settingsPayload });
+    return this.leagueOnboarding.updateVerifiedConfig(entry.id, config);
+  }
+
   disconnect() {
     if (!this.yahooOAuth.tokenStore.configured) return false;
     this.client = null;

@@ -230,6 +230,66 @@ class LeagueOnboardingService {
     return { leagueId: id, draftSlot: resolved, source, updatedAt: entry.config.provenance.draftSlotUpdatedAt };
   }
 
+  updateVerifiedConfig(leagueId, config) {
+    const id = String(leagueId || '');
+    const entry = this.runtime.leagues.find((candidate) => candidate.id === id);
+    if (!entry) throw onboardingError('LEAGUE_NOT_FOUND', `League not found: ${id}`);
+    if (!entry.managed || entry.config.platform !== 'yahoo') {
+      throw onboardingError('LEAGUE_UPDATE_NOT_ALLOWED', 'Yahoo settings refresh is available only for imported Yahoo leagues');
+    }
+    const refreshed = structuredClone(config);
+    if (String(refreshed.id) !== id) {
+      throw onboardingError('LEAGUE_ID_MISMATCH', `Refreshed league id ${refreshed.id} does not match ${id}`);
+    }
+    refreshed.provenance ||= {};
+    refreshed.provenance.warnings ||= [];
+    if (!refreshed.draft?.draftSlot && entry.config.draft?.draftSlot) {
+      refreshed.draft.draftSlot = entry.config.draft.draftSlot;
+      refreshed.provenance.draftSlotSource = entry.config.provenance?.draftSlotSource || 'preserved-import';
+      refreshed.provenance.draftSlotUpdatedAt = entry.config.provenance?.draftSlotUpdatedAt || null;
+      refreshed.provenance.warnings = refreshed.provenance.warnings
+        .filter((warning) => !String(warning).includes('confirmed draft position'));
+    }
+    refreshed.provenance.verificationStatus = refreshed.provenance.warnings.length ? 'verified-with-warnings' : 'verified';
+    refreshed.provenance.settingsRefreshedAt = new Date().toISOString();
+    const verified = validateLeagueConfig(refreshed);
+    const registryPath = path.resolve(this.runtime.leagueManagedRegistryPath);
+    const registry = fs.existsSync(registryPath)
+      ? JSON.parse(fs.readFileSync(registryPath, 'utf8'))
+      : null;
+    if (!registry || registry.schemaVersion !== 1 || !Array.isArray(registry.leagues)) {
+      throw onboardingError('INVALID_LEAGUE_REGISTRY', 'Managed league registry is invalid');
+    }
+    const registered = registry.leagues.find((candidate) => String(candidate.id) === id);
+    if (!registered) throw onboardingError('LEAGUE_UPDATE_NOT_ALLOWED', 'Managed league registry does not contain this league');
+    registered.verificationStatus = verified.provenance.verificationStatus;
+
+    const priorConfig = structuredClone(entry.config);
+    atomicWriteJson(entry.configPath, verified);
+    try {
+      atomicWriteJson(registryPath, registry);
+    } catch (error) {
+      atomicWriteJson(entry.configPath, priorConfig);
+      throw error;
+    }
+
+    entry.config = verified;
+    entry.verificationStatus = verified.provenance.verificationStatus;
+    const draftService = this.draftServices.get(id);
+    const weeklyService = this.weeklyServices.get(id);
+    if (draftService) draftService.league = verified;
+    if (weeklyService) weeklyService.league = verified;
+    if (this.runtime.defaultLeagueId === id) this.runtime.league = verified;
+    return {
+      leagueId: id,
+      config: structuredClone(verified),
+      verificationStatus: entry.verificationStatus,
+      warnings: structuredClone(verified.provenance.warnings),
+      rawPayloadPersisted: false,
+      updatedAt: verified.provenance.settingsRefreshedAt
+    };
+  }
+
   persist({ config, yahooLeagueKey, yahooTeamKey, credentialRef, verificationStatus }) {
     if (this.runtime.leagues.some((entry) => entry.id === config.id)) {
       throw onboardingError('LEAGUE_ALREADY_EXISTS', `A league with id ${config.id} already exists`);

@@ -576,6 +576,8 @@ async function selectLeague(leagueId) {
     : yahooEligible ? 'Yahoo has not published a draft position yet; refresh later or enter the confirmed slot.' : 'Enter the demo/manual snake-draft position.';
   $('#refresh-yahoo-draft-slot').classList.toggle('hidden', !yahooEligible);
   $('#refresh-yahoo-draft-slot').disabled = !state.yahooOAuth?.connected;
+  $('#refresh-yahoo-settings').classList.toggle('hidden', !yahooEligible);
+  $('#refresh-yahoo-settings').disabled = !state.yahooOAuth?.connected;
   $('#weekly-yahoo-refresh').disabled = !yahooEligible || !state.yahooOAuth?.connected;
   $('#weekly-yahoo-refresh').title = yahooEligible
     ? state.yahooOAuth?.connected ? 'Refresh this league from Yahoo' : 'Connect Yahoo before refreshing'
@@ -598,6 +600,26 @@ async function selectLeague(leagueId) {
   }
   if (sessionId) await resumeSession(sessionId);
   else if (yahooEligible && state.yahooOAuth?.connected) await refreshYahooDraftPosition({ silent: true });
+}
+
+async function refreshYahooSettings() {
+  if (!yahooSyncEligible()) return null;
+  const button = $('#refresh-yahoo-settings');
+  button.disabled = true;
+  try {
+    const result = await api(scoped('/yahoo/settings/refresh'), { method: 'POST', body: '{}' });
+    showToast(result.warnings.length
+      ? `Yahoo settings refreshed with ${result.warnings.length} warning${result.warnings.length === 1 ? '' : 's'}.`
+      : 'Yahoo league settings refreshed and fully recognized.');
+    await refreshFleetSummary();
+    await selectLeague(state.leagueId);
+    return result;
+  } catch (error) {
+    showToast(`Yahoo settings refresh failed: ${error.message}`);
+    return null;
+  } finally {
+    button.disabled = !state.yahooOAuth?.connected;
+  }
 }
 
 async function refreshYahooDraftPosition({ silent = false } = {}) {
@@ -1396,6 +1418,7 @@ async function init() {
   });
   $('#add-team-count').addEventListener('input', (event) => { $('#add-draft-slot').max = event.target.value; });
   $('#session-form').addEventListener('submit', createSession);
+  $('#refresh-yahoo-settings').addEventListener('click', refreshYahooSettings);
   $('#refresh-yahoo-draft-slot').addEventListener('click', () => refreshYahooDraftPosition());
   $('#yahoo-draft-sync-once').addEventListener('click', () => controlYahooDraftSync('once'));
   $('#yahoo-draft-sync-start').addEventListener('click', () => controlYahooDraftSync('start'));
