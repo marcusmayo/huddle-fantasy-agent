@@ -61,6 +61,8 @@
         </label>
         <button id="refresh-yahoo-settings" type="button" class="ghost compact hidden">Refresh league settings</button>
         <button id="refresh-yahoo-draft-slot" type="button" class="ghost compact hidden">Refresh slot from Yahoo</button>
+        <button id="rehearse-yahoo" type="button" class="ghost compact hidden">Run Yahoo read rehearsal</button>
+        <small id="yahoo-rehearsal-status" class="field-help hidden"></small>
         <label>Sync source
           <select id="source-mode">
             <option value="manual">Manual now</option>
@@ -265,6 +267,7 @@
           </div>
           <ul id="waiver-reasons"></ul>
           <p id="waiver-priority" class="explanation"></p>
+          <div id="waiver-plan" class="weekly-list"></div>
         </section>
 
         <div class="weekly-grid">

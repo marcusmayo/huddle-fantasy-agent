@@ -82,7 +82,7 @@ function defaultPositionMaximums(league) {
   }));
 }
 
-function assessRosterConstraint(player, mine, league) {
+function assessRosterConstraint(player, mine, league, { availableByPosition = {}, opponentPicksBeforeNext = 0 } = {}) {
   const rosterSize = draftedRosterSize(league.roster);
   const selected = Object.values(mine).reduce((total, count) => total + count, 0);
   const remainingPicks = rosterSize - selected - 1;
@@ -96,6 +96,16 @@ function assessRosterConstraint(player, mine, league) {
   const missingStarterSlots = starterSlots(league.roster).length - maximumStarterAssignments(counts, league.roster);
   if (missingStarterSlots > Math.max(0, remainingPicks)) {
     reasons.push(`This pick would leave ${missingStarterSlots} required starter slots for only ${Math.max(0, remainingPicks)} remaining picks.`);
+  }
+  if (remainingPicks > 0 && opponentPicksBeforeNext > 0) {
+    for (const position of ['QB', 'RB', 'WR', 'TE', 'K', 'DEF']) {
+      const dedicatedNeed = Math.max(0, Number(league.roster[position] || 0) - Number(counts[position] || 0));
+      if (!dedicatedNeed || player.position === position) continue;
+      const remainingAtPosition = Math.max(0, Number(availableByPosition[position] || 0) - (player.position === position ? 1 : 0));
+      if (remainingAtPosition < opponentPicksBeforeNext + dedicatedNeed) {
+        reasons.push(`${position} supply may not survive ${opponentPicksBeforeNext} opponent picks before the next turn; reserve the required slot now.`);
+      }
+    }
   }
   return {
     feasible: reasons.length === 0,
@@ -200,12 +210,16 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
     draftSlot,
     currentOwner !== draftSlot
   );
+  const availableByPosition = Object.fromEntries(Object.entries(groups).map(([position, group]) => [position, group.length]));
+  const opponentPicksBeforeNext = currentOwner === draftSlot && nextPick
+    ? Math.max(0, nextPick - currentOverall - 1)
+    : 0;
   const raw = available.map((player) => {
     const positionGroup = groups[player.position] || [];
     const positionIndex = positionGroup.findIndex((candidate) => candidate.id === player.id);
     const nextAtPosition = positionGroup[positionIndex + 1];
     const waitProbability = availabilityAtPick(player.adp, nextPick);
-    const rosterConstraint = assessRosterConstraint(player, mine, league);
+    const rosterConstraint = assessRosterConstraint(player, mine, league, { availableByPosition, opponentPicksBeforeNext });
     return {
       player,
       waitProbability,

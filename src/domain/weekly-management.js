@@ -322,7 +322,30 @@ function waiverRecommendation({ roster, availablePlayers, league, waiver = {}, h
   }
   evaluated.sort((a, b) => b.rankScore - a.rankScore || b.confidence - a.confidence);
   const best = evaluated[0];
-  if (!best || best.expectedPointsGained < finite(holdThreshold, 2)) {
+  const threshold = finite(holdThreshold, 2);
+  const move = (item, priority) => {
+    const percent = item.expectedPointsGained >= 8 ? 20 : item.expectedPointsGained >= 5 ? 12 : 6;
+    const budgetRemaining = finite(waiver.budgetRemaining);
+    return {
+      priority,
+      action: 'ADD_DROP',
+      add: item.candidate,
+      drop: item.drop,
+      expectedPointsGained: item.expectedPointsGained,
+      confidence: item.confidence,
+      confidenceLabel: item.confidence >= 0.8 ? 'high' : item.confidence >= 0.6 ? 'medium' : 'low',
+      faab: {
+        recommended: budgetRemaining ? Math.max(1, Math.round(budgetRemaining * percent / 100)) : null,
+        percent,
+        budgetRemaining
+      },
+      priorityGuidance: item.expectedPointsGained >= 5
+        ? 'Use a strong waiver priority if roster need is immediate.'
+        : 'Use a claim only if losing normal rolling priority is acceptable.'
+    };
+  };
+  const claimPlan = evaluated.filter((item) => item.expectedPointsGained >= threshold).slice(0, 5).map((item, index) => move(item, index + 1));
+  if (!best || best.expectedPointsGained < threshold) {
     return {
       action: 'HOLD',
       expectedPointsGained: best?.expectedPointsGained || 0,
@@ -330,29 +353,24 @@ function waiverRecommendation({ roster, availablePlayers, league, waiver = {}, h
       confidenceLabel: best?.confidence >= 0.8 ? 'high' : best?.confidence >= 0.6 ? 'medium' : 'low',
       faab: { recommended: 0, percent: 0, budgetRemaining: finite(waiver.budgetRemaining) },
       priorityGuidance: 'Preserve waiver priority this week.',
+      claimPlan: [],
+      consideredAlternatives: evaluated.slice(0, 3).map((item, index) => ({
+        priority: index + 1,
+        add: item.candidate,
+        drop: item.drop,
+        expectedPointsGained: item.expectedPointsGained,
+        belowThresholdBy: round(threshold - item.expectedPointsGained)
+      })),
       reasons: [best
-        ? `The best reviewed move gains only ${best.expectedPointsGained} projected points, below the ${finite(holdThreshold, 2)}-point claim threshold.`
+        ? `The best reviewed move gains only ${best.expectedPointsGained} projected points, below the ${threshold}-point claim threshold.`
         : 'No available player has enough league-scored projection evidence and a valid drop candidate.']
     };
   }
-  const percent = best.expectedPointsGained >= 8 ? 20 : best.expectedPointsGained >= 5 ? 12 : 6;
-  const budgetRemaining = finite(waiver.budgetRemaining);
-  const confidence = best.confidence;
+  const primary = move(best, 1);
   return {
-    action: 'ADD_DROP',
-    add: best.candidate,
-    drop: best.drop,
-    expectedPointsGained: best.expectedPointsGained,
-    confidence,
-    confidenceLabel: confidence >= 0.8 ? 'high' : confidence >= 0.6 ? 'medium' : 'low',
-    faab: {
-      recommended: budgetRemaining ? Math.max(1, Math.round(budgetRemaining * percent / 100)) : null,
-      percent,
-      budgetRemaining
-    },
-    priorityGuidance: best.expectedPointsGained >= 5
-      ? 'Use a strong waiver priority if roster need is immediate.'
-      : 'Use a claim only if losing normal rolling priority is acceptable.',
+    ...primary,
+    claimPlan,
+    alternatives: claimPlan.slice(1),
     reasons: [
       `${best.candidate.name} projects ${best.expectedPointsGained} points above ${best.drop.name} in this league's scoring.`,
       best.candidate.sleeperTrend?.direction === 'rising'

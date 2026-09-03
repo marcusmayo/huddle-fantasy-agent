@@ -365,6 +365,8 @@ class DraftService {
         source: this.playerPool.source,
         season: this.playerPool.season,
         complete: this.playerPool.complete !== false,
+        quality: this.playerPool.complete === false ? 'partial-estimated' : 'complete',
+        projectionCoverage: structuredClone(this.playerPool.projectionCoverage || null),
         fetchedAt: this.playerPool.fetchedAt || null,
         league: {
           id: this.league.id,
@@ -401,7 +403,7 @@ class DraftService {
           providerPayloadsPersisted: false
         },
         warning: this.playerPool.complete === false
-          ? 'Player evidence is truncated or incomplete; confirm the preferred player against Yahoo before drafting.'
+          ? 'Draft synchronization is operational. Some provider projections are missing, so disclosed rank-based estimates may be used; confirm estimated recommendations in Yahoo.'
           : null
       },
       execution: 'recommendation-only'

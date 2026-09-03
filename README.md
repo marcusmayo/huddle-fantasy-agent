@@ -28,7 +28,7 @@ Until Yahoo OAuth is connected, the supported workflow is fully usable in recomm
 - Purpose-aware screenshot analysis through OpenRouter for completed picks, available players, team rosters, and waiver/free-agent pages, with a browser preview and mandatory operator confirmation before any state change.
 - Balanced, safe, and upside recommendations after every reconciled pick.
 - Value above replacement, roster need, positional tier drop, risk, next-turn availability, and early K/DEF discipline.
-- Completion-safe draft constraints: preferred alternatives cannot exceed position maximums or leave too few remaining picks to fill every required starter slot.
+- Completion-safe draft constraints: preferred alternatives cannot exceed position maximums, leave too few selections to fill required starters, or defer a required position whose supply may not survive the opponent picks before the next turn.
 - Sleeper-value flags based on Expert Consensus Rank versus ADP and ceiling, plus separately attributed Sleeper add/drop trend badges.
 - Cached FantasyPros rankings/projection adapter with explicit truncated-response warnings and an optional Tank01 second-opinion adapter.
 - Transparent source reconciliation: FantasyPros 67.5% and Tank01 32.5% within the normalized source-consensus factor; Sleeper trends only break close ties.
@@ -38,7 +38,7 @@ Until Yahoo OAuth is connected, the supported workflow is fully usable in recomm
 - Account-first Yahoo OAuth with single-use state, AES-256-GCM token storage, owned-league/team discovery, operator-confirmed settings import, and account-scoped disconnect controls.
 - Versioned Yahoo weekly normalization and scheduled multi-league previews: raw provider payloads remain in process memory, previews expire, and one league's failure cannot block another.
 - Direct FantasyPros `player_yahoo_id` ingestion with a full Sleeper player-map fallback for Yahoo identities, independent of the smaller trend feed, with ambiguous identities quarantined.
-- `npm run preflight` for account, league, state, evidence freshness, player-key readiness, and enough pool depth to cover the largest imported league's complete draft; it refreshes and persists live evidence when any evidence gate fails.
+- `npm run preflight` for account, league, state, evidence freshness, player-key readiness, total and position-specific pool depth, plus a three-endpoint read-only Yahoo rehearsal for every verified league; it refreshes and persists live evidence when an evidence gate fails.
 - Automatic 30-day-or-less screenshot evidence expiry, manual purge/delete APIs, visible unresolved-player queue, and page-level Yahoo attribution.
 - Agent-core model routing with an integrity check. Models can explain a computed card but cannot reorder it.
 - Aegis-compatible health, color, manifest, status, and allowlisted read-only WebSocket command contracts.
@@ -48,7 +48,7 @@ Until Yahoo OAuth is connected, the supported workflow is fully usable in recomm
 - Local web dashboard and JSON API.
 - League-isolated weekly snapshots with every team's score, matchup result, standings movement, points for/against, target roster actuals, transaction history, lineup risks, and weekly winner.
 - Actual-versus-optimal lineup analysis with flex-aware starter eligibility and points-left-on-bench logging.
-- League-authoritative waiver recommendations with expected gain, FAAB/priority guidance, confidence, and an explicit `HOLD` when no claim clears the configured threshold.
+- League-authoritative waiver recommendations with an ordered five-claim fallback plan, expected gain, FAAB/priority guidance, confidence, and an explicit `HOLD` with the closest reviewed move when no claim clears the configured threshold.
 - Failure-isolated fleet weekly runs and state quarantine: one league's invalid import or damaged JSON state does not interrupt healthy leagues.
 
 ## Draft-room preview
@@ -61,7 +61,7 @@ Yahoo-imported leagues prefill the draft position when Yahoo returns it and offe
 
 Choose **Weekly management** in the dashboard, select a league, then click **Refresh from Yahoo** for a transient live preview or upload a normalized weekly snapshot for an explicitly approved persistence workflow. Huddle calculates the weekly winner and standings movement, compares the actual lineup with the best eligible lineup, flags injuries/byes/zero-projection starters, logs transactions, and produces either `ADD_DROP` or a first-class `HOLD` recommendation.
 
-Shared provider evidence is cached once, but each league recalculates independently using its own scoring, roster, visible free-agent pool, waiver rules, budget, and priority. A rerun refreshes only explicit current-week or remaining-season projection fields from that shared pool; it does not mistake preseason totals for weekly projections. The fleet endpoint uses failure isolation so bad data in one league does not block successful reviews in the others. There is no hard-coded league-count limit. The repository regression suite completes a full draft and 18 weekly reviews for three differently configured leagues; commercial multi-user concurrency still requires a production database, tenancy controls, and deployment load testing.
+Shared provider evidence is cached once, but each league recalculates independently using its own scoring, roster, paginated visible free-agent pool, waiver rules, budget, and priority. Yahoo free agents are read page by page up to a configurable 500-player cap. A rerun refreshes only explicit current-week or remaining-season projection fields from that shared pool; it does not mistake preseason totals for weekly projections. Explicitly imported history compacts candidate rows to a configurable top 25 while retaining the primary and fallback claim plan. The fleet endpoint uses failure isolation so bad data in one league does not block successful reviews in the others. There is no hard-coded league-count limit. The repository regression suite completes a full draft and 18 weekly reviews for every league size from three through ten teams; commercial multi-user concurrency still requires a production database, tenancy controls, and deployment load testing.
 
 The Yahoo client exposes read-only discovery, settings, scoreboard, standings, transactions, roster, draft-result, player-identity, and available-player methods. OAuth callback, encrypted token storage/refresh, owned-league discovery, selected-league settings import, automatic draft polling, and expiring weekly previews are implemented. A draft poll resolves unfamiliar player keys through Yahoo's read-only player endpoint; if that lookup is temporarily unavailable, Huddle records the key as unresolved, marks sync degraded, and continues with later picks instead of stalling the draft. Weekly previews run at startup, after account connection/import, and every 24 hours while the service stays awake. The first production payload for every league must still be compared with Yahoo; a failed adapter validation is fail-closed and can use the manual JSON fallback. See the [September 8 operations plan](docs/september-8-operations.md), [weekly management runbook](docs/weekly-management-runbook.md), and [example weekly snapshot](config/fixtures/weekly-snapshot.example.json).
 
@@ -162,6 +162,7 @@ OpenRouter documents base64 image inputs through the OpenAI-compatible [`/api/v1
 | `DELETE` | `/api/yahoo/connection` | Remove the account-scoped encrypted Yahoo token |
 | `POST` | `/api/leagues/:leagueId/yahoo/settings/refresh` | Re-read and atomically replace one imported Yahoo league's normalized settings |
 | `POST` | `/api/leagues/:leagueId/yahoo/draft-position/refresh` | Re-read the target team's confirmed Yahoo draft position |
+| `POST` | `/api/leagues/:leagueId/yahoo/rehearsal` | Exercise league-settings, draft-results, and one player lookup through the GET-only Yahoo client without retaining raw data |
 | `GET` | `/api/leagues/:leagueId/unresolved-players` | Review unmatched/manual player identities |
 | `DELETE` | `/api/leagues/:leagueId/draft/sessions/:id/evidence-reviews` | Delete one session's screenshot review metadata |
 | `POST` | `/api/compliance/purge-expired` | Purge expired screenshot review metadata across leagues |

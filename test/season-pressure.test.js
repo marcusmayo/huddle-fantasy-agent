@@ -106,47 +106,70 @@ function weeklyRoster(league, week) {
 }
 
 function weeklySnapshot(league, week) {
-  const teams = Array.from({ length: league.teamCount }, (_, index) => ({
-    teamId: `team-${index + 1}`,
-    name: index === 0 ? league.targetTeam : `${league.id} Team ${index + 1}`,
-    isTarget: index === 0,
-    score: 85 + ((week * 7 + index * 11) % 65),
-    opponentId: `team-${index % 2 === 0 ? index + 2 : index}`,
-    standingRank: index + 1,
-    previousStandingRank: index === 0 ? Math.min(league.teamCount, 2) : index + 1,
-    pointsFor: 100 * week + index,
-    pointsAgainst: 95 * week + index
-  }));
+  const teams = Array.from({ length: league.teamCount }, (_, index) => {
+    const pairedIndex = index % 2 === 0 ? index + 1 : index - 1;
+    const bye = pairedIndex >= league.teamCount;
+    return {
+      teamId: `team-${index + 1}`,
+      name: index === 0 ? league.targetTeam : `${league.id} Team ${index + 1}`,
+      isTarget: index === 0,
+      score: 85 + ((week * 7 + index * 11) % 65),
+      opponentId: bye ? null : `team-${pairedIndex + 1}`,
+      bye,
+      standingRank: index + 1,
+      previousStandingRank: index === 0 ? Math.min(league.teamCount, 2) : index + 1,
+      pointsFor: 100 * week + index,
+      pointsAgainst: 95 * week + index
+    };
+  });
+  const strongWaiverWeek = week % 2 === 1;
   return {
     season: 2026,
     week,
     source: 'season-pressure-fixture',
     teams,
     roster: weeklyRoster(league, week),
-    availablePlayers: [
-      { playerId: `${league.id}-${week}-waiver`, name: `${league.id} Waiver`, position: 'WR', available: true, remainingProjectedPoints: 90 + week }
-    ],
+    availablePlayers: Array.from({ length: 250 }, (_, index) => ({
+      playerId: `${league.id}-${week}-waiver-${index + 1}`,
+      name: `${league.id} Waiver ${index + 1}`,
+      position: index % 2 ? 'RB' : 'WR',
+      available: true,
+      remainingProjectedPoints: (strongWaiverWeek ? 180 : 50) - index * 0.05
+    })),
     waiver: { budgetRemaining: 100 - week, priority: 3 },
     transactions: []
   };
 }
 
-test('three isolated leagues survive a complete draft and 18 weekly management reviews', () => {
-  const leagues = [fullPpr, halfPpr, standard];
+test('three through ten-team leagues survive complete drafts and 18 weekly management reviews', () => {
+  const templates = [fullPpr, halfPpr, standard];
+  const leagues = Array.from({ length: 8 }, (_, index) => {
+    const teamCount = index + 3;
+    const configured = structuredClone(templates[index % templates.length]);
+    configured.id = `pressure-${teamCount}`;
+    configured.name = `Pressure ${teamCount}`;
+    configured.targetTeam = `Target ${teamCount}`;
+    configured.teamCount = teamCount;
+    configured.draft.draftSlot = Math.min(3, teamCount);
+    return configured;
+  });
   const players = playerPool();
   const draftResults = leagues.map((league) => simulateDraft(league, players));
   assert.deepEqual(draftResults.map((result) => result.targetRoster), leagues.map((league) => draftedRosterSize(league.roster)));
 
   let reviews = 0;
+  const actions = { ADD_DROP: 0, HOLD: 0 };
   for (const league of leagues) {
     for (let week = 1; week <= 18; week += 1) {
       const review = buildWeeklyReview({ snapshot: weeklySnapshot(league, week), league, playerPool: { source: 'pressure', players: [] } });
       assert.equal(review.leagueId, league.id);
       assert.equal(review.week, week);
       assert.ok(['ADD_DROP', 'HOLD'].includes(review.waiver.recommendation.action));
+      actions[review.waiver.recommendation.action] += 1;
       assert.ok(review.lineup.optimalPoints >= review.lineup.actualPoints);
       reviews += 1;
     }
   }
-  assert.equal(reviews, 54);
+  assert.equal(reviews, 144);
+  assert.deepEqual(actions, { ADD_DROP: 72, HOLD: 72 });
 });

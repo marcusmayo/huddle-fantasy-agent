@@ -9,11 +9,15 @@ function printHuman(report) {
   console.log(`Yahoo account: ${report.account.connected ? 'connected' : 'not connected'}`);
   console.log(`Player crosswalk: ${report.playerEvidence.crosswalk.mapped}/${report.playerEvidence.crosswalk.players} (${(report.playerEvidence.crosswalk.coverage * 100).toFixed(1)}%)`);
   console.log(`Draft pool depth: ${report.playerEvidence.crosswalk.players}/${report.playerEvidence.crosswalk.requiredPlayers || 0}${report.playerEvidence.crosswalk.playerShortfall ? ` (short by ${report.playerEvidence.crosswalk.playerShortfall})` : ' (complete)'}`);
+  console.log(`Position depth: ${(report.playerEvidence.crosswalk.positions || []).map((item) => `${item.position} ${item.loaded}/${item.required}${item.shortfall ? ` (-${item.shortfall})` : ''}`).join(' · ') || 'unavailable'}`);
   console.log(`Evidence: ${report.playerEvidence.source || 'not loaded'} · ${report.playerEvidence.ageHours == null ? 'age unknown' : `${report.playerEvidence.ageHours}h old`}`);
   console.log(`Draft polling: ${report.yahooAutomation.draftAutoSyncEnabled ? 'enabled' : 'disabled'} · ${report.yahooAutomation.draftPollSeconds}s`);
   console.log(`Weekly preview: ${report.yahooAutomation.weeklyAutoRefreshEnabled ? 'scheduled' : 'manual'} · transient only`);
   if (report.preflightEvidenceRefresh) {
     console.log(`Preflight evidence refresh: ${report.preflightEvidenceRefresh.status}`);
+  }
+  for (const rehearsal of report.yahooRehearsals || []) {
+    console.log(`Yahoo rehearsal ${rehearsal.leagueId}: ${rehearsal.ready ? 'passed' : 'failed'}${rehearsal.checks ? ` · ${rehearsal.checks.map((check) => `${check.name} ${check.ok ? 'ok' : 'failed'}`).join(' · ')}` : ''}`);
   }
   for (const league of report.leagues) {
     console.log(`League ${league.name}: ${league.ready ? 'ready' : `blocked — ${league.problems.join('; ')}`}`);
@@ -35,16 +39,32 @@ function needsLiveEvidence(report, maximumAgeHours) {
     || report.playerEvidence.ageHours == null
     || report.playerEvidence.ageHours > maximumAgeHours
     || report.playerEvidence.crosswalk.playerShortfall > 0
+    || (report.playerEvidence.crosswalk.positionShortfalls || []).length > 0
     || report.playerEvidence.crosswalk.coverage < report.playerEvidence.crosswalk.requiredCoverage;
 }
 
-function finalize(report, refresh) {
-  const finalReport = { ...report, preflightEvidenceRefresh: refresh };
+function finalize(report, refresh, yahooRehearsals = []) {
+  const finalReport = { ...report, preflightEvidenceRefresh: refresh, yahooRehearsals };
   if (refresh?.status === 'failed' || refresh?.status === 'blocked') {
     finalReport.blockers = [`${refresh.error.code}: ${refresh.error.message}`, ...finalReport.blockers];
     finalReport.readyForLiveDraft = false;
   }
+  for (const rehearsal of yahooRehearsals.filter((item) => !item.ready)) {
+    finalReport.blockers.push(`Yahoo rehearsal failed for ${rehearsal.leagueId}: ${rehearsal.error?.message || rehearsal.checks?.filter((check) => !check.ok).map((check) => check.error?.message).filter(Boolean).join('; ') || 'read-only endpoint check failed'}`);
+    finalReport.readyForLiveDraft = false;
+  }
   return finalReport;
+}
+
+async function rehearseLeagues(report, operation, enabled) {
+  if (!enabled || !report.account.connected) return [];
+  return Promise.all(report.leagues.filter((league) => league.ready).map(async (league) => {
+    try {
+      return await operation(league.leagueId);
+    } catch (error) {
+      return { leagueId: league.leagueId, ready: false, error: { code: error.code || 'YAHOO_REHEARSAL_FAILED', message: error.message } };
+    }
+  }));
 }
 
 async function requestJson(url, options = {}) {
@@ -75,7 +95,12 @@ async function liveServerPreflight(runtime) {
       refresh = { status: 'failed', target: 'running-server', error: { code: error.code || 'REFRESH_FAILED', message: error.message } };
     }
   }
-  return finalize(report, refresh);
+  const rehearsals = await rehearseLeagues(
+    report,
+    (leagueId) => requestJson(`${base}/api/leagues/${encodeURIComponent(leagueId)}/yahoo/rehearsal`, { method: 'POST' }),
+    runtime.preflightYahooRehearsalEnabled
+  );
+  return finalize(report, refresh, rehearsals);
 }
 
 async function offlinePreflight(runtime) {
@@ -99,7 +124,14 @@ async function offlinePreflight(runtime) {
       error: { code: 'FANTASYPROS_KEY_MISSING', message: 'FANTASYPROS_API_KEY is required to replace synthetic demo evidence and build Yahoo player identities' }
     };
   }
-  return finalize(app.yahooOperations.readiness(), refresh);
+  const report = app.yahooOperations.readiness();
+  const rehearsals = await rehearseLeagues(
+    report,
+    (leagueId) => app.yahooOperations.rehearse({ leagueId }),
+    app.runtime.preflightYahooRehearsalEnabled
+  );
+  app.yahooOperations.stop();
+  return finalize(report, refresh, rehearsals);
 }
 
 async function main() {

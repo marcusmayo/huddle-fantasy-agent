@@ -69,8 +69,9 @@ POST that payload to `/api/fleet/weekly/run`. The response reports `succeeded`, 
 - Standing movement is previous rank minus current rank.
 - Actual lineup points include non-bench/non-IR slots. The position-count optimizer fills the configured starting slots with the highest actual score while respecting QB, RB, WR, TE, K, DEF, flex, and superflex eligibility; its state space grows by position counts rather than every subset of rostered players.
 - Risks include current-week byes, non-healthy injury states, and zero-projection starters.
-- Waiver candidates must be explicitly available in this league. The engine compares league-scored remaining projection against a legal, unlocked bench drop.
-- A candidate must clear the snapshot's `holdThreshold`, defaulting to two projected points. Otherwise the result is first-class `HOLD`, with zero FAAB and preserve-priority guidance.
+- Waiver candidates must be explicitly available in this league. Live Yahoo refreshes paginate the available-player endpoint up to the configured cap (500 by default), and the engine compares league-scored remaining projection against a legal, unlocked bench drop.
+- A candidate must clear the snapshot's `holdThreshold`, defaulting to two projected points. Qualifying moves are returned as an ordered five-claim fallback plan. Otherwise the result is first-class `HOLD`, with zero FAAB, preserve-priority guidance, and the closest below-threshold move disclosed.
+- Explicit normalized imports compact saved free-agent history to the configured top-candidate limit (25 by default). The original candidate count and compaction metadata remain visible; transient Yahoo previews are never persisted.
 - Sleeper rising/falling activity is a small tie-break only. Yahoo availability, scoring, roster, and waiver rules remain authoritative filters.
 
 Every import is persisted under the league's own state file with a stable event ID, revision count, run log, source evidence, and recommendation. Replaying the same event ID is idempotent.

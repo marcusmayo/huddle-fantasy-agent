@@ -116,6 +116,43 @@ test('weekly waiver engine explicitly holds when no claim clears the league thre
   assert.equal(review.waiver.recommendation.expectedPointsGained, 1);
   assert.equal(review.waiver.recommendation.faab.recommended, 0);
   assert.match(review.waiver.recommendation.priorityGuidance, /Preserve/);
+  assert.equal(review.waiver.recommendation.claimPlan.length, 0);
+  assert.equal(review.waiver.recommendation.consideredAlternatives.length, 1);
+});
+
+test('weekly waiver guidance ranks fallback claims and compacts persisted candidate history', () => {
+  const currentLeague = league();
+  const largeSnapshot = snapshot();
+  largeSnapshot.availablePlayers = Array.from({ length: 40 }, (_, index) => ({
+    playerId: `waiver-${index + 1}`,
+    name: `Waiver Player ${index + 1}`,
+    position: index % 2 ? 'RB' : 'WR',
+    available: true,
+    remainingProjectedPoints: 160 - index
+  }));
+  const store = new MemoryStateStore();
+  const draftService = new DraftService({ league: currentLeague, playerPool, store });
+  const weeklyService = new WeeklyManagementService({
+    league: currentLeague,
+    playerPool,
+    draftService,
+    persistedCandidateLimit: 10
+  });
+  const imported = weeklyService.importSnapshot(largeSnapshot, { eventId: 'compact:1' });
+  assert.equal(imported.review.availablePlayers.length, 40);
+  assert.equal(imported.review.waiver.recommendation.claimPlan.length, 5);
+  assert.deepEqual(imported.review.waiver.recommendation.claimPlan.map((item) => item.priority), [1, 2, 3, 4, 5]);
+  const persisted = weeklyService.getWeek(4, 2026);
+  assert.equal(persisted.availablePlayers.length, 10);
+  assert.deepEqual(persisted.persistence, {
+    persisted: true,
+    rawProviderPayloadPersisted: false,
+    compacted: true,
+    availablePlayersObserved: 40,
+    availablePlayersPersisted: 10,
+    candidateLimit: 10
+  });
+  assert.ok(JSON.stringify(store.load()).length < JSON.stringify({ snapshot: largeSnapshot, review: imported.review }).length);
 });
 
 test('weekly rerun refreshes explicit current projections from the shared pool', () => {

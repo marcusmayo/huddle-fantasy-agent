@@ -42,6 +42,10 @@ Do not set `HUDDLE_YAHOO_OAUTH_ENABLED=true` until all of these are complete:
 | `HUDDLE_YAHOO_WEEKLY_AUTO_REFRESH_ENABLED` | `true` | Enables startup and interval fleet previews |
 | `HUDDLE_YAHOO_WEEKLY_REFRESH_HOURS` | `24` | Scheduled preview interval while the process is awake |
 | `HUDDLE_YAHOO_WEEKLY_PREVIEW_TTL_MINUTES` | `60` | In-memory normalized preview lifetime |
+| `HUDDLE_YAHOO_WEEKLY_PLAYER_PAGE_SIZE` | `100` | Requested free-agent page size |
+| `HUDDLE_YAHOO_WEEKLY_MAX_AVAILABLE_PLAYERS` | `500` | Per-league safety cap for paginated free-agent reads |
+| `HUDDLE_DRAFT_POSITION_DEPTH_BUFFER_PERCENT` | `20` | Required QB/RB/WR/TE/K/DEF evidence buffer above starter demand |
+| `HUDDLE_PREFLIGHT_YAHOO_REHEARSAL_ENABLED` | `true` | Adds safe league-settings, draft-results, and player GET checks to preflight |
 | `HUDDLE_YAHOO_EVIDENCE_RETENTION_DAYS` | `30` | Metadata retention ceiling |
 | `HUDDLE_COMPLIANCE_MAINTENANCE_ENABLED` | local only | Enables purge and disconnect endpoints |
 
