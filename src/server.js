@@ -444,6 +444,9 @@ function createHandler({ runtime, draftServices, weeklyServices, weeklyFleetRunn
         if (tail[0] === 'yahoo' && tail[1] === 'draft-position' && tail[2] === 'refresh' && request.method === 'POST') {
           return json(response, 200, await yahooAccount.refreshDraftPosition({ leagueId: entry.id }));
         }
+        if (tail[0] === 'yahoo' && tail[1] === 'settings' && tail[2] === 'refresh' && request.method === 'POST') {
+          return json(response, 200, await yahooAccount.refreshLeagueSettings({ leagueId: entry.id }));
+        }
         const { service } = serviceFor(runtime, draftServices, entry.id);
         if (tail[0] === 'unresolved-players' && request.method === 'GET') {
           return json(response, 200, { leagueId: entry.id, players: service.unresolvedPlayers() });

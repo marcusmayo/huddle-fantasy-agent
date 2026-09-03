@@ -2,7 +2,8 @@
 
 class FantasyProsRefreshController {
   constructor({ enabled, configured, intervalMs, sync, quotaStatus, setIntervalImpl = setInterval, clearIntervalImpl = clearInterval }) {
-    this.enabled = Boolean(enabled && configured);
+    this.configured = Boolean(configured);
+    this.enabled = Boolean(enabled && this.configured);
     this.intervalMs = Math.max(6 * 60 * 60 * 1000, Number(intervalMs) || 24 * 60 * 60 * 1000);
     this.sync = sync;
     this.quotaStatus = quotaStatus;
@@ -19,6 +20,7 @@ class FantasyProsRefreshController {
   status() {
     return {
       enabled: this.enabled,
+      configured: this.configured,
       intervalHours: this.intervalMs / (60 * 60 * 1000),
       inFlight: Boolean(this.inFlight),
       lastAttemptAt: this.lastAttemptAt,

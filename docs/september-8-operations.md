@@ -98,7 +98,7 @@ Open the forwarded port 8787. Keep its visibility private. In Huddle:
 4. Discover leagues.
 5. Import only the real leagues you will operate.
 6. Delete or hide all demo leagues.
-7. For every imported league, confirm the target team, draft type, team count, scoring, roster positions, waiver mode, and any import warnings.
+7. For every imported league, select **Refresh league settings**, then confirm the target team, draft type, team count, scoring, roster positions, waiver mode, and any remaining import warnings.
 
 The encrypted token file and league state are local runtime data and must not be committed.
 
@@ -107,14 +107,12 @@ The encrypted token file and league state are local runtime data and must not be
 With Huddle running, use a second terminal:
 
 ```bash
-curl -fsS -X POST http://127.0.0.1:8787/api/data/sources/sync \
-  -H 'content-type: application/json' \
-  -d '{"force":true}'
-
 npm run preflight
 ```
 
-The final line must begin with:
+Preflight automatically refreshes and persists provider evidence when the snapshot is missing, stale, or below the Yahoo crosswalk threshold. A deliberate forced refresh remains available through `POST /api/data/sources/sync`, but should not be used repeatedly because one complete refresh can consume up to 12 FantasyPros requests.
+
+The readiness line must say:
 
 ```text
 Huddle live-draft readiness: READY
@@ -128,6 +126,8 @@ Preflight must show:
 - Yahoo crosswalk coverage at or above 80%;
 - Yahoo draft auto-sync enabled;
 - no quarantined or unwritable league state.
+
+If preflight reports `FANTASYPROS_KEY_MISSING`, configure `FANTASYPROS_API_KEY` in the Codespace secrets/environment and restart the Codespace. Yahoo OAuth, Tank01, and OpenRouter credentials do not replace the FantasyPros primary evidence key in the current architecture.
 
 One full six-position FantasyPros refresh can use up to 12 requests. Do not repeatedly force refresh. The normal startup/24-hour schedule uses cached data and the configured local budget.
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
+const { loadRuntimeConfig } = require('../src/config');
 const { buildApp } = require('../src/server');
 
 function printHuman(report) {
@@ -10,6 +11,9 @@ function printHuman(report) {
   console.log(`Evidence: ${report.playerEvidence.source || 'not loaded'} · ${report.playerEvidence.ageHours == null ? 'age unknown' : `${report.playerEvidence.ageHours}h old`}`);
   console.log(`Draft polling: ${report.yahooAutomation.draftAutoSyncEnabled ? 'enabled' : 'disabled'} · ${report.yahooAutomation.draftPollSeconds}s`);
   console.log(`Weekly preview: ${report.yahooAutomation.weeklyAutoRefreshEnabled ? 'scheduled' : 'manual'} · transient only`);
+  if (report.preflightEvidenceRefresh) {
+    console.log(`Preflight evidence refresh: ${report.preflightEvidenceRefresh.status}`);
+  }
   for (const league of report.leagues) {
     console.log(`League ${league.name}: ${league.ready ? 'ready' : `blocked — ${league.problems.join('; ')}`}`);
   }
@@ -24,13 +28,93 @@ function printHuman(report) {
   console.log('\nHuddle remains read-only. Make every draft pick, lineup change, and waiver transaction in Yahoo.');
 }
 
-try {
-  const app = buildApp();
-  const report = app.yahooOperations.readiness();
+function needsLiveEvidence(report, maximumAgeHours) {
+  const source = String(report.playerEvidence.source || '').toLowerCase();
+  return /synthetic|demo|fixture/.test(source)
+    || report.playerEvidence.ageHours == null
+    || report.playerEvidence.ageHours > maximumAgeHours
+    || report.playerEvidence.crosswalk.coverage < report.playerEvidence.crosswalk.requiredCoverage;
+}
+
+function finalize(report, refresh) {
+  const finalReport = { ...report, preflightEvidenceRefresh: refresh };
+  if (refresh?.status === 'failed' || refresh?.status === 'blocked') {
+    finalReport.blockers = [`${refresh.error.code}: ${refresh.error.message}`, ...finalReport.blockers];
+    finalReport.readyForLiveDraft = false;
+  }
+  return finalReport;
+}
+
+async function requestJson(url, options = {}) {
+  const response = await fetch(url, { ...options, signal: AbortSignal.timeout(5_000) });
+  const body = await response.json();
+  if (!response.ok) throw Object.assign(new Error(body.message || `Request failed (${response.status})`), { code: body.error || 'HTTP_REQUEST_FAILED' });
+  return body;
+}
+
+async function liveServerPreflight(runtime) {
+  const base = `http://127.0.0.1:${runtime.port}`;
+  await requestJson(`${base}/health/liveliness`);
+  let report = await requestJson(`${base}/api/operations/readiness`);
+  let refresh = null;
+  if (needsLiveEvidence(report, runtime.operationsMaximumEvidenceAgeHours)) {
+    try {
+      refresh = {
+        status: 'completed',
+        target: 'running-server',
+        result: await requestJson(`${base}/api/data/sources/sync`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ force: false })
+        })
+      };
+      report = await requestJson(`${base}/api/operations/readiness`);
+    } catch (error) {
+      refresh = { status: 'failed', target: 'running-server', error: { code: error.code || 'REFRESH_FAILED', message: error.message } };
+    }
+  }
+  return finalize(report, refresh);
+}
+
+async function offlinePreflight(runtime) {
+  const app = buildApp(runtime);
+  const initial = app.yahooOperations.readiness();
+  let refresh = null;
+  if (needsLiveEvidence(initial, app.runtime.operationsMaximumEvidenceAgeHours) && app.fantasyProsRefresh.status().configured) {
+    try {
+      refresh = {
+        status: 'completed',
+        target: 'offline-snapshot',
+        result: await app.fantasyProsRefresh.trigger({ force: false }, 'preflight')
+      };
+    } catch (error) {
+      refresh = { status: 'failed', target: 'offline-snapshot', error: { code: error.code || 'REFRESH_FAILED', message: error.message } };
+    }
+  } else if (needsLiveEvidence(initial, app.runtime.operationsMaximumEvidenceAgeHours)) {
+    refresh = {
+      status: 'blocked',
+      target: 'offline-snapshot',
+      error: { code: 'FANTASYPROS_KEY_MISSING', message: 'FANTASYPROS_API_KEY is required to replace synthetic demo evidence and build Yahoo player identities' }
+    };
+  }
+  return finalize(app.yahooOperations.readiness(), refresh);
+}
+
+async function main() {
+  const runtime = loadRuntimeConfig();
+  let report;
+  try {
+    report = await liveServerPreflight(runtime);
+  } catch (error) {
+    if (!['ECONNREFUSED', 'UND_ERR_CONNECT_TIMEOUT', 'ABORT_ERR'].includes(error.cause?.code || error.code)) throw error;
+    report = await offlinePreflight(runtime);
+  }
   if (process.argv.includes('--json')) console.log(JSON.stringify(report, null, 2));
   else printHuman(report);
   process.exitCode = report.readyForLiveDraft ? 0 : 1;
-} catch (error) {
+}
+
+main().catch((error) => {
   console.error(`Huddle preflight failed: ${error.code || 'PREFLIGHT_FAILED'}: ${error.message}`);
   process.exitCode = 1;
-}
+});

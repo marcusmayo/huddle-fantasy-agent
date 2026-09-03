@@ -81,9 +81,9 @@ function loadRuntimeConfig() {
   loadDotEnv();
   const leaguePath = process.env.HUDDLE_LEAGUE_CONFIG || './config/leagues/yahoo-example.json';
   const playerPath = process.env.HUDDLE_PLAYER_FIXTURE || './config/fixtures/demo-players.json';
-  const snapshotPath = process.env.HUDDLE_PLAYER_SNAPSHOT_FILE
-    ? path.resolve(process.env.HUDDLE_PLAYER_SNAPSHOT_FILE)
-    : null;
+  const snapshotPath = process.env.HUDDLE_PLAYER_SNAPSHOT_FILE === ''
+    ? null
+    : path.resolve(process.env.HUDDLE_PLAYER_SNAPSHOT_FILE || './data/player-pool.json');
   const registry = process.env.HUDDLE_LEAGUE_REGISTRY
     ? loadLeagueRegistry(process.env.HUDDLE_LEAGUE_REGISTRY)
     : {

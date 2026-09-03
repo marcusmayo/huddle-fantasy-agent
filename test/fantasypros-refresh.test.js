@@ -21,6 +21,7 @@ test('automatic FantasyPros refresh is rate-aware and never schedules faster tha
   });
   controller.start();
   await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(controller.status().configured, true);
   assert.equal(scheduledMs, 6 * 60 * 60 * 1000);
   assert.equal(syncs, 1);
   assert.equal(controller.status().lastSuccessAt !== null, true);
@@ -38,5 +39,6 @@ test('disabled auto-refresh does not call the provider', async () => {
   });
   controller.start();
   await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(controller.status().configured, false);
   assert.equal(syncs, 0);
 });

@@ -15,7 +15,7 @@ The public example profile is a synthetic six-team, two-quarterback, full-PPR de
 | Fleet resilience | Invalid weekly imports and damaged league state are isolated from healthy leagues |
 | Yahoo OAuth | Account-first callback, encrypted token refresh, owned-league discovery, operator-confirmed settings import, draft polling, and transient weekly previews are implemented |
 | Operations | Fail-closed preflight, draft auto-resume, scheduled failure-isolated weekly refresh, expiring previews, structured status, and container health checks are implemented |
-| Verification | `npm run check` passes 95 tests covering complete drafts, 54 isolated weekly reviews, demo/Yahoo isolation, draft-slot reconciliation, zero-league Yahoo onboarding, OAuth safety, live-sync idempotency, and transient normalization |
+| Verification | `npm run check` passes 97 tests covering complete drafts, 54 isolated weekly reviews, demo/Yahoo isolation, full DR Fantasy scoring normalization, draft-slot reconciliation, zero-league Yahoo onboarding, OAuth safety, live-sync idempotency, and transient normalization |
 
 Until Yahoo OAuth is connected, the supported workflow is fully usable in recommendation-only mode: record draft picks manually or through confirmed screenshots, and import normalized weekly JSON through the dashboard or league-scoped API. Huddle never represents these manual inputs as Yahoo-verified data.
 
@@ -38,7 +38,7 @@ Until Yahoo OAuth is connected, the supported workflow is fully usable in recomm
 - Account-first Yahoo OAuth with single-use state, AES-256-GCM token storage, owned-league/team discovery, operator-confirmed settings import, and account-scoped disconnect controls.
 - Versioned Yahoo weekly normalization and scheduled multi-league previews: raw provider payloads remain in process memory, previews expire, and one league's failure cannot block another.
 - Full Sleeper player-map identity crosswalk for Yahoo player keys, independent of the smaller trend feed, with ambiguous identities quarantined.
-- `npm run preflight` for account, league, state, evidence freshness, and player-key readiness before a live draft.
+- `npm run preflight` for account, league, state, evidence freshness, and player-key readiness before a live draft; it refreshes and persists live evidence when the snapshot is missing, stale, or below the Yahoo crosswalk threshold.
 - Automatic 30-day-or-less screenshot evidence expiry, manual purge/delete APIs, visible unresolved-player queue, and page-level Yahoo attribution.
 - Agent-core model routing with an integrity check. Models can explain a computed card but cannot reorder it.
 - Aegis-compatible health, color, manifest, status, and allowlisted read-only WebSocket command contracts.
@@ -100,7 +100,7 @@ Do not paste API keys into issues, commits, screenshots, or chat messages.
 
 With the five Yahoo variables configured, open Huddle and select **Connect Yahoo**. The callback stores the account token in the encrypted token envelope, then Huddle discovers NFL leagues and teams owned by that account. Select **Import this league** to read the league settings transiently and create a minimal operator-confirmed Huddle profile. The raw discovery and settings responses are neither returned to the browser nor written to league state.
 
-The importer supports snake drafts, common offensive scoring, standard/flex/superflex roster positions, waiver timing, and playoff size. It fails closed for auction/salary-cap drafts and surfaces unsupported custom scoring categories as verification warnings. Importing a league triggers an initial transient weekly refresh; live validation warnings remain visible and the manual weekly workflow remains available.
+The importer supports snake drafts, offense scoring, distance-banded field goals, PATs, team-defense scoring and points-allowed bands, standard/flex/superflex roster positions, waiver timing, and playoff size. It fails closed for auction/salary-cap drafts and surfaces genuinely unsupported custom scoring categories as verification warnings. Use **Refresh league settings** after an importer upgrade or a Yahoo commissioner change; Huddle re-reads and replaces the normalized profile without retaining the raw Yahoo payload. Importing a league triggers an initial transient weekly refresh; live validation warnings remain visible and the manual weekly workflow remains available.
 
 Player images are disabled by default. [FantasyPros states that its Sportradar-licensed player image URLs are not included in the API license](https://support.fantasypros.com/hc/en-us/articles/49749297704475-How-do-I-request-access-to-the-FantasyPros-API), so Huddle strips those fields before caching and never displays them. To connect a separately licensed image provider, follow the [player media policy](docs/player-media-policy.md); adding a host without documented display rights is not sufficient.
 
@@ -160,6 +160,8 @@ OpenRouter documents base64 image inputs through the OpenAI-compatible [`/api/v1
 | `GET` | `/api/yahoo/leagues` | Discover normalized NFL leagues and teams owned by the connected account |
 | `POST` | `/api/yahoo/leagues/import` | Confirm and import one selected league's normalized settings |
 | `DELETE` | `/api/yahoo/connection` | Remove the account-scoped encrypted Yahoo token |
+| `POST` | `/api/leagues/:leagueId/yahoo/settings/refresh` | Re-read and atomically replace one imported Yahoo league's normalized settings |
+| `POST` | `/api/leagues/:leagueId/yahoo/draft-position/refresh` | Re-read the target team's confirmed Yahoo draft position |
 | `GET` | `/api/leagues/:leagueId/unresolved-players` | Review unmatched/manual player identities |
 | `DELETE` | `/api/leagues/:leagueId/draft/sessions/:id/evidence-reviews` | Delete one session's screenshot review metadata |
 | `POST` | `/api/compliance/purge-expired` | Purge expired screenshot review metadata across leagues |
