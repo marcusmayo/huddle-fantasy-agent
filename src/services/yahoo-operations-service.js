@@ -5,7 +5,9 @@ const path = require('node:path');
 const { YahooDraftPoller } = require('../providers/yahoo');
 const { YahooTransientWeeklyAdapter } = require('../providers/yahoo-transient-weekly');
 const { normalizeYahooWeeklyBundle } = require('../providers/yahoo-weekly-normalizer');
-const { draftedRosterSize } = require('../domain/league');
+const { draftedRosterSize, positionTargets } = require('../domain/league');
+
+const DRAFT_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
 
 function operationsError(code, message, details) {
   return Object.assign(new Error(message), { code, details });
@@ -58,7 +60,9 @@ class YahooOperationsService {
     this.pollerFactory = pollerFactory || ((options) => new YahooDraftPoller(options));
     this.weeklyAdapterFactory = weeklyAdapterFactory || ((client) => new YahooTransientWeeklyAdapter({
       client,
-      normalizer: normalizeYahooWeeklyBundle
+      normalizer: normalizeYahooWeeklyBundle,
+      playerPageSize: runtime.yahooWeeklyPlayerPageSize,
+      maximumAvailablePlayers: runtime.yahooWeeklyMaximumAvailablePlayers
     }));
     this.now = now;
     this.setInterval = setIntervalImpl;
@@ -71,6 +75,8 @@ class YahooOperationsService {
     this.weeklyTimer = null;
     this.maintenanceTimer = null;
     this.started = false;
+    this.startedAt = null;
+    this.nextWeeklyRefreshAt = null;
   }
 
   iso() {
@@ -90,12 +96,29 @@ class YahooOperationsService {
   crosswalk() {
     const players = this.runtime.playerPool.players || [];
     const mapped = players.filter((player) => player.yahooPlayerKey).length;
-    const draftRequirements = yahooLeagueEntries(this.runtime).map((entry) => ({
-      leagueId: entry.id,
-      name: entry.config.name,
-      totalPicks: draftedRosterSize(entry.config.roster) * entry.config.teamCount
-    }));
+    const positionBuffer = Number(this.runtime.yahooDraftPositionDepthBuffer ?? 0);
+    const draftRequirements = yahooLeagueEntries(this.runtime).map((entry) => {
+      const targets = positionTargets(entry.config.roster);
+      return {
+        leagueId: entry.id,
+        name: entry.config.name,
+        totalPicks: draftedRosterSize(entry.config.roster) * entry.config.teamCount,
+        positions: Object.fromEntries(DRAFT_POSITIONS.map((position) => [
+          position,
+          Math.ceil(targets[position] * entry.config.teamCount * (1 + positionBuffer))
+        ]))
+      };
+    });
     const requiredPlayers = Math.max(0, ...draftRequirements.map((item) => item.totalPicks));
+    const loadedByPosition = Object.fromEntries(DRAFT_POSITIONS.map((position) => [
+      position,
+      players.filter((player) => player.position === position).length
+    ]));
+    const positions = DRAFT_POSITIONS.map((position) => {
+      const required = Math.max(0, ...draftRequirements.map((item) => item.positions[position]));
+      const loaded = loadedByPosition[position];
+      return { position, loaded, required, shortfall: Math.max(0, required - loaded) };
+    });
     return {
       players: players.length,
       mapped,
@@ -104,6 +127,9 @@ class YahooOperationsService {
       requiredCoverage: this.runtime.yahooDraftMinimumCrosswalkCoverage,
       requiredPlayers,
       playerShortfall: Math.max(0, requiredPlayers - players.length),
+      positionBufferPercent: Math.round(positionBuffer * 100),
+      positions,
+      positionShortfalls: positions.filter((item) => item.shortfall > 0),
       draftRequirements
     };
   }
@@ -142,6 +168,9 @@ class YahooOperationsService {
       const limitingLeague = crosswalk.draftRequirements.find((item) => item.totalPicks === crosswalk.requiredPlayers);
       blockers.push(`Player evidence pool has ${crosswalk.players} players; ${limitingLeague?.name || 'the largest Yahoo league'} requires at least ${crosswalk.requiredPlayers} for its complete draft`);
     }
+    for (const position of crosswalk.positionShortfalls) {
+      blockers.push(`${position.position} evidence depth is ${position.loaded}; at least ${position.required} is required with the configured ${crosswalk.positionBufferPercent}% draft buffer`);
+    }
     if (this.runtime.playerPool.complete === false) warnings.push('Player evidence is marked incomplete; verify every recommendation in Yahoo');
     const fetchedAt = finiteDate(this.runtime.playerPool.fetchedAt);
     const evidenceAgeHours = fetchedAt == null ? null : Math.round(((this.now().getTime() - fetchedAt) / 3_600_000) * 10) / 10;
@@ -162,6 +191,8 @@ class YahooOperationsService {
       playerEvidence: {
         source: this.runtime.playerPool.source,
         complete: this.runtime.playerPool.complete !== false,
+        quality: this.runtime.playerPool.complete === false ? 'partial-estimated' : 'complete',
+        operationalStatus: blockers.length === 0 ? 'ready' : 'blocked',
         fetchedAt: this.runtime.playerPool.fetchedAt || null,
         ageHours: evidenceAgeHours,
         crosswalk
@@ -212,6 +243,13 @@ class YahooOperationsService {
       throw operationsError(
         'DRAFT_PLAYER_POOL_TOO_SHALLOW',
         `Player evidence pool has ${crosswalk.players} players; automated polling requires at least ${crosswalk.requiredPlayers}`,
+        crosswalk
+      );
+    }
+    if (crosswalk.positionShortfalls.length) {
+      throw operationsError(
+        'DRAFT_POSITION_POOL_TOO_SHALLOW',
+        `Player evidence is too shallow at ${crosswalk.positionShortfalls.map((item) => item.position).join(', ')}`,
         crosswalk
       );
     }
@@ -310,6 +348,7 @@ class YahooOperationsService {
   weeklyStatus(leagueId, { includeReview = false } = {}) {
     const entry = this.entry(leagueId);
     const item = this.weeklyPreviews.get(entry.id) || null;
+    const lastAttemptMs = finiteDate(item?.lastAttemptAt);
     return {
       leagueId: entry.id,
       state: !item ? 'not-run' : this.isPreviewStale(item) ? 'stale' : item.error ? 'failed' : 'ready',
@@ -320,7 +359,53 @@ class YahooOperationsService {
       season: item?.season || null,
       error: item?.error || null,
       persistence: 'transient-memory-only',
+      ageMinutes: lastAttemptMs == null ? null : Math.max(0, Math.round(((this.now().getTime() - lastAttemptMs) / 60_000) * 10) / 10),
+      candidateCoverage: item?.provenance?.availablePlayers || null,
       review: includeReview && item?.review && !this.isPreviewStale(item) ? structuredClone(item.review) : null
+    };
+  }
+
+  async rehearse({ leagueId }) {
+    const entry = this.entry(leagueId);
+    if (entry.config.platform !== 'yahoo' || !entry.yahooLeagueKey || !entry.yahooTeamKey) {
+      throw operationsError('YAHOO_SOURCE_NOT_AVAILABLE', 'Yahoo rehearsal applies only to an imported Yahoo league');
+    }
+    const client = this.yahooAccount.readClient();
+    const mappedPlayer = (this.runtime.playerPool.players || []).find((player) => player.yahooPlayerKey);
+    const timedCheck = async (name, operation, describe) => {
+      const started = process.hrtime.bigint();
+      try {
+        const value = await operation();
+        return {
+          name,
+          ok: true,
+          durationMs: Math.round(Number(process.hrtime.bigint() - started) / 100_000) / 10,
+          details: describe(value)
+        };
+      } catch (error) {
+        return {
+          name,
+          ok: false,
+          durationMs: Math.round(Number(process.hrtime.bigint() - started) / 100_000) / 10,
+          error: { code: error.code || 'YAHOO_REHEARSAL_CHECK_FAILED', message: error.message }
+        };
+      }
+    };
+    const checks = await Promise.all([
+      timedCheck('league-settings', () => client.leagueSettings(entry.yahooLeagueKey), () => 'Read-only league settings received'),
+      timedCheck('draft-results', () => client.draftResults(entry.yahooLeagueKey), (value) => `${value.picks?.length || 0} completed picks visible`),
+      mappedPlayer
+        ? timedCheck('player-lookup', () => client.player(mappedPlayer.yahooPlayerKey), (value) => `Yahoo player identity confirmed for ${value.name || mappedPlayer.name}`)
+        : Promise.resolve({ name: 'player-lookup', ok: false, durationMs: 0, error: { code: 'YAHOO_PLAYER_CROSSWALK_EMPTY', message: 'No Yahoo player key is available for rehearsal' } })
+    ]);
+    return {
+      leagueId: entry.id,
+      observedAt: this.iso(),
+      ready: checks.every((check) => check.ok),
+      accountConnected: this.yahooAccount.status().connected,
+      checks,
+      mutations: false,
+      rawPayloadPersisted: false
     };
   }
 
@@ -370,7 +455,11 @@ class YahooOperationsService {
     return {
       observedAt: this.iso(),
       scheduled: this.runtime.yahooWeeklyAutoRefreshEnabled,
+      processActive: this.started,
+      processStartedAt: this.startedAt,
       refreshHours: this.runtime.yahooWeeklyRefreshIntervalMs / 3_600_000,
+      nextRefreshAt: this.nextWeeklyRefreshAt,
+      previewTtlMinutes: this.runtime.yahooWeeklyPreviewTtlMs / 60_000,
       latestRun: structuredClone(this.weeklyRuns.at(-1) || null),
       leagues: yahooLeagueEntries(this.runtime).map((entry) => this.weeklyStatus(entry.id))
     };
@@ -418,6 +507,7 @@ class YahooOperationsService {
 
   async runScheduledWeeklyRefresh(trigger) {
     const run = await this.refreshWeeklyFleet({ trigger });
+    this.nextWeeklyRefreshAt = new Date(this.now().getTime() + this.runtime.yahooWeeklyRefreshIntervalMs).toISOString();
     const line = JSON.stringify({
       event: 'yahoo-weekly-refresh',
       observedAt: run.observedAt,
@@ -467,8 +557,10 @@ class YahooOperationsService {
   start() {
     if (this.started) return;
     this.started = true;
+    this.startedAt = this.iso();
     queueMicrotask(() => this.autoResumeDrafts());
     if (this.runtime.yahooWeeklyAutoRefreshEnabled) {
+      this.nextWeeklyRefreshAt = new Date(this.now().getTime() + this.runtime.yahooWeeklyRefreshIntervalMs).toISOString();
       queueMicrotask(() => this.runScheduledWeeklyRefresh('startup').catch((error) => {
         this.logger.warn?.(JSON.stringify({ event: 'yahoo-weekly-refresh', trigger: 'startup', error: error.message }));
       }));
@@ -489,6 +581,7 @@ class YahooOperationsService {
     this.weeklyTimer = null;
     this.maintenanceTimer = null;
     this.started = false;
+    this.nextWeeklyRefreshAt = null;
   }
 }
 

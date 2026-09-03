@@ -578,6 +578,9 @@ async function selectLeague(leagueId) {
   $('#refresh-yahoo-draft-slot').disabled = !state.yahooOAuth?.connected;
   $('#refresh-yahoo-settings').classList.toggle('hidden', !yahooEligible);
   $('#refresh-yahoo-settings').disabled = !state.yahooOAuth?.connected;
+  $('#rehearse-yahoo').classList.toggle('hidden', !yahooEligible);
+  $('#rehearse-yahoo').disabled = !state.yahooOAuth?.connected;
+  $('#yahoo-rehearsal-status').classList.add('hidden');
   $('#weekly-yahoo-refresh').disabled = !yahooEligible || !state.yahooOAuth?.connected;
   $('#weekly-yahoo-refresh').title = yahooEligible
     ? state.yahooOAuth?.connected ? 'Refresh this league from Yahoo' : 'Connect Yahoo before refreshing'
@@ -616,6 +619,27 @@ async function refreshYahooSettings() {
     return result;
   } catch (error) {
     showToast(`Yahoo settings refresh failed: ${error.message}`);
+    return null;
+  } finally {
+    button.disabled = !state.yahooOAuth?.connected;
+  }
+}
+
+async function rehearseYahoo() {
+  if (!yahooSyncEligible()) return null;
+  const button = $('#rehearse-yahoo');
+  const status = $('#yahoo-rehearsal-status');
+  button.disabled = true;
+  status.classList.remove('hidden');
+  status.textContent = 'Checking read-only settings, draft-results, and player endpoints…';
+  try {
+    const result = await api(scoped('/yahoo/rehearsal'), { method: 'POST', body: '{}' });
+    status.textContent = result.ready
+      ? `Yahoo rehearsal passed: ${result.checks.map((check) => `${check.name} ${check.durationMs}ms`).join(' · ')}. No data was changed or retained.`
+      : `Yahoo rehearsal needs attention: ${result.checks.filter((check) => !check.ok).map((check) => `${check.name}: ${check.error.message}`).join(' · ')}`;
+    return result;
+  } catch (error) {
+    status.textContent = `Yahoo rehearsal failed: ${error.message}`;
     return null;
   } finally {
     button.disabled = !state.yahooOAuth?.connected;
@@ -746,6 +770,13 @@ function renderWeekly(review) {
   $('#waiver-confidence').textContent = `${waiver.confidenceLabel} confidence`;
   $('#waiver-reasons').innerHTML = waiver.reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join('');
   $('#waiver-priority').textContent = waiver.priorityGuidance;
+  const plan = waiver.claimPlan || [];
+  const considered = waiver.consideredAlternatives || [];
+  $('#waiver-plan').innerHTML = plan.length > 1
+    ? `<article><strong>Fallback claim order</strong><span>${plan.slice(1).map((item) => `${item.priority}. ${escapeHtml(item.add.name)} for ${escapeHtml(item.drop.name)} (+${item.expectedPointsGained})`).join(' · ')}</span></article>`
+    : waiver.action === 'HOLD' && considered.length
+      ? `<article><strong>Closest reviewed move</strong><span>${escapeHtml(considered[0].add.name)} for ${escapeHtml(considered[0].drop.name)} (+${considered[0].expectedPointsGained}; below threshold)</span></article>`
+      : '';
 
   $('#weekly-standings').innerHTML = review.standings.map((team) => `<tr class="${team.teamId === target.teamId ? 'target-team-row' : ''}">
     <td>${team.standingRank ?? '—'}</td><td><strong>${escapeHtml(team.name)}</strong><small>${escapeHtml(team.result || 'pending')}</small></td>
@@ -782,7 +813,8 @@ async function loadWeekly(reviewKey) {
     `<option value="${week.season}:${week.week}">${week.season} · Week ${week.week} · ${escapeHtml(week.waiverAction)}</option>`).join('');
   if (!reviewKey && yahoo?.review) {
     renderWeekly(yahoo.review);
-    $('#weekly-message').textContent = `Live Yahoo Week ${yahoo.week} preview · transient until ${new Date(yahoo.expiresAt).toLocaleString()}`;
+    const coverage = yahoo.candidateCoverage;
+    $('#weekly-message').textContent = `Live Yahoo Week ${yahoo.week} preview · ${coverage ? `${coverage.retrieved} available players across ${coverage.pages} page${coverage.pages === 1 ? '' : 's'} · ` : ''}transient until ${new Date(yahoo.expiresAt).toLocaleString()}`;
     return;
   }
   if (!result.weeks.length) {
@@ -813,7 +845,8 @@ async function refreshWeeklyFromYahoo() {
     });
     state.yahooWeeklyStatus = result;
     renderWeekly(result.review);
-    $('#weekly-message').textContent = `Yahoo Week ${result.week} review ready. It is transient and expires ${new Date(result.expiresAt).toLocaleString()}.`;
+    const coverage = result.candidateCoverage;
+    $('#weekly-message').textContent = `Yahoo Week ${result.week} review ready. ${coverage ? `${coverage.retrieved} available players were reviewed across ${coverage.pages} page${coverage.pages === 1 ? '' : 's'}. ` : ''}It is transient and expires ${new Date(result.expiresAt).toLocaleString()}.`;
     showToast(`Yahoo Week ${result.week} refreshed. Review the lineup and ${result.review.waiver.recommendation.action} guidance; make all changes in Yahoo.`);
   } catch (error) {
     $('#weekly-message').textContent = error.message;
@@ -1012,7 +1045,7 @@ function renderRecommendation(card) {
   state.recommendation = card;
   $('#current-pick').textContent = card.currentOverall;
   $('#next-turn').textContent = card.nextUserPick || 'slot required';
-  $('#coverage').textContent = card.evidence.complete ? card.evidence.source : 'Incomplete';
+  $('#coverage').textContent = card.evidence.complete ? card.evidence.source : `${card.evidence.source} · partial projections`;
   $('#clock-state').textContent = card.onClock ? 'YOU ARE ON THE CLOCK' : 'Watching the room';
   $('#clock-state').classList.toggle('hot', card.onClock);
   $('#evidence-warning').classList.toggle('hidden', !card.evidence.warning);
@@ -1067,7 +1100,8 @@ function renderBoardEvidence(card) {
   const sourceCoverage = reconciliation.coverage || {};
   const sourceErrors = reconciliation.errors || [];
   const rows = [
-    ['Player evidence', `${evidence.source || 'unknown'} · ${evidence.season || 'season unknown'} · ${evidence.complete ? 'complete' : 'incomplete'}`],
+    ['Player evidence', `${evidence.source || 'unknown'} · ${evidence.season || 'season unknown'} · ${evidence.complete ? 'complete projections' : 'operational with disclosed estimates'}`],
+    ['Projection coverage', evidence.projectionCoverage ? `${evidence.projectionCoverage.projected}/${evidence.projectionCoverage.ranked} players (${Math.round(evidence.projectionCoverage.coverage * 100)}%) have provider projections` : 'Coverage metadata unavailable'],
     ['Evidence timestamp', sourceTime],
     ['League context', `${league.name || state.league.name} · ${league.teamCount || state.league.teamCount} teams · ${league.scoringType || state.league.scoringType}`],
     ['Roster demand', roster || 'Not available'],
@@ -1420,6 +1454,7 @@ async function init() {
   $('#session-form').addEventListener('submit', createSession);
   $('#refresh-yahoo-settings').addEventListener('click', refreshYahooSettings);
   $('#refresh-yahoo-draft-slot').addEventListener('click', () => refreshYahooDraftPosition());
+  $('#rehearse-yahoo').addEventListener('click', rehearseYahoo);
   $('#yahoo-draft-sync-once').addEventListener('click', () => controlYahooDraftSync('once'));
   $('#yahoo-draft-sync-start').addEventListener('click', () => controlYahooDraftSync('start'));
   $('#yahoo-draft-sync-stop').addEventListener('click', () => controlYahooDraftSync('stop'));

@@ -447,6 +447,9 @@ function createHandler({ runtime, draftServices, weeklyServices, weeklyFleetRunn
         if (tail[0] === 'yahoo' && tail[1] === 'settings' && tail[2] === 'refresh' && request.method === 'POST') {
           return json(response, 200, await yahooAccount.refreshLeagueSettings({ leagueId: entry.id }));
         }
+        if (tail[0] === 'yahoo' && tail[1] === 'rehearsal' && request.method === 'POST') {
+          return json(response, 200, await yahooOperations.rehearse({ leagueId: entry.id }));
+        }
         const { service } = serviceFor(runtime, draftServices, entry.id);
         if (tail[0] === 'unresolved-players' && request.method === 'GET') {
           return json(response, 200, { leagueId: entry.id, players: service.unresolvedPlayers() });
@@ -620,11 +623,17 @@ function normalizeRuntime(runtime) {
   runtime.yahooDraftAutoSyncEnabled ??= false;
   runtime.yahooDraftPollIntervalMs = Math.max(5_000, Number(runtime.yahooDraftPollIntervalMs) || 15_000);
   runtime.yahooDraftMinimumCrosswalkCoverage = Math.max(0.5, Math.min(1, Number(runtime.yahooDraftMinimumCrosswalkCoverage) || 0.8));
+  const positionDepthBuffer = Number(runtime.yahooDraftPositionDepthBuffer);
+  runtime.yahooDraftPositionDepthBuffer = Math.max(0, Math.min(1, Number.isFinite(positionDepthBuffer) ? positionDepthBuffer : 0.2));
   runtime.yahooWeeklyAutoRefreshEnabled ??= false;
   runtime.yahooWeeklyRefreshIntervalMs = Math.max(6 * 60 * 60 * 1000, Number(runtime.yahooWeeklyRefreshIntervalMs) || 24 * 60 * 60 * 1000);
   runtime.yahooWeeklyPreviewTtlMs = Math.max(15 * 60 * 1000, Number(runtime.yahooWeeklyPreviewTtlMs) || 60 * 60 * 1000);
+  runtime.yahooWeeklyPlayerPageSize = Math.max(1, Math.min(100, Number(runtime.yahooWeeklyPlayerPageSize) || 100));
+  runtime.yahooWeeklyMaximumAvailablePlayers = Math.max(runtime.yahooWeeklyPlayerPageSize, Math.min(1000, Number(runtime.yahooWeeklyMaximumAvailablePlayers) || 500));
+  runtime.weeklyPersistedCandidateLimit = Math.max(5, Math.min(100, Number(runtime.weeklyPersistedCandidateLimit) || 25));
   runtime.weekOverride = runtime.weekOverride == null ? null : Number(runtime.weekOverride);
   runtime.operationsMaximumEvidenceAgeHours = Math.max(6, Number(runtime.operationsMaximumEvidenceAgeHours) || 36);
+  runtime.preflightYahooRehearsalEnabled ??= true;
   runtime.yahooEvidenceRetentionDays = Math.max(1, Math.min(30, Number(runtime.yahooEvidenceRetentionDays) || 30));
   runtime.complianceMaintenanceEnabled ??= false;
   runtime.sourceSyncStatus ||= null;
@@ -649,7 +658,12 @@ function buildApp(inputRuntime = loadRuntimeConfig(), options = {}) {
         evidenceRetentionDays: runtime.yahooEvidenceRetentionDays
       });
       draftServices.set(entry.id, draftService);
-      weeklyServices.set(entry.id, new WeeklyManagementService({ league: entry.config, playerPool: runtime.playerPool, draftService }));
+      weeklyServices.set(entry.id, new WeeklyManagementService({
+        league: entry.config,
+        playerPool: runtime.playerPool,
+        draftService,
+        persistedCandidateLimit: runtime.weeklyPersistedCandidateLimit
+      }));
     } catch (error) {
       runtime.leagueErrors.push({
         leagueId: entry.id,

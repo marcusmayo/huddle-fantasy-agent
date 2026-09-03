@@ -10,9 +10,9 @@ The 2026 NFL season opens on Wednesday, September 9. September 8 is therefore th
 |---|---|---|
 | Provider evidence | Refreshes at startup and then every 24 hours within Huddle's local FantasyPros budget | Stale evidence over 36 hours blocks live-draft preflight |
 | Yahoo OAuth tokens | Access tokens refresh through the stored refresh token | Tokens are AES-256-GCM encrypted and never logged |
-| Draft observation | A Yahoo-source session polls completed draft results every 15 seconds and resumes after a restart | Requires at least 80% Yahoo player-key coverage; repeated picks are idempotent |
+| Draft observation | A Yahoo-source session polls completed draft results every 15 seconds and resumes after a restart | Requires at least 80% Yahoo player-key coverage plus total and position-specific player depth; repeated picks are idempotent |
 | Draft recommendations | Re-ranks locally after every observed or manually entered pick | Huddle cannot submit a pick |
-| Weekly reads | Runs at startup, after OAuth connection, after league import, and every 24 hours | Raw Yahoo payloads and normalized previews stay in memory and expire after 60 minutes |
+| Weekly reads | Runs at startup, after OAuth connection, after league import, and every 24 hours; paginates up to 500 available players per league | Raw Yahoo payloads and normalized previews stay in memory and expire after 60 minutes |
 | Multi-league weekly refresh | Each league succeeds or fails independently | One bad league does not interrupt another |
 | Evidence retention | Prunes expired screenshot evidence every 24 hours | Retention is clamped to 30 days |
 | Process recovery | Docker Compose uses `restart: unless-stopped` and a health check | Requires an always-on Docker host; a sleeping Codespace cannot run schedules |
@@ -125,6 +125,8 @@ Preflight must show:
 - player evidence no older than 36 hours;
 - Yahoo crosswalk coverage at or above 80%;
 - draft pool depth at or above the league's teams multiplied by drafted roster slots (126 for DR Fantasy);
+- QB/RB/WR/TE/K/DEF depth at or above starter demand plus the configured 20% buffer;
+- a passed read-only Yahoo rehearsal for settings, draft results, and player lookup;
 - Yahoo draft auto-sync enabled;
 - no quarantined or unwritable league state.
 
@@ -136,13 +138,14 @@ One full FantasyPros refresh can use up to 13 requests: six rankings, six projec
 
 Before the real draft:
 
-1. Create a Yahoo-source draft session with the confirmed draft slot.
-2. Confirm the **Yahoo draft sync** panel reaches **Running**.
-3. Use **Sync now** once.
-4. Compare Huddle's completed-pick count and latest pick with Yahoo.
-5. Verify the recommended player is still available in Yahoo.
-6. Stop the rehearsal session or clearly label it so it cannot be mistaken for the live session.
-7. Practice manual pick entry as the network-failure fallback.
+1. Select **Run Yahoo read rehearsal** and require all three GET-only checks to pass. `npm run preflight` performs the same rehearsal automatically.
+2. Create a Yahoo-source draft session with the confirmed draft slot.
+3. Confirm the **Yahoo draft sync** panel reaches **Running**.
+4. Use **Sync now** once.
+5. Compare Huddle's completed-pick count and latest pick with Yahoo.
+6. Verify the recommended player is still available in Yahoo.
+7. Stop the rehearsal session or clearly label it so it cannot be mistaken for the live session.
+8. Practice manual pick entry as the network-failure fallback.
 
 ## September 8 live-draft procedure
 
@@ -193,7 +196,7 @@ The automated weekly preview runs only while Huddle is running. A Codespace is a
 3. Set the season and week.
 4. Click **Refresh from Yahoo**.
 5. Confirm the preview reports `yahoo-live-transient-v1`, the expected week, every league team, the correct target roster, and current free agents.
-6. Review matchup, standings, actual-versus-optimal lineup, injuries/byes, transactions, and the `ADD_DROP` or `HOLD` decision.
+6. Review matchup, standings, actual-versus-optimal lineup, injuries/byes, transactions, and the ordered waiver claim plan or `HOLD` decision. Confirm the displayed number of paginated Yahoo free agents is plausible for the league.
 7. Confirm availability, lock status, FAAB, priority, and deadline in Yahoo.
 8. Make lineup and waiver changes manually in Yahoo.
 

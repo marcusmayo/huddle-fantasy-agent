@@ -3,11 +3,60 @@
 const crypto = require('node:crypto');
 const { buildWeeklyReview } = require('../domain/weekly-management');
 
+function playerIdentity(player) {
+  return String(player?.yahooPlayerKey || player?.playerId || player?.id || player?.name || player?.playerName || '').trim().toLowerCase();
+}
+
+function projectionValue(player) {
+  for (const value of [player?.remainingProjectedPoints, player?.projectedPoints, player?.weeklyProjectedPoints]) {
+    if (value !== null && value !== undefined && Number.isFinite(Number(value))) return Number(value);
+  }
+  return -Infinity;
+}
+
+function compactCandidatePool(players, recommendation, limit) {
+  const byIdentity = new Map((players || []).map((player) => [playerIdentity(player), player]));
+  const selected = [];
+  const seen = new Set();
+  const add = (player) => {
+    const identity = playerIdentity(player);
+    if (!identity || seen.has(identity) || selected.length >= limit) return;
+    const original = byIdentity.get(identity);
+    if (!original) return;
+    seen.add(identity);
+    selected.push(structuredClone(original));
+  };
+  for (const item of recommendation?.claimPlan || []) add(item.add);
+  for (const item of recommendation?.consideredAlternatives || []) add(item.add);
+  for (const player of [...(players || [])].sort((a, b) => projectionValue(b) - projectionValue(a))) add(player);
+  return selected;
+}
+
+function compactWeeklyEntry(snapshot, review, limit) {
+  const compactAvailable = compactCandidatePool(snapshot.availablePlayers, review.waiver.recommendation, limit);
+  const identities = new Set(compactAvailable.map(playerIdentity));
+  const compactReviewPlayers = review.availablePlayers.filter((player) => identities.has(playerIdentity(player)));
+  const persistence = {
+    persisted: true,
+    rawProviderPayloadPersisted: false,
+    compacted: compactAvailable.length < snapshot.availablePlayers.length,
+    availablePlayersObserved: snapshot.availablePlayers.length,
+    availablePlayersPersisted: compactAvailable.length,
+    candidateLimit: limit
+  };
+  return {
+    snapshot: { ...structuredClone(snapshot), availablePlayers: compactAvailable },
+    review: { ...structuredClone(review), availablePlayers: structuredClone(compactReviewPlayers), persistence },
+    persistence
+  };
+}
+
 class WeeklyManagementService {
-  constructor({ league, playerPool, draftService }) {
+  constructor({ league, playerPool, draftService, persistedCandidateLimit = 25 }) {
     this.league = league;
     this.playerPool = playerPool;
     this.draftService = draftService;
+    this.persistedCandidateLimit = Math.max(5, Math.min(100, Number(persistedCandidateLimit) || 25));
     this.state = draftService.state;
     this.state.weekly ||= { weeks: {}, appliedEventIds: [], runs: [] };
     this.state.weekly.weeks ||= {};
@@ -69,6 +118,8 @@ class WeeklyManagementService {
     }
     const normalized = { ...structuredClone(snapshot), source: source || snapshot?.source || 'normalized-import' };
     const review = buildWeeklyReview({ snapshot: normalized, league: this.league, playerPool: this.playerPool, expectedWeek, preferSharedProjections });
+    const compacted = compactWeeklyEntry(normalized, review, this.persistedCandidateLimit);
+    const persistedReview = { ...structuredClone(review), persistence: compacted.persistence };
     const key = this.key(review.season, review.week);
     const existing = this.state.weekly.weeks[key];
     const run = {
@@ -83,8 +134,8 @@ class WeeklyManagementService {
     };
     this.state.weekly.weeks[key] = {
       eventId: stableEventId,
-      snapshot: normalized,
-      review,
+      snapshot: compacted.snapshot,
+      review: compacted.review,
       createdAt: existing?.createdAt || now,
       updatedAt: now,
       revisions: (existing?.revisions || 0) + 1
@@ -94,7 +145,7 @@ class WeeklyManagementService {
     this.state.weekly.runs.push(run);
     this.state.weekly.runs = this.state.weekly.runs.slice(-250);
     this.draftService.persist();
-    return { applied: true, reason: null, review: structuredClone(review), run };
+    return { applied: true, reason: null, review: persistedReview, run };
   }
 
   rerun(week, season) {
@@ -181,4 +232,4 @@ class WeeklyFleetRunner {
   }
 }
 
-module.exports = { WeeklyFleetRunner, WeeklyManagementService };
+module.exports = { WeeklyFleetRunner, WeeklyManagementService, compactCandidatePool, compactWeeklyEntry };

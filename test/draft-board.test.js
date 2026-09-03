@@ -109,3 +109,18 @@ test('final recommendations reserve enough picks to complete every required star
   assert.equal(kicker.feasible, true);
   assert.equal(defense.feasible, true);
 });
+
+test('recommendations reserve a required position before opponents can exhaust its supply', () => {
+  const smallLeague = {
+    ...structuredClone(league),
+    teamCount: 4,
+    roster: { QB: 1, RB: 1, WR: 1, TE: 1, K: 1, DEF: 1, BN: 2 }
+  };
+  const mine = { RB: 1, WR: 1, TE: 1, K: 1, DEF: 1 };
+  const availableByPosition = { QB: 2, RB: 20, WR: 20, TE: 10, K: 10, DEF: 10 };
+  const runner = assessRosterConstraint({ position: 'RB' }, mine, smallLeague, { availableByPosition, opponentPicksBeforeNext: 3 });
+  const quarterback = assessRosterConstraint({ position: 'QB' }, mine, smallLeague, { availableByPosition, opponentPicksBeforeNext: 3 });
+  assert.equal(runner.feasible, false);
+  assert.match(runner.reasons.join(' '), /QB supply may not survive/);
+  assert.equal(quarterback.feasible, true);
+});

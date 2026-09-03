@@ -6,6 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const { normalizeYahooWeeklyBundle } = require('../src/providers/yahoo-weekly-normalizer');
+const { YahooTransientWeeklyAdapter } = require('../src/providers/yahoo-transient-weekly');
 const { buildApp } = require('../src/server');
 const { DraftService } = require('../src/services/draft-service');
 const { WeeklyManagementService } = require('../src/services/weekly-management-service');
@@ -33,7 +34,8 @@ const pool = {
     { id: 'fp-qb', yahooPlayerKey: '999.p.1', name: 'Quarterback One', position: 'QB', team: 'AAA', projectedPoints: 300, weeklyProjectedPoints: 20, remainingProjectedPoints: 250 },
     { id: 'fp-rb', yahooPlayerKey: '999.p.2', name: 'Running Back Two', position: 'RB', team: 'BBB', projectedPoints: 220, weeklyProjectedPoints: 12, remainingProjectedPoints: 180 },
     { id: 'fp-wr', yahooPlayerKey: '999.p.3', name: 'Wide Receiver Three', position: 'WR', team: 'CCC', projectedPoints: 205, weeklyProjectedPoints: 11, remainingProjectedPoints: 170 },
-    { id: 'fp-te', yahooPlayerKey: '999.p.4', name: 'Tight End Four', position: 'TE', team: 'DDD', projectedPoints: 165, weeklyProjectedPoints: 9, remainingProjectedPoints: 130 }
+    { id: 'fp-te', yahooPlayerKey: '999.p.4', name: 'Tight End Four', position: 'TE', team: 'DDD', projectedPoints: 165, weeklyProjectedPoints: 9, remainingProjectedPoints: 130 },
+    { id: 'fp-qb-2', yahooPlayerKey: '999.p.5', name: 'Quarterback Five', position: 'QB', team: 'EEE', projectedPoints: 280, weeklyProjectedPoints: 18, remainingProjectedPoints: 230 }
   ]
 };
 
@@ -105,6 +107,39 @@ test('Yahoo weekly v1 normalizer creates a complete safe snapshot without raw pa
   assert.equal(snapshot.waiver.priority, 1);
   assert.equal(snapshot.normalization.adapter, 'yahoo-weekly-v1');
   assert.doesNotMatch(JSON.stringify(snapshot), /RAW_WEEKLY_YAHOO_MUST_NOT_PERSIST/);
+});
+
+test('Yahoo weekly adapter paginates the complete available-player pool up to its configured cap', async () => {
+  const drafts = new DraftService({ league, playerPool: structuredClone(pool), store: new MemoryStateStore() });
+  const weekly = new WeeklyManagementService({ league, playerPool: structuredClone(pool), draftService: drafts });
+  const raw = yahooWeeklyBundle();
+  const starts = [];
+  const pages = [
+    [player('999.p.3', 'Available One', 'WR', 'BN', 0, 14), player('999.p.4', 'Available Two', 'TE', 'BN', 0, 10)],
+    [player('999.p.5', 'Available Three', 'QB', 'BN', 0, 18)],
+    []
+  ];
+  const availablePayload = (rows) => ({ fantasy_content: { league: [{ players: Object.assign(Object.fromEntries(rows.map((row, index) => [index, row])), { count: rows.length }) }] } });
+  const client = {
+    scoreboard: async () => raw.scoreboard,
+    standings: async () => raw.standings,
+    transactions: async () => raw.transactions,
+    roster: async () => raw.roster,
+    availablePlayers: async (_leagueKey, { start }) => {
+      starts.push(start);
+      return availablePayload(pages[starts.length - 1]);
+    }
+  };
+  const adapter = new YahooTransientWeeklyAdapter({
+    client,
+    normalizer: normalizeYahooWeeklyBundle,
+    playerPageSize: 2,
+    maximumAvailablePlayers: 10
+  });
+  const result = await adapter.preview({ leagueKey: '999.l.1', teamKey: '999.l.1.t.1', week: 1, season: 2026, weeklyService: weekly });
+  assert.deepEqual(starts, [0, 2, 3]);
+  assert.equal(result.review.availablePlayers.length, 3);
+  assert.deepEqual(result.provenance.availablePlayers, { pages: 2, retrieved: 3, pageSize: 2, maximum: 10, complete: true, capped: false });
 });
 
 test('Yahoo operations readiness and one-shot draft sync are fail-loud and idempotent', async () => {
@@ -290,6 +325,80 @@ test('operational readiness blocks a mapped player pool that cannot cover the co
   assert.match(readiness.blockers.join(' '), /pool has 3 players.*requires at least 4/);
 });
 
+test('operational readiness blocks a position-starved pool even when total draft depth is sufficient', () => {
+  const twoQuarterbackLeague = structuredClone(league);
+  twoQuarterbackLeague.id = 'position-depth';
+  twoQuarterbackLeague.name = 'Position Depth';
+  twoQuarterbackLeague.teamCount = 10;
+  twoQuarterbackLeague.roster = { QB: 2, BN: 18 };
+  const players = [
+    ...Array.from({ length: 10 }, (_, index) => ({ id: `qb-${index}`, yahooPlayerKey: `999.p.${index}`, name: `QB ${index}`, position: 'QB' })),
+    ...Array.from({ length: 190 }, (_, index) => ({ id: `rb-${index}`, yahooPlayerKey: `999.p.${index + 100}`, name: `RB ${index}`, position: 'RB' }))
+  ];
+  const operations = new YahooOperationsService({
+    runtime: {
+      season: 2026,
+      playerPool: { source: 'fantasypros-test', complete: true, fetchedAt: '2026-09-08T12:00:00.000Z', players },
+      leagues: [{ id: twoQuarterbackLeague.id, config: twoQuarterbackLeague, stateFile: '/tmp/position-depth.json', yahooLeagueKey: '999.l.2', yahooTeamKey: '999.l.2.t.1', verificationStatus: 'verified' }],
+      yahooDraftAutoSyncEnabled: true,
+      yahooDraftPollIntervalMs: 15_000,
+      yahooDraftMinimumCrosswalkCoverage: 0.8,
+      yahooDraftPositionDepthBuffer: 0.2,
+      yahooWeeklyAutoRefreshEnabled: false,
+      yahooWeeklyRefreshIntervalMs: 86_400_000,
+      yahooWeeklyPreviewTtlMs: 3_600_000,
+      operationsMaximumEvidenceAgeHours: 36,
+      leagueErrors: []
+    },
+    yahooAccount: { status: () => ({ enabled: true, clientConfigured: true, encryptedTokenStorageConfigured: true, connected: true }) },
+    draftServices: new Map([[twoQuarterbackLeague.id, { listSessions: () => [] }]]),
+    weeklyServices: new Map(),
+    now: () => new Date('2026-09-08T12:30:00.000Z')
+  });
+  const readiness = operations.readiness();
+  assert.equal(readiness.playerEvidence.crosswalk.playerShortfall, 0);
+  assert.deepEqual(readiness.playerEvidence.crosswalk.positionShortfalls, [{ position: 'QB', loaded: 10, required: 24, shortfall: 14 }]);
+  assert.equal(readiness.readyForLiveDraft, false);
+  assert.match(readiness.blockers.join(' '), /QB evidence depth is 10/);
+});
+
+test('Yahoo rehearsal validates read-only settings, draft, and player endpoints without persisting payloads', async () => {
+  const calls = [];
+  const operations = new YahooOperationsService({
+    runtime: {
+      season: 2026,
+      playerPool: structuredClone(pool),
+      leagues: [{ id: league.id, config: league, stateFile: '/tmp/rehearsal.json', yahooLeagueKey: '999.l.1', yahooTeamKey: '999.l.1.t.1', verificationStatus: 'verified' }],
+      yahooDraftAutoSyncEnabled: true,
+      yahooDraftPollIntervalMs: 15_000,
+      yahooDraftMinimumCrosswalkCoverage: 0.8,
+      yahooWeeklyAutoRefreshEnabled: false,
+      yahooWeeklyRefreshIntervalMs: 86_400_000,
+      yahooWeeklyPreviewTtlMs: 3_600_000,
+      operationsMaximumEvidenceAgeHours: 36,
+      leagueErrors: []
+    },
+    yahooAccount: {
+      status: () => ({ enabled: true, clientConfigured: true, encryptedTokenStorageConfigured: true, connected: true }),
+      readClient: () => ({
+        leagueSettings: async () => { calls.push('GET settings'); return { raw: 'not returned' }; },
+        draftResults: async () => { calls.push('GET draft'); return { payload: { raw: 'not returned' }, picks: [] }; },
+        player: async (key) => { calls.push(`GET player ${key}`); return { name: 'Quarterback One' }; }
+      })
+    },
+    draftServices: new Map(),
+    weeklyServices: new Map(),
+    now: () => new Date('2026-09-08T12:30:00.000Z')
+  });
+  const result = await operations.rehearse({ leagueId: league.id });
+  assert.equal(result.ready, true);
+  assert.equal(result.mutations, false);
+  assert.equal(result.rawPayloadPersisted, false);
+  assert.deepEqual(result.checks.map((check) => check.name), ['league-settings', 'draft-results', 'player-lookup']);
+  assert.deepEqual(calls, ['GET settings', 'GET draft', 'GET player 999.p.1']);
+  assert.doesNotMatch(JSON.stringify(result), /not returned/);
+});
+
 test('operational HTTP routes expose readiness, draft sync control, and transient weekly refresh', async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'huddle-ops-http-'));
   const calls = [];
@@ -306,6 +415,7 @@ test('operational HTTP routes expose readiness, draft sync control, and transien
     weeklyFleetStatus: () => ({ scheduled: true, latestRun: { complete: true, succeeded: 1, failed: 0 }, leagues: [] }),
     previewWeekly: async ({ leagueId, week, season }) => ({ leagueId, week: Number(week), season: Number(season), state: 'ready', review: { week: Number(week), season: Number(season) } }),
     refreshWeeklyFleet: async () => ({ complete: true, succeeded: 1, failed: 0, results: [] }),
+    rehearse: async ({ leagueId }) => ({ leagueId, ready: true, checks: [], mutations: false }),
     runScheduledWeeklyRefresh: async () => ({ complete: true, succeeded: 1, failed: 0, results: [] }),
     start() {}, stop() {}
   };
@@ -342,6 +452,8 @@ test('operational HTTP routes expose readiness, draft sync control, and transien
     assert.equal((await weeklyResponse.json()).review.week, 1);
     const weeklyFleet = await (await fetch(`${base}/api/operations/weekly/status`)).json();
     assert.equal(weeklyFleet.latestRun.complete, true);
+    const rehearsal = await (await fetch(`${base}/api/leagues/${league.id}/yahoo/rehearsal`, { method: 'POST' })).json();
+    assert.equal(rehearsal.ready, true);
   } finally {
     await new Promise((resolve) => app.commandRelay.close(resolve));
     await new Promise((resolve) => app.server.close(resolve));
