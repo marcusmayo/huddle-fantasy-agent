@@ -22,6 +22,19 @@ test('drafted players are excluded from every recommendation', () => {
   assert.notEqual(card.alternatives.upside.player.id, 'demo-rb-1');
 });
 
+test('a Yahoo-key placeholder excludes the matching player after a later pool refresh', () => {
+  const players = structuredClone(pool.players.slice(0, 2));
+  players[0].yahooPlayerKey = '470.p.1001';
+  players[1].yahooPlayerKey = '1002';
+  const picks = [{
+    playerId: 'yahoo:1001', playerName: 'Yahoo player 1001', position: null,
+    yahooPlayerKey: '1001', resolutionStatus: 'unresolved-yahoo', isMine: false
+  }];
+  const card = buildRecommendationCard({ players, picks, league, draftSlot: 3 });
+  assert.equal(card.board.some((item) => item.player.id === players[0].id), false);
+  assert.equal(card.board.some((item) => item.player.id === players[1].id), true);
+});
+
 test('recommendation output is deterministic for the same state', () => {
   const input = { players: pool.players, picks: [], league, draftSlot: 3 };
   const first = scoreAvailablePlayers({ ...input, style: 'balanced' });

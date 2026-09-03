@@ -34,6 +34,36 @@ function extractDraftResults(payload) {
   return [...unique.values()].sort((a, b) => a.overallPick - b.overallPick);
 }
 
+function recursivelyFindScalars(value, key, output = []) {
+  if (Array.isArray(value)) {
+    for (const item of value) recursivelyFindScalars(item, key, output);
+    return output;
+  }
+  if (!value || typeof value !== 'object') return output;
+  if (Object.prototype.hasOwnProperty.call(value, key)
+    && ['string', 'number', 'boolean'].includes(typeof value[key])) output.push(value[key]);
+  for (const child of Object.values(value)) recursivelyFindScalars(child, key, output);
+  return output;
+}
+
+function extractYahooPlayer(payload, expectedPlayerKey) {
+  const first = (key) => recursivelyFindScalars(payload, key)[0];
+  const yahooPlayerKey = String(first('player_key') || expectedPlayerKey || '').trim();
+  if (!yahooPlayerKey) return null;
+  const rawPosition = String(first('display_position') || first('position') || '').toUpperCase();
+  const position = rawPosition === 'DST' || rawPosition === 'D/ST' ? 'DEF' : rawPosition;
+  const fullName = first('full');
+  const firstName = first('first');
+  const lastName = first('last');
+  const name = String(fullName || [firstName, lastName].filter(Boolean).join(' ') || '').trim();
+  return {
+    yahooPlayerKey,
+    name: name || null,
+    position: ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'].includes(position) ? position : null,
+    team: String(first('editorial_team_abbr') || 'FA').toUpperCase()
+  };
+}
+
 class YahooReadOnlyClient {
   constructor({
     accessToken,
@@ -71,6 +101,11 @@ class YahooReadOnlyClient {
   async draftResults(leagueKey) {
     const payload = await this.get(`/league/${encodeURIComponent(leagueKey)}/draftresults`);
     return { payload, picks: extractDraftResults(payload) };
+  }
+
+  async player(playerKey) {
+    const payload = await this.get(`/player/${encodeURIComponent(playerKey)}`);
+    return extractYahooPlayer(payload, playerKey);
   }
 
   async scoreboard(leagueKey, week) {
@@ -157,6 +192,12 @@ class YahooDraftPoller {
         .map((player) => [String(player.yahooPlayerKey || '').split('.p.').at(-1), player])
         .filter(([id]) => id && id !== 'undefined')
     );
+    this.playerByIdentity = new Map(
+      playerPool.players.map((player) => [
+        `${String(player.name || '').toLowerCase().replace(/[^a-z0-9]/g, '')}|${player.position}`,
+        player
+      ])
+    );
     this.timer = null;
     this.running = false;
   }
@@ -164,12 +205,39 @@ class YahooDraftPoller {
   async syncOnce() {
     const { picks } = await this.client.draftResults(this.leagueKey);
     const session = this.draftService.getSession(this.sessionId);
+    const unresolvedPicks = [];
     for (const pick of picks.filter((item) => item.overallPick > session.picks.length)) {
-      const player = this.playerByYahooKey.get(pick.yahooPlayerKey)
+      let player = this.playerByYahooKey.get(pick.yahooPlayerKey)
         || this.playerByYahooId.get(String(pick.yahooPlayerKey).split('.p.').at(-1));
+      let externalPlayer = null;
       if (!player) {
-        this.onStatus({ level: 'warning', code: 'UNRESOLVED_PLAYER', pick });
-        break;
+        try {
+          externalPlayer = typeof this.client.player === 'function'
+            ? await this.client.player(pick.yahooPlayerKey)
+            : null;
+          const identity = externalPlayer?.name && externalPlayer?.position
+            ? `${externalPlayer.name.toLowerCase().replace(/[^a-z0-9]/g, '')}|${externalPlayer.position}`
+            : null;
+          player = identity ? this.playerByIdentity.get(identity) : null;
+        } catch (error) {
+          this.onStatus({
+            level: 'warning',
+            code: 'YAHOO_PLAYER_LOOKUP_FAILED',
+            message: error.message,
+            pick
+          });
+        }
+        if (!player && (!externalPlayer?.name || !externalPlayer?.position)) {
+          unresolvedPicks.push(pick.overallPick);
+          this.onStatus({
+            level: 'warning',
+            code: 'UNRESOLVED_PLAYER_RECORDED',
+            message: `Yahoo pick ${pick.overallPick} was recorded by player key so later picks can continue syncing`,
+            pick
+          });
+        } else if (!player) {
+          this.onStatus({ level: 'info', code: 'PLAYER_RESOLVED_FROM_YAHOO', pick });
+        }
       }
       const isMine = pick.teamKey === this.targetTeamKey;
       if (isMine) {
@@ -182,14 +250,25 @@ class YahooDraftPoller {
       this.draftService.recordPick(this.sessionId, {
         eventId: `yahoo:${this.leagueKey}:${pick.overallPick}`,
         overallPick: pick.overallPick,
-        playerId: player.id,
+        playerId: player?.id,
+        externalPlayer: player ? null : { ...(externalPlayer || {}), yahooPlayerKey: pick.yahooPlayerKey },
+        yahooPlayerKey: pick.yahooPlayerKey,
         teamId: pick.teamKey,
         isMine,
         source: 'yahoo'
       });
     }
-    this.onStatus({ level: 'info', code: 'SYNCED', observedPicks: picks.length });
-    return this.draftService.getSession(this.sessionId);
+    const saved = this.draftService.getSession(this.sessionId);
+    const persistentUnresolvedPicks = saved.picks
+      .filter((pick) => pick.resolutionStatus === 'unresolved-yahoo')
+      .map((pick) => pick.overallPick);
+    this.onStatus({
+      level: 'info',
+      code: 'SYNCED',
+      observedPicks: picks.length,
+      unresolvedPicks: [...new Set([...persistentUnresolvedPicks, ...unresolvedPicks])].sort((a, b) => a - b)
+    });
+    return saved;
   }
 
   start() {
@@ -215,4 +294,4 @@ class YahooDraftPoller {
   }
 }
 
-module.exports = { DEFAULT_BASE_URL, YahooDraftPoller, YahooReadOnlyClient, extractDraftResults };
+module.exports = { DEFAULT_BASE_URL, YahooDraftPoller, YahooReadOnlyClient, extractDraftResults, extractYahooPlayer };

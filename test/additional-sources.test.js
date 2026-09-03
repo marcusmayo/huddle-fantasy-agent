@@ -7,7 +7,7 @@ const path = require('node:path');
 const test = require('node:test');
 const { SleeperClient, normalizeSleeperPlayerCrosswalk, normalizeSleeperTrends } = require('../src/providers/sleeper');
 const { Tank01Client, normalizeTank01Players, positionFromPosAdp, scoringToAdpType } = require('../src/providers/tank01');
-const { SOURCE_WEIGHTS, evidenceIndex, matchEvidence, reconcilePlayerEvidence } = require('../src/services/player-evidence');
+const { SOURCE_WEIGHTS, ensureDraftProjections, evidenceIndex, matchEvidence, reconcilePlayerEvidence } = require('../src/services/player-evidence');
 
 test('Tank01 normalizes draft rows and caches one ADP request', async () => {
   const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'huddle-tank01-'));
@@ -142,6 +142,41 @@ test('source reconciliation applies the configured 67.5/32.5 blend and Sleeper b
   assert.equal(pool.players[0].sleeperTrend.direction, 'rising');
   assert.equal(pool.sourceEvidence.coverage.tank01Matched, 2);
   assert.equal(pool.sourceEvidence.coverage.sleeperMatched, 1);
+});
+
+test('ranked players without a projection receive a disclosed deterministic estimate', () => {
+  const completed = ensureDraftProjections([
+    { id: 'rb-1', name: 'Projected Back', position: 'RB', expertRank: 1, projectedPoints: 250, floor: 210, ceiling: 290 },
+    { id: 'rb-2', name: 'Ranked Back', position: 'RB', expertRank: 12, projectedPoints: null }
+  ]);
+  assert.equal(completed.players[0].projectionImputed, false);
+  assert.equal(completed.players[1].projectionImputed, true);
+  assert.equal(completed.players[1].projectionSource, 'rank-interpolation');
+  assert.equal(completed.players[1].projectedPoints > 0, true);
+  assert.deepEqual(completed.coverage, { provided: 1, imputed: 1, total: 2, providedRatio: 0.5 });
+});
+
+test('Tank01 and Sleeper extend a limited primary pool with Yahoo-mapped late-round players', () => {
+  const pool = reconcilePlayerEvidence({
+    source: 'fantasypros-api',
+    players: [{ id: 'fp:1', name: 'Primary Runner', position: 'RB', expertRank: 1, projectedPoints: 250 }]
+  }, {
+    tank01: { players: [
+      { tank01Id: 't1', name: 'Primary Runner', position: 'RB', rank: 1, projectedPoints: 250 },
+      { tank01Id: 't2', name: 'Late Receiver', position: 'WR', rank: 130, projectedPoints: null }
+    ] },
+    sleeper: {
+      players: [],
+      identityPlayers: [{ yahooId: '9002', name: 'Late Receiver', position: 'WR', team: 'TST' }]
+    }
+  });
+
+  assert.equal(pool.players.length, 2);
+  assert.equal(pool.players[1].id, 'tank01:t2');
+  assert.equal(pool.players[1].yahooPlayerKey, '9002');
+  assert.equal(pool.players[1].evidenceRole, 'secondary-fallback');
+  assert.equal(pool.players[1].projectionImputed, true);
+  assert.equal(pool.sourceEvidence.coverage.secondaryFallbackPlayers, 1);
 });
 
 test('ambiguous secondary identities are excluded instead of resolving by input order', () => {

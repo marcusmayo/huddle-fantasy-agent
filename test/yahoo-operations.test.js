@@ -31,7 +31,9 @@ const pool = {
   source: 'fantasypros-test', complete: true, fetchedAt: '2026-09-08T12:00:00.000Z',
   players: [
     { id: 'fp-qb', yahooPlayerKey: '999.p.1', name: 'Quarterback One', position: 'QB', team: 'AAA', projectedPoints: 300, weeklyProjectedPoints: 20, remainingProjectedPoints: 250 },
-    { id: 'fp-rb', yahooPlayerKey: '999.p.2', name: 'Running Back Two', position: 'RB', team: 'BBB', projectedPoints: 220, weeklyProjectedPoints: 12, remainingProjectedPoints: 180 }
+    { id: 'fp-rb', yahooPlayerKey: '999.p.2', name: 'Running Back Two', position: 'RB', team: 'BBB', projectedPoints: 220, weeklyProjectedPoints: 12, remainingProjectedPoints: 180 },
+    { id: 'fp-wr', yahooPlayerKey: '999.p.3', name: 'Wide Receiver Three', position: 'WR', team: 'CCC', projectedPoints: 205, weeklyProjectedPoints: 11, remainingProjectedPoints: 170 },
+    { id: 'fp-te', yahooPlayerKey: '999.p.4', name: 'Tight End Four', position: 'TE', team: 'DDD', projectedPoints: 165, weeklyProjectedPoints: 9, remainingProjectedPoints: 130 }
   ]
 };
 
@@ -250,6 +252,42 @@ test('operational readiness identifies synthetic evidence as a live-draft blocke
   const readiness = operations.readiness();
   assert.equal(readiness.readyForLiveDraft, false);
   assert.match(readiness.blockers.join(' '), /Synthetic demo player evidence.*FANTASYPROS_API_KEY/);
+});
+
+test('operational readiness blocks a mapped player pool that cannot cover the complete draft', () => {
+  const shallowPool = structuredClone(pool);
+  shallowPool.players = shallowPool.players.slice(0, 3);
+  const operations = new YahooOperationsService({
+    runtime: {
+      season: 2026,
+      playerPool: shallowPool,
+      leagues: [{
+        id: league.id, config: league, stateFile: '/tmp/live-yahoo.json',
+        yahooLeagueKey: '999.l.1', yahooTeamKey: '999.l.1.t.1', verificationStatus: 'verified'
+      }],
+      yahooDraftAutoSyncEnabled: true,
+      yahooDraftPollIntervalMs: 15_000,
+      yahooDraftMinimumCrosswalkCoverage: 0.8,
+      yahooWeeklyAutoRefreshEnabled: false,
+      yahooWeeklyRefreshIntervalMs: 86_400_000,
+      yahooWeeklyPreviewTtlMs: 3_600_000,
+      operationsMaximumEvidenceAgeHours: 36,
+      leagueErrors: []
+    },
+    yahooAccount: {
+      status: () => ({ enabled: true, clientConfigured: true, encryptedTokenStorageConfigured: true, connected: true })
+    },
+    draftServices: new Map([[league.id, { listSessions: () => [] }]]),
+    weeklyServices: new Map(),
+    now: () => new Date('2026-09-08T12:30:00.000Z')
+  });
+
+  const readiness = operations.readiness();
+  assert.equal(readiness.playerEvidence.crosswalk.coverage, 1);
+  assert.equal(readiness.playerEvidence.crosswalk.requiredPlayers, 4);
+  assert.equal(readiness.playerEvidence.crosswalk.playerShortfall, 1);
+  assert.equal(readiness.readyForLiveDraft, false);
+  assert.match(readiness.blockers.join(' '), /pool has 3 players.*requires at least 4/);
 });
 
 test('operational HTTP routes expose readiness, draft sync control, and transient weekly refresh', async () => {

@@ -12,7 +12,7 @@ test('automatic FantasyPros refresh is rate-aware and never schedules faster tha
     configured: true,
     intervalMs: 1000,
     sync: async () => { syncs += 1; return { players: 100 }; },
-    quotaStatus: () => ({ budget: 24, estimatedUsed: syncs * 12, estimatedRemaining: 24 - syncs * 12, fullSyncCost: 12 }),
+    quotaStatus: () => ({ budget: 24, estimatedUsed: syncs * 13, estimatedRemaining: 24 - syncs * 13, fullSyncCost: 13 }),
     setIntervalImpl: (_callback, milliseconds) => {
       scheduledMs = milliseconds;
       return { unref() {} };
@@ -35,7 +35,7 @@ test('disabled auto-refresh does not call the provider', async () => {
     configured: false,
     intervalMs: 24 * 60 * 60 * 1000,
     sync: async () => { syncs += 1; },
-    quotaStatus: () => ({ budget: 24, estimatedUsed: 0, estimatedRemaining: 24, fullSyncCost: 12 })
+    quotaStatus: () => ({ budget: 24, estimatedUsed: 0, estimatedRemaining: 24, fullSyncCost: 13 })
   });
   controller.start();
   await new Promise((resolve) => setImmediate(resolve));
