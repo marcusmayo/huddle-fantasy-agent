@@ -110,7 +110,7 @@ With Huddle running, use a second terminal:
 npm run preflight
 ```
 
-Preflight automatically refreshes and persists provider evidence when the snapshot is missing, stale, or below the Yahoo crosswalk threshold. A deliberate forced refresh remains available through `POST /api/data/sources/sync`, but should not be used repeatedly because one complete refresh can consume up to 12 FantasyPros requests.
+Preflight automatically refreshes and persists provider evidence when the snapshot is missing, stale, below the Yahoo crosswalk threshold, or too shallow to cover every selection in the largest imported draft. A deliberate forced refresh remains available through `POST /api/data/sources/sync`, but should not be used repeatedly because one complete refresh can consume up to 13 FantasyPros requests.
 
 The readiness line must say:
 
@@ -124,12 +124,13 @@ Preflight must show:
 - every real league ready and verified;
 - player evidence no older than 36 hours;
 - Yahoo crosswalk coverage at or above 80%;
+- draft pool depth at or above the league's teams multiplied by drafted roster slots (126 for DR Fantasy);
 - Yahoo draft auto-sync enabled;
 - no quarantined or unwritable league state.
 
 If preflight reports `FANTASYPROS_KEY_MISSING`, configure `FANTASYPROS_API_KEY` in the Codespace secrets/environment and restart the Codespace. Yahoo OAuth, Tank01, and OpenRouter credentials do not replace the FantasyPros primary evidence key in the current architecture.
 
-One full six-position FantasyPros refresh can use up to 12 requests. Do not repeatedly force refresh. The normal startup/24-hour schedule uses cached data and the configured local budget.
+One full FantasyPros refresh can use up to 13 requests: six rankings, six projections, and one canonical player-metadata/external-ID request. Do not repeatedly force refresh. The normal startup/24-hour schedule uses cached data and the configured local budget. Ranked players are retained even when the projection response is smaller; missing projections are clearly marked as deterministic rank estimates, and Yahoo-mapped Tank01/Sleeper candidates can extend late-round coverage.
 
 ### 5. Rehearse the exact league
 
@@ -169,8 +170,8 @@ Before the real draft:
 1. Make the selection only in Yahoo.
 2. After every completed pick, confirm Huddle's recent-pick list agrees with Yahoo before trusting the next recommendation.
 3. If sync is merely delayed, use **Sync now** once. Do not repeatedly click it.
-4. If an opponent player cannot be resolved, enter that completed pick manually and continue.
-5. If the sync panel is **Degraded** or **Blocked**, stop automatic sync and use manual entry. Do not enter a pick both manually and automatically unless the recent-pick list proves it is absent; stable event IDs protect replays but cannot correct a wrong player choice.
+4. If a player is outside the recommendation pool, Huddle first performs a read-only Yahoo identity lookup. If that lookup fails, Huddle records the Yahoo player key, marks sync **Degraded**, and continues processing later picks. Review the unresolved row; use manual entry only if the completed-pick count or identity differs from Yahoo.
+5. If the sync panel remains **Degraded** or becomes **Blocked**, compare the recent-pick list with Yahoo before stopping automatic sync and using manual entry. Do not enter a pick both manually and automatically unless the recent-pick list proves it is absent; stable event IDs protect replays but cannot correct a wrong player choice.
 6. Verify the preferred player is still available in Yahoo and that Huddle's roster matches the drafted roster.
 7. Treat incomplete provider evidence, unsupported settings, or a recommendation that conflicts with Yahoo roster rules as a stop condition.
 
@@ -229,6 +230,7 @@ Do not use automated Yahoo reads as the source of truth when any of these is tru
 - the OAuth account is disconnected or refresh fails;
 - the configured league/team differs from Yahoo;
 - crosswalk coverage is below 80%;
+- player-pool depth is below the complete draft size;
 - player evidence is over 36 hours old;
 - draft sync is blocked or repeatedly degraded;
 - completed-pick order differs from Yahoo;

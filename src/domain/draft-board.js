@@ -176,7 +176,14 @@ function whyLines(player, components, mine, targets, waitProbability) {
 function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'balanced' }) {
   if (!STYLES[style]) throw new Error(`Unknown recommendation style: ${style}`);
   const draftedIds = new Set(picks.map((pick) => pick.playerId));
-  const available = players.filter((player) => !draftedIds.has(player.id));
+  const draftedYahooKeys = new Set(picks.map((pick) => String(pick.yahooPlayerKey || '')).filter(Boolean));
+  const draftedYahooIds = new Set([...draftedYahooKeys].map((key) => key.includes('.p.') ? key.split('.p.').at(-1) : key));
+  const available = players.filter((player) => {
+    if (draftedIds.has(player.id)) return false;
+    const key = String(player.yahooPlayerKey || '');
+    const id = key.includes('.p.') ? key.split('.p.').at(-1) : key;
+    return !key || (!draftedYahooKeys.has(key) && !draftedYahooIds.has(id));
+  });
   if (!available.length) return [];
 
   const playerById = new Map(players.map((player) => [player.id, player]));

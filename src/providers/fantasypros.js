@@ -4,7 +4,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DST'];
-const REQUESTS_PER_FULL_SYNC = POSITIONS.length * 2;
+// Rankings and projections are position-specific. The metadata request supplies
+// canonical external IDs (including Yahoo) for every ranked player.
+const REQUESTS_PER_FULL_SYNC = POSITIONS.length * 2 + 1;
 const IMAGE_FIELD_RE = /(avatar|headshot|image|photo|picture|portrait)/i;
 
 function stripPlayerImageFields(value) {
@@ -80,6 +82,10 @@ function normalizeRankedPlayer(raw, position) {
 
 function projectionPlayerId(raw) {
   return raw?.fpid || raw?.player_id || raw?.playerId || raw?.id || null;
+}
+
+function metadataPlayerId(raw) {
+  return raw?.player_id || raw?.playerId || raw?.fpid || raw?.id || null;
 }
 
 function projectionStats(raw) {
@@ -180,10 +186,13 @@ class FantasyProsClient {
 
   async loadDraftPool({ season, scoring = 'PPR', force = false } = {}) {
     if (!season) throw new Error('season is required');
-    const plan = POSITIONS.flatMap((position) => [
+    const plan = [
+      this.requestDescriptor('/nfl/players', {}),
+      ...POSITIONS.flatMap((position) => [
       this.requestDescriptor(`/nfl/${season}/consensus-rankings`, { position, scoring, week: 0 }),
       this.requestDescriptor(`/nfl/${season}/projections`, { position, week: 0 })
-    ]);
+      ])
+    ];
     const requiredRequests = force ? plan.length : plan.filter((item) => !this.freshCache(item.cachePath)).length;
     const quota = this.quotaStatus();
     if (requiredRequests > quota.estimatedRemaining) {
@@ -192,16 +201,25 @@ class FantasyProsClient {
       error.details = { ...quota, requiredRequests };
       throw error;
     }
-    const batches = await Promise.all(POSITIONS.map(async (position) => {
+    const [metadata, batches] = await Promise.all([
+      this.request('/nfl/players', {}, { force }),
+      Promise.all(POSITIONS.map(async (position) => {
       const [rankings, projections] = await Promise.all([
         this.request(`/nfl/${season}/consensus-rankings`, { position, scoring, week: 0 }, { force }),
         this.request(`/nfl/${season}/projections`, { position, week: 0 }, { force })
       ]);
       return { position, rankings, projections };
-    }));
+      }))
+    ]);
+
+    const metadataById = new Map(responsePlayers(metadata.payload)
+      .map((raw) => [metadataPlayerId(raw), raw])
+      .filter(([id]) => id)
+      .map(([id, raw]) => [String(id), raw]));
 
     const players = [];
-    let complete = true;
+    let complete = !metadata.truncated;
+    let projectedPlayers = 0;
     for (const batch of batches) {
       complete &&= !batch.rankings.truncated && !batch.projections.truncated;
       const projectionById = new Map(responsePlayers(batch.projections.payload)
@@ -209,26 +227,39 @@ class FantasyProsClient {
         .filter(([id]) => id)
         .map(([id, raw]) => [String(id), raw]));
       for (const raw of responsePlayers(batch.rankings.payload)) {
-        const player = normalizeRankedPlayer(raw, batch.position);
+        const rawId = raw?.player_id || raw?.playerId || raw?.id;
+        const player = normalizeRankedPlayer({ ...(metadataById.get(String(rawId)) || {}), ...raw }, batch.position);
         if (!player) continue;
         const projection = projectionById.get(player.fantasyProsId) || {};
         const projectedPoints = projectionPoints(projection, scoring);
-        if (!Number.isFinite(projectedPoints)) continue;
-        const spread = Math.max(12, projectedPoints * 0.16);
+        if (Number.isFinite(projectedPoints)) projectedPlayers += 1;
+        const spread = Number.isFinite(projectedPoints) ? Math.max(12, projectedPoints * 0.16) : null;
         players.push({
           ...player,
           projectedPoints,
-          floor: firstNumber(projection.floor, projection.fpts_floor) ?? projectedPoints - spread,
-          ceiling: firstNumber(projection.ceiling, projection.fpts_ceiling) ?? projectedPoints + spread
+          floor: Number.isFinite(projectedPoints)
+            ? firstNumber(projection.floor, projection.fpts_floor) ?? projectedPoints - spread
+            : null,
+          ceiling: Number.isFinite(projectedPoints)
+            ? firstNumber(projection.ceiling, projection.fpts_ceiling) ?? projectedPoints + spread
+            : null,
+          projectionSource: Number.isFinite(projectedPoints) ? 'fantasypros-api' : 'missing'
         });
       }
     }
+    const uniquePlayers = [...new Map(players.map((player) => [player.id, player])).values()];
+    complete &&= projectedPlayers === uniquePlayers.length;
     return {
       source: 'fantasypros-api',
       season,
       complete,
       fetchedAt: new Date().toISOString(),
-      players
+      projectionCoverage: {
+        projected: projectedPlayers,
+        ranked: uniquePlayers.length,
+        coverage: uniquePlayers.length ? Math.round((projectedPlayers / uniquePlayers.length) * 10_000) / 10_000 : 0
+      },
+      players: uniquePlayers
     };
   }
 
@@ -276,6 +307,7 @@ module.exports = {
   REQUESTS_PER_FULL_SYNC,
   isTruncated,
   normalizeRankedPlayer,
+  metadataPlayerId,
   projectionPlayerId,
   projectionPoints,
   responsePlayers,

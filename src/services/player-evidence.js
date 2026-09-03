@@ -1,6 +1,15 @@
 'use strict';
 
 const SOURCE_WEIGHTS = Object.freeze({ fantasyPros: 0.675, tank01: 0.325 });
+const SUPPORTED_POSITIONS = new Set(['QB', 'RB', 'WR', 'TE', 'K', 'DEF']);
+const POSITION_PROJECTION_BASELINES = Object.freeze({
+  QB: 320,
+  RB: 235,
+  WR: 220,
+  TE: 165,
+  K: 135,
+  DEF: 125
+});
 
 function normalizeName(value) {
   return String(value || '')
@@ -13,6 +22,17 @@ function normalizeName(value) {
 function normalizePosition(value) {
   const position = String(value || '').toUpperCase();
   return position === 'DST' || position === 'D/ST' ? 'DEF' : position;
+}
+
+function positiveNumber(value) {
+  const number = value === null || value === undefined || value === '' ? Number.NaN : Number(value);
+  return Number.isFinite(number) && number > 0 ? number : null;
+}
+
+function finiteNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function yahooId(player) {
@@ -82,6 +102,68 @@ function positionalScores(rows, rankOf) {
   return output;
 }
 
+function draftRank(player, fallback) {
+  const value = Number(player?.expertRank ?? player?.adp);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function projectedFromNeighbors(player, index, group, known) {
+  const rank = draftRank(player, index + 1);
+  const before = [...known].reverse().find((item) => item.rank <= rank) || null;
+  const after = known.find((item) => item.rank >= rank) || null;
+  if (before && after && before !== after && after.rank !== before.rank) {
+    const progress = (rank - before.rank) / (after.rank - before.rank);
+    return before.points + (after.points - before.points) * progress;
+  }
+  if (before) return before.points * (0.985 ** Math.max(0, rank - before.rank));
+  if (after) return after.points * (1.015 ** Math.max(0, after.rank - rank));
+  const baseline = POSITION_PROJECTION_BASELINES[player.position] || 150;
+  return baseline * (0.97 ** index);
+}
+
+function ensureDraftProjections(players = []) {
+  const output = players.map((player) => ({ ...player }));
+  const groups = output.reduce((result, player) => {
+    if (SUPPORTED_POSITIONS.has(player.position)) (result[player.position] ||= []).push(player);
+    return result;
+  }, {});
+  let imputed = 0;
+  let provided = 0;
+  for (const group of Object.values(groups)) {
+    group.sort((left, right) => draftRank(left, Number.MAX_SAFE_INTEGER) - draftRank(right, Number.MAX_SAFE_INTEGER)
+      || left.name.localeCompare(right.name));
+    const known = group.map((player, index) => ({
+      player,
+      rank: draftRank(player, index + 1),
+      points: Number(player.projectedPoints)
+    })).filter((item) => Number.isFinite(item.points) && item.points > 0);
+    group.forEach((player, index) => {
+      let projectedPoints = positiveNumber(player.projectedPoints);
+      const hasProjection = projectedPoints != null;
+      if (hasProjection) provided += 1;
+      else {
+        projectedPoints = Math.max(1, projectedFromNeighbors(player, index, group, known));
+        imputed += 1;
+      }
+      const spread = Math.max(12, projectedPoints * 0.16);
+      player.projectedPoints = Math.round(projectedPoints * 100) / 100;
+      player.floor = finiteNumber(player.floor) ?? Math.max(0, Math.round((projectedPoints - spread) * 100) / 100);
+      player.ceiling = finiteNumber(player.ceiling) ?? Math.round((projectedPoints + spread) * 100) / 100;
+      player.projectionImputed = !hasProjection;
+      if (!hasProjection) player.projectionSource = known.length ? 'rank-interpolation' : 'rank-baseline';
+    });
+  }
+  return {
+    players: output,
+    coverage: {
+      provided,
+      imputed,
+      total: output.length,
+      providedRatio: output.length ? Math.round((provided / output.length) * 10_000) / 10_000 : 0
+    }
+  };
+}
+
 function reconcilePlayerEvidence(primaryPool, { tank01 = null, sleeper = null, errors = [] } = {}) {
   const primaryPlayers = primaryPool.players || [];
   const tankPlayers = tank01?.players || [];
@@ -95,8 +177,9 @@ function reconcilePlayerEvidence(primaryPool, { tank01 = null, sleeper = null, e
   let tankMatched = 0;
   let sleeperMatched = 0;
   let sleeperCrosswalkMatched = 0;
+  const matchedTankRows = new Set();
 
-  const players = primaryPlayers.map((player) => {
+  const primaryReconciled = primaryPlayers.map((player) => {
     const tankPlayer = matchEvidence(player, tankIndex);
     const sleeperPlayer = matchEvidence(player, sleeperIndex);
     const sleeperIdentity = matchEvidence(player, sleeperIdentityIndex);
@@ -105,7 +188,10 @@ function reconcilePlayerEvidence(primaryPool, { tank01 = null, sleeper = null, e
     const sourceConsensus = tank01Normalized == null
       ? fantasyProsNormalized
       : fantasyProsNormalized * SOURCE_WEIGHTS.fantasyPros + tank01Normalized * SOURCE_WEIGHTS.tank01;
-    if (tankPlayer) tankMatched += 1;
+    if (tankPlayer) {
+      tankMatched += 1;
+      matchedTankRows.add(tankPlayer);
+    }
     if (sleeperPlayer) sleeperMatched += 1;
     if (sleeperIdentity?.yahooId) sleeperCrosswalkMatched += 1;
     const primaryRank = Number(player.expertRank ?? player.adp);
@@ -126,6 +212,11 @@ function reconcilePlayerEvidence(primaryPool, { tank01 = null, sleeper = null, e
       tank01Projection: Number.isFinite(tankPlayer?.projectedPoints) ? tankPlayer.projectedPoints : null,
       sourceDisagreementSlots: disagreementSlots,
       sourceDisagreement: disagreementSlots != null && disagreementSlots >= 12,
+      projectedPoints: positiveNumber(player.projectedPoints)
+        ?? positiveNumber(tankPlayer?.projectedPoints),
+      projectionSource: positiveNumber(player.projectedPoints) != null
+        ? player.projectionSource || 'fantasypros-api'
+        : positiveNumber(tankPlayer?.projectedPoints) != null ? 'tank01-api' : 'missing',
       sleeperTrend: sleeperPlayer ? {
         direction: sleeperPlayer.direction,
         adds: sleeperPlayer.adds,
@@ -136,6 +227,59 @@ function reconcilePlayerEvidence(primaryPool, { tank01 = null, sleeper = null, e
       } : null
     };
   });
+
+  // A limited FantasyPros projection response must not cap the identity or
+  // reconciliation pool. Tank01 supplies late-round ADP candidates while the
+  // cached Sleeper player map supplies their Yahoo identities. These rows are
+  // explicitly marked as secondary fallback evidence.
+  const seenYahooIds = new Set(primaryReconciled.map(yahooId).filter(Boolean));
+  const fallbackPlayers = [];
+  for (const tankPlayer of tankPlayers) {
+    if (matchedTankRows.has(tankPlayer) || !SUPPORTED_POSITIONS.has(normalizePosition(tankPlayer.position))) continue;
+    const sleeperIdentity = matchEvidence(tankPlayer, sleeperIdentityIndex);
+    const fallbackYahooId = yahooId(sleeperIdentity);
+    if (!fallbackYahooId || seenYahooIds.has(fallbackYahooId)) continue;
+    const sleeperPlayer = matchEvidence(tankPlayer, sleeperIndex);
+    const position = normalizePosition(tankPlayer.position);
+    const rank = Number(tankPlayer.rank);
+    fallbackPlayers.push({
+      id: tankPlayer.tank01Id ? `tank01:${tankPlayer.tank01Id}` : `secondary:${identityKey(tankPlayer)}`,
+      name: String(tankPlayer.name),
+      position,
+      team: String(tankPlayer.team || sleeperIdentity?.team || 'FA').toUpperCase(),
+      yahooPlayerKey: fallbackYahooId,
+      expertRank: null,
+      adp: Number.isFinite(rank) ? rank : null,
+      tier: 99,
+      byeWeek: null,
+      injuryStatus: null,
+      risk: 0.3,
+      projectedPoints: positiveNumber(tankPlayer.projectedPoints),
+      projectionSource: positiveNumber(tankPlayer.projectedPoints) != null ? 'tank01-api' : 'missing',
+      evidenceRole: 'secondary-fallback',
+      sourceConsensus: tankPositionScores.get(tankPlayer) ?? 0.25,
+      sourceRanks: {
+        fantasyPros: null,
+        fantasyProsNormalized: null,
+        tank01: Number.isFinite(rank) ? rank : null,
+        tank01Normalized: tankPositionScores.get(tankPlayer) ?? null
+      },
+      tank01Projection: positiveNumber(tankPlayer.projectedPoints),
+      sourceDisagreementSlots: null,
+      sourceDisagreement: false,
+      sleeperTrend: sleeperPlayer ? {
+        direction: sleeperPlayer.direction,
+        adds: sleeperPlayer.adds,
+        drops: sleeperPlayer.drops,
+        net: sleeperPlayer.net,
+        lookbackHours: sleeper?.lookbackHours || 24,
+        attribution: sleeper.attribution || 'Sleeper'
+      } : null
+    });
+    seenYahooIds.add(fallbackYahooId);
+  }
+  const completed = ensureDraftProjections([...primaryReconciled, ...fallbackPlayers]);
+  const players = completed.players;
 
   const activeSources = ['fantasypros'];
   if (tankPlayers.length) activeSources.push('tank01');
@@ -168,7 +312,9 @@ function reconcilePlayerEvidence(primaryPool, { tank01 = null, sleeper = null, e
       yahooRole: 'league scoring and player availability are authoritative filters',
       coverage: {
         primaryPlayers: primaryPlayers.length,
+        totalPlayers: players.length,
         tank01Matched: tankMatched,
+        secondaryFallbackPlayers: fallbackPlayers.length,
         sleeperMatched,
         sleeperCrosswalkMatched,
         ambiguousTank01: tankIndex.ambiguousYahooIds.size + tankIndex.ambiguousIdentities.size,
@@ -179,6 +325,7 @@ function reconcilePlayerEvidence(primaryPool, { tank01 = null, sleeper = null, e
         tank01: tank01?.fetchedAt || null,
         sleeper: sleeper?.fetchedAt || null
       },
+      projectionCoverage: completed.coverage,
       warnings,
       errors: errors.map((error) => ({
         provider: error.provider,
@@ -196,6 +343,7 @@ module.exports = {
   matchEvidence,
   normalizeName,
   positionalScores,
+  ensureDraftProjections,
   reconcilePlayerEvidence,
   yahooId
 };

@@ -8,6 +8,7 @@ function printHuman(report) {
   console.log(`Huddle live-draft readiness: ${report.readyForLiveDraft ? 'READY' : 'NOT READY'}`);
   console.log(`Yahoo account: ${report.account.connected ? 'connected' : 'not connected'}`);
   console.log(`Player crosswalk: ${report.playerEvidence.crosswalk.mapped}/${report.playerEvidence.crosswalk.players} (${(report.playerEvidence.crosswalk.coverage * 100).toFixed(1)}%)`);
+  console.log(`Draft pool depth: ${report.playerEvidence.crosswalk.players}/${report.playerEvidence.crosswalk.requiredPlayers || 0}${report.playerEvidence.crosswalk.playerShortfall ? ` (short by ${report.playerEvidence.crosswalk.playerShortfall})` : ' (complete)'}`);
   console.log(`Evidence: ${report.playerEvidence.source || 'not loaded'} · ${report.playerEvidence.ageHours == null ? 'age unknown' : `${report.playerEvidence.ageHours}h old`}`);
   console.log(`Draft polling: ${report.yahooAutomation.draftAutoSyncEnabled ? 'enabled' : 'disabled'} · ${report.yahooAutomation.draftPollSeconds}s`);
   console.log(`Weekly preview: ${report.yahooAutomation.weeklyAutoRefreshEnabled ? 'scheduled' : 'manual'} · transient only`);
@@ -33,6 +34,7 @@ function needsLiveEvidence(report, maximumAgeHours) {
   return /synthetic|demo|fixture/.test(source)
     || report.playerEvidence.ageHours == null
     || report.playerEvidence.ageHours > maximumAgeHours
+    || report.playerEvidence.crosswalk.playerShortfall > 0
     || report.playerEvidence.crosswalk.coverage < report.playerEvidence.crosswalk.requiredCoverage;
 }
 

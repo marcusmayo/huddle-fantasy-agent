@@ -26,6 +26,29 @@ function manualPlayer(input) {
   return { id: `manual:${fingerprint}`, name, position, team };
 }
 
+function externalYahooPlayer(input) {
+  const value = input?.externalPlayer;
+  if (!value) return null;
+  const yahooPlayerKey = String(value.yahooPlayerKey || '').trim().slice(0, 120);
+  if (!yahooPlayerKey) {
+    const error = new Error('External Yahoo player requires yahooPlayerKey');
+    error.code = 'INVALID_EXTERNAL_PLAYER';
+    throw error;
+  }
+  const normalizedPosition = String(value.position || '').trim().toUpperCase().replace('D/ST', 'DEF').replace('DST', 'DEF');
+  const position = POSITIONS.has(normalizedPosition) ? normalizedPosition : null;
+  const yahooId = yahooPlayerKey.includes('.p.') ? yahooPlayerKey.split('.p.').at(-1) : yahooPlayerKey;
+  const suppliedName = String(value.name || '').trim().slice(0, 80);
+  return {
+    id: `yahoo:${yahooPlayerKey}`,
+    yahooPlayerKey,
+    name: suppliedName.length >= 2 ? suppliedName : `Yahoo player ${yahooId}`,
+    position,
+    team: String(value.team || 'FA').trim().toUpperCase().slice(0, 8) || 'FA',
+    resolutionStatus: position && suppliedName.length >= 2 ? 'resolved-yahoo' : 'unresolved-yahoo'
+  };
+}
+
 class DraftService {
   constructor({ league, playerPool, store, evidenceRetentionDays = 30, now = () => new Date() }) {
     this.league = league;
@@ -108,12 +131,12 @@ class DraftService {
   recordPick(id, input) {
     const session = this.state.sessions[id];
     if (!session) return this.getSession(id);
-    if (!input?.playerId && !input?.manualPlayer) {
-      const error = new Error('playerId or manualPlayer is required');
+    if (!input?.playerId && !input?.manualPlayer && !input?.externalPlayer) {
+      const error = new Error('playerId, manualPlayer, or externalPlayer is required');
       error.code = 'INVALID_PICK';
       throw error;
     }
-    const fallbackPlayer = manualPlayer(input);
+    const fallbackPlayer = manualPlayer(input) || externalYahooPlayer(input);
     const player = this.playerPool.players.find((candidate) => candidate.id === input.playerId) || fallbackPlayer;
     if (!player) {
       const error = new Error(`Unknown player: ${input.playerId}`);
@@ -140,6 +163,8 @@ class DraftService {
       playerId,
       playerName: player.name,
       position: player.position,
+      yahooPlayerKey: input.yahooPlayerKey || player.yahooPlayerKey || null,
+      resolutionStatus: player.resolutionStatus || 'resolved-pool',
       teamId: input.teamId || null,
       isMine: Boolean(input.isMine),
       observedAt: input.observedAt || this.currentIso(),
@@ -265,14 +290,18 @@ class DraftService {
     const items = [];
     for (const session of Object.values(this.state.sessions)) {
       for (const pick of session.picks || []) {
-        if (!String(pick.playerId).startsWith('manual:')) continue;
+        const isManual = String(pick.playerId).startsWith('manual:');
+        const isYahooPlaceholder = pick.resolutionStatus === 'unresolved-yahoo';
+        if (!isManual && !isYahooPlaceholder) continue;
         items.push({
           leagueId: this.league.id,
           sessionId: session.id,
-          kind: 'manual-pick',
+          kind: isYahooPlaceholder ? 'yahoo-pick' : 'manual-pick',
           playerId: pick.playerId,
           playerName: pick.playerName,
           position: pick.position,
+          yahooPlayerKey: pick.yahooPlayerKey || null,
+          overallPick: pick.overallPick,
           observedAt: pick.observedAt,
           resolution: 'needs-provider-crosswalk'
         });
@@ -396,4 +425,4 @@ class DraftService {
   }
 }
 
-module.exports = { DraftService, manualPlayer };
+module.exports = { DraftService, externalYahooPlayer, manualPlayer };

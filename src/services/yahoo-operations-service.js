@@ -5,6 +5,7 @@ const path = require('node:path');
 const { YahooDraftPoller } = require('../providers/yahoo');
 const { YahooTransientWeeklyAdapter } = require('../providers/yahoo-transient-weekly');
 const { normalizeYahooWeeklyBundle } = require('../providers/yahoo-weekly-normalizer');
+const { draftedRosterSize } = require('../domain/league');
 
 function operationsError(code, message, details) {
   return Object.assign(new Error(message), { code, details });
@@ -89,12 +90,21 @@ class YahooOperationsService {
   crosswalk() {
     const players = this.runtime.playerPool.players || [];
     const mapped = players.filter((player) => player.yahooPlayerKey).length;
+    const draftRequirements = yahooLeagueEntries(this.runtime).map((entry) => ({
+      leagueId: entry.id,
+      name: entry.config.name,
+      totalPicks: draftedRosterSize(entry.config.roster) * entry.config.teamCount
+    }));
+    const requiredPlayers = Math.max(0, ...draftRequirements.map((item) => item.totalPicks));
     return {
       players: players.length,
       mapped,
       missing: Math.max(0, players.length - mapped),
       coverage: players.length ? Math.round((mapped / players.length) * 10_000) / 10_000 : 0,
-      requiredCoverage: this.runtime.yahooDraftMinimumCrosswalkCoverage
+      requiredCoverage: this.runtime.yahooDraftMinimumCrosswalkCoverage,
+      requiredPlayers,
+      playerShortfall: Math.max(0, requiredPlayers - players.length),
+      draftRequirements
     };
   }
 
@@ -127,6 +137,10 @@ class YahooOperationsService {
     }
     if (crosswalk.coverage < crosswalk.requiredCoverage) {
       blockers.push(`Yahoo player-key coverage is ${(crosswalk.coverage * 100).toFixed(1)}%; ${(crosswalk.requiredCoverage * 100).toFixed(0)}% is required`);
+    }
+    if (crosswalk.playerShortfall) {
+      const limitingLeague = crosswalk.draftRequirements.find((item) => item.totalPicks === crosswalk.requiredPlayers);
+      blockers.push(`Player evidence pool has ${crosswalk.players} players; ${limitingLeague?.name || 'the largest Yahoo league'} requires at least ${crosswalk.requiredPlayers} for its complete draft`);
     }
     if (this.runtime.playerPool.complete === false) warnings.push('Player evidence is marked incomplete; verify every recommendation in Yahoo');
     const fetchedAt = finiteDate(this.runtime.playerPool.fetchedAt);
@@ -194,6 +208,13 @@ class YahooOperationsService {
       throw operationsError('YAHOO_IDENTIFIERS_MISSING', 'Yahoo league and target-team keys are required');
     }
     const crosswalk = this.crosswalk();
+    if (crosswalk.playerShortfall) {
+      throw operationsError(
+        'DRAFT_PLAYER_POOL_TOO_SHALLOW',
+        `Player evidence pool has ${crosswalk.players} players; automated polling requires at least ${crosswalk.requiredPlayers}`,
+        crosswalk
+      );
+    }
     if (!crosswalk.mapped || crosswalk.coverage < crosswalk.requiredCoverage) {
       throw operationsError(
         'YAHOO_PLAYER_CROSSWALK_INCOMPLETE',
@@ -225,11 +246,15 @@ class YahooOperationsService {
         const current = this.draftStatuses.get(key) || status;
         current.lastAttemptAt = this.iso();
         if (event.code === 'SYNCED') {
-          current.state = 'running';
+          current.state = event.unresolvedPicks?.length ? 'degraded' : 'running';
           current.lastSuccessAt = this.iso();
           current.observedPicks = event.observedPicks;
           current.draftSlot = service.getSession(sessionId).draftSlot;
-          current.lastError = null;
+          current.lastError = event.unresolvedPicks?.length ? {
+            code: 'UNRESOLVED_PLAYERS_RECORDED',
+            message: `Recorded ${event.unresolvedPicks.length} Yahoo pick(s) by player key; review picks ${event.unresolvedPicks.join(', ')}`,
+            picks: event.unresolvedPicks
+          } : null;
         } else if (event.code === 'DRAFT_SLOT_RECONCILED') {
           current.draftSlot = event.draftSlot;
           current.draftSlotSource = 'yahoo-draft-result';
