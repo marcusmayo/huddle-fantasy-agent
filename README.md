@@ -29,7 +29,7 @@ September 2026 · Silent feature overviews, not live-account recordings. Select 
 
 ![Huddle connected to a read-only Yahoo league and preparing a league-specific draft session](docs/assets/huddle-draft-room-preview.png)
 
-Filter and resize the player board, search beyond the visible rows, and track recent picks. Yahoo picks sync automatically in Yahoo mode; manual entry and confirmed screenshot review remain available. Unmatched players are flagged without stopping later picks.
+Filter and resize the player board, search beyond the visible rows, and track recent picks. Yahoo picks sync automatically in Yahoo mode; manual entry and confirmed screenshot review remain available. Unmatched players are flagged without stopping later picks. **`READY` does not change a manual session to Yahoo mode; look for `Yahoo sync` in the session header for automatic pick updates.**
 
 **How picks are ranked:** Yahoo controls availability and league rules. FantasyPros contributes **67.5%** and Tank01 **32.5%** of the source-consensus component—not the entire score. Without Tank01, that component uses FantasyPros alone. Sleeper trends break close ties. The engine also considers projected value, roster needs, scarcity, risk and next-turn availability. AI can explain a recommendation but cannot change its order.
 
@@ -59,7 +59,7 @@ Open `http://127.0.0.1:8787`. The synthetic demo needs no credentials and never 
 
 In your local `.env`, set the Yahoo credentials, registered callback URL and encryption key shown in [.env.example](.env.example), then set `HUDDLE_YAHOO_OAUTH_ENABLED=true`. Add provider keys for live rankings and screenshot analysis. Keep credentials and real league details out of Git.
 
-Choose **Connect Yahoo → Import this league**, confirm the settings, then open **Draft room**. The **Draft readiness** panel checks automatically for connected, imported Yahoo leagues. Select **Check draft readiness** to rerun it—no terminal required.
+Choose **Connect Yahoo → Import this league**, confirm the settings, then open **Draft room**. **Draft readiness** appears below the workspace tabs, including during an active draft. It checks automatically for connected, imported Yahoo leagues. Select **Check draft readiness** to rerun it—no terminal required.
 
 **Open a live draft only when the panel shows `READY`.** It checks account access, settings, player identities, data freshness, draft depth and read-only Yahoo access. Blockers and warnings appear separately. Recheck after a restart, settings/data changes, or 15 minutes; review projection warnings and confirm the polling allowance with Yahoo.
 
@@ -72,6 +72,8 @@ npm run check
 ```
 
 The documented suite has **134 tests**, including full drafts and 18-week reviews for league sizes from three through ten teams, plus isolation, OAuth, identity matching and readiness checks. These are application tests, not production load or security certification.
+
+**Operator check — September 4, 2026:** A screenshot of the running instance showed `READY`, 177/177 player identities mapped, 177 players against 120 required, and passing Yahoo read checks. Projection and polling warnings remained. This verifies the displayed readiness result, not a completed live draft or season.
 
 This is a **personal-use MVP**, not a commercial multi-user service. Before launch: validate each league's first live payload, confirm Yahoo polling/history-retention permissions, and add user isolation, authenticated administration, managed secrets, monitoring and commercial data licenses. There is no fixed league-count limit, but hosted concurrency is not validated. Player photos stay off unless separately licensed.
 
