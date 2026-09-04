@@ -1,0 +1,21 @@
+name: Readiness development review
+on:
+  push:
+    branches: [feat/in-app-draft-readiness]
+    paths: [.github/workflows/readiness-review.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: git archive --format=zip -o readiness-source.zip HEAD src public config scripts test package.json package-lock.json README.md .env.example docs/technical-reference.md docs/september-8-operations.md docs/live-draft-runbook.md docs/yahoo-integration-safety.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: readiness-source
+          path: readiness-source.zip
+          retention-days: 1
