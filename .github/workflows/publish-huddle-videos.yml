@@ -1,0 +1,120 @@
+name: Publish Huddle September 2026 videos
+
+on:
+  push:
+    branches: [docs/publish-linkedin-videos-20260904]
+    paths: [docs/media/publish-manifest.json]
+
+permissions: {}
+
+concurrency:
+  group: publish-huddle-september-2026-videos
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'marcusmayo/huddle-fantasy-agent'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Read publication manifest
+        uses: actions/checkout@v4
+        with:
+          path: source
+          persist-credentials: false
+      - name: Check out current main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: publish
+      - name: Install video inspection tools
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Fetch exact approved files and verify checksums
+        shell: python
+        run: |
+          import hashlib, json, pathlib, subprocess, urllib.request
+          from urllib.parse import urlparse
+          manifest = json.loads(pathlib.Path('source/docs/media/publish-manifest.json').read_text())
+          expected = {
+              'huddle-linkedin-article-1920x1080.mp4': ('0e6d7549f205c07d806a5da5281cd951c074af833073df236c6ff2e7b4eb3841', 29353311, 1920, 1080),
+              'huddle-linkedin-feed-1080x1350.mp4': ('797434c9cef79614aa528efa820e54eef88eb8bda9d986117bb6bc730e061332', 29297538, 1080, 1350),
+          }
+          assert set(manifest['videos']) == set(expected), 'Unexpected video manifest'
+          assets = pathlib.Path('publish/docs/assets')
+          assets.mkdir(parents=True, exist_ok=True)
+          report = {'date': '2026-09-04', 'kind': 'Silent editorial feature overview, not live app footage', 'files': []}
+          for filename, (digest, size, width, height) in expected.items():
+              url = manifest['videos'][filename]
+              parsed = urlparse(url)
+              assert parsed.scheme == 'https' and parsed.hostname and parsed.hostname.endswith('.runwayml.com'), 'Unexpected source host'
+              target = assets / filename
+              with urllib.request.urlopen(url, timeout=120) as response:
+                  data = response.read(size + 1)
+              assert len(data) == size, f'Wrong file size: {filename}'
+              assert hashlib.sha256(data).hexdigest() == digest, f'Checksum mismatch: {filename}'
+              target.write_bytes(data)
+              probe = json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-show_streams', '-show_format', '-of', 'json', str(target)]))
+              streams = probe['streams']
+              assert len(streams) == 1 and streams[0]['codec_name'] == 'h264'
+              assert (streams[0]['width'], streams[0]['height']) == (width, height)
+              assert streams[0]['r_frame_rate'] == '30/1'
+              assert abs(float(probe['format']['duration']) - 60) < 0.1
+              subprocess.run(['ffmpeg', '-v', 'error', '-xerror', '-i', str(target), '-f', 'null', '-'], check=True, timeout=180)
+              report['files'].append({'path': 'docs/assets/' + filename, 'bytes': size, 'sha256': digest, 'width': width, 'height': height, 'fps': 30, 'seconds': 60, 'full_decode': 'passed'})
+          (assets / 'huddle-linkedin-video-validation.json').write_text(json.dumps(report, indent=2) + '\n')
+      - name: Create README preview from the landscape video
+        working-directory: publish
+        run: |
+          ffmpeg -v error -y -ss 1 -i docs/assets/huddle-linkedin-article-1920x1080.mp4 -frames:v 1 -vf scale=1280:-1 -q:v 2 docs/assets/huddle-linkedin-overview-thumbnail.jpg
+          ffmpeg -v error -y -i docs/assets/huddle-linkedin-article-1920x1080.mp4 -filter_complex "fps=3,scale=800:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=96[p];[s1][p]paletteuse=dither=bayer:bayer_scale=4" -loop 0 docs/assets/huddle-linkedin-overview-preview.gif
+          test $(stat -c%s docs/assets/huddle-linkedin-overview-preview.gif) -lt 10000000
+      - name: Add landscape preview and both video links to README
+        shell: python
+        run: |
+          import pathlib
+          root = pathlib.Path('publish')
+          readme = root / 'README.md'
+          text = readme.read_text()
+          start = '<!-- HUDDLE-LINKEDIN-VIDEOS:START -->'
+          end = '<!-- HUDDLE-LINKEDIN-VIDEOS:END -->'
+          section = '''<!-- HUDDLE-LINKEDIN-VIDEOS:START -->
+          ## Huddle in 60 seconds
+
+          **Current feature overview — September 2026.** Draft-day guidance and weekly management, with you in control.
+
+          [![Watch Huddle's 60-second feature overview: Yahoo connection, draft recommendations, weekly reviews, waivers and human control](docs/assets/huddle-linkedin-overview-preview.gif)](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-linkedin-article-1920x1080.mp4)
+
+          **[Watch / download the landscape video (1920 × 1080)](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-linkedin-article-1920x1080.mp4)** · **[Download the LinkedIn feed video (1080 × 1350)](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-linkedin-feed-1080x1350.mp4)**
+
+          The animated preview above is derived from the landscape video; select it for the full-resolution MP4. Both videos are 60-second, silent, text-led feature overviews, not recordings of a live Yahoo account. No real league results or credentials appear. Huddle recommends; the user makes every pick, lineup change and waiver claim in Yahoo.
+
+          [Video file verification](docs/assets/huddle-linkedin-video-validation.json) · [Static thumbnail](docs/assets/huddle-linkedin-overview-thumbnail.jpg) · [Earlier walkthrough — August 9, 2026](docs/assets/huddle-product-demo.mp4)
+          <!-- HUDDLE-LINKEDIN-VIDEOS:END -->
+          '''
+          import textwrap
+          section = textwrap.dedent(section)
+          if start in text:
+              assert end in text
+              a = text.index(start)
+              b = text.index(end, a) + len(end)
+              text = text[:a] + section.rstrip() + text[b:]
+          else:
+              anchor = '## Current MVP status\n'
+              assert text.count(anchor) == 1, 'README anchor changed; refusing to overwrite'
+              text = text.replace(anchor, section + '\n' + anchor, 1)
+          readme.write_text(text)
+      - name: Publish only video assets and README to main
+        working-directory: publish
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md docs/assets/huddle-linkedin-article-1920x1080.mp4 docs/assets/huddle-linkedin-feed-1080x1350.mp4 docs/assets/huddle-linkedin-video-validation.json docs/assets/huddle-linkedin-overview-thumbnail.jpg docs/assets/huddle-linkedin-overview-preview.gif
+          if git diff --cached --quiet; then
+            echo 'Approved videos and README are already published.'
+          else
+            git commit -m 'docs: publish LinkedIn-ready Huddle videos and README preview'
+            git push origin HEAD:main
+          fi
+          git rev-parse HEAD >> "$GITHUB_STEP_SUMMARY"
