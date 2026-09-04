@@ -5,6 +5,15 @@ const { pickOwner } = require('../domain/league');
 
 const DEFAULT_BASE_URL = 'https://fantasysports.yahooapis.com/fantasy/v2';
 
+function qualifyYahooPlayerKey(playerKey, leagueKey) {
+  const rawPlayerKey = String(playerKey || '').trim();
+  const rawLeagueKey = String(leagueKey || '').trim();
+  const gameKey = rawLeagueKey.includes('.l.') ? rawLeagueKey.split('.l.')[0] : '';
+  const playerId = rawPlayerKey.includes('.p.') ? rawPlayerKey.split('.p.').at(-1) : rawPlayerKey;
+  if (!gameKey || !/^\d+$/.test(playerId)) return null;
+  return `${gameKey}.p.${playerId}`;
+}
+
 function recursivelyFindDraftResults(value, output = []) {
   if (Array.isArray(value)) {
     for (const item of value) recursivelyFindDraftResults(item, output);
@@ -294,4 +303,11 @@ class YahooDraftPoller {
   }
 }
 
-module.exports = { DEFAULT_BASE_URL, YahooDraftPoller, YahooReadOnlyClient, extractDraftResults, extractYahooPlayer };
+module.exports = {
+  DEFAULT_BASE_URL,
+  YahooDraftPoller,
+  YahooReadOnlyClient,
+  extractDraftResults,
+  extractYahooPlayer,
+  qualifyYahooPlayerKey
+};

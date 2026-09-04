@@ -2,7 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { YahooDraftPoller } = require('../providers/yahoo');
+const { YahooDraftPoller, qualifyYahooPlayerKey } = require('../providers/yahoo');
 const { YahooTransientWeeklyAdapter } = require('../providers/yahoo-transient-weekly');
 const { normalizeYahooWeeklyBundle } = require('../providers/yahoo-weekly-normalizer');
 const { draftedRosterSize, positionTargets } = require('../domain/league');
@@ -371,7 +371,12 @@ class YahooOperationsService {
       throw operationsError('YAHOO_SOURCE_NOT_AVAILABLE', 'Yahoo rehearsal applies only to an imported Yahoo league');
     }
     const client = this.yahooAccount.readClient();
-    const mappedPlayer = (this.runtime.playerPool.players || []).find((player) => player.yahooPlayerKey);
+    const mappedPlayer = (this.runtime.playerPool.players || [])
+      .map((player) => ({
+        player,
+        rehearsalKey: qualifyYahooPlayerKey(player.yahooPlayerKey, entry.yahooLeagueKey)
+      }))
+      .find((candidate) => candidate.rehearsalKey);
     const timedCheck = async (name, operation, describe) => {
       const started = process.hrtime.bigint();
       try {
@@ -395,8 +400,20 @@ class YahooOperationsService {
       timedCheck('league-settings', () => client.leagueSettings(entry.yahooLeagueKey), () => 'Read-only league settings received'),
       timedCheck('draft-results', () => client.draftResults(entry.yahooLeagueKey), (value) => `${value.picks?.length || 0} completed picks visible`),
       mappedPlayer
-        ? timedCheck('player-lookup', () => client.player(mappedPlayer.yahooPlayerKey), (value) => `Yahoo player identity confirmed for ${value.name || mappedPlayer.name}`)
-        : Promise.resolve({ name: 'player-lookup', ok: false, durationMs: 0, error: { code: 'YAHOO_PLAYER_CROSSWALK_EMPTY', message: 'No Yahoo player key is available for rehearsal' } })
+        ? timedCheck(
+          'player-lookup',
+          () => client.player(mappedPlayer.rehearsalKey),
+          (value) => `Yahoo player identity confirmed for ${value.name || mappedPlayer.player.name}; current-season key used`
+        )
+        : Promise.resolve({
+          name: 'player-lookup',
+          ok: false,
+          durationMs: 0,
+          error: {
+            code: 'YAHOO_PLAYER_CROSSWALK_UNUSABLE',
+            message: 'No numeric Yahoo player ID can be qualified for the imported league season'
+          }
+        })
     ]);
     return {
       leagueId: entry.id,

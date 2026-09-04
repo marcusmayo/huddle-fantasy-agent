@@ -399,6 +399,44 @@ test('Yahoo rehearsal validates read-only settings, draft, and player endpoints 
   assert.doesNotMatch(JSON.stringify(result), /not returned/);
 });
 
+test('Yahoo rehearsal qualifies numeric and stale player IDs for the imported league season', async () => {
+  const numericPool = structuredClone(pool);
+  numericPool.players[0].yahooPlayerKey = '40059';
+  numericPool.players[1].yahooPlayerKey = '461.p.40060';
+  const lookedUp = [];
+  const operations = new YahooOperationsService({
+    runtime: {
+      season: 2026,
+      playerPool: numericPool,
+      leagues: [{ id: league.id, config: league, stateFile: '/tmp/rehearsal-qualified.json', yahooLeagueKey: '470.l.153454', yahooTeamKey: '470.l.153454.t.1', verificationStatus: 'verified' }],
+      yahooDraftAutoSyncEnabled: true,
+      yahooDraftPollIntervalMs: 15_000,
+      yahooDraftMinimumCrosswalkCoverage: 0.8,
+      yahooWeeklyAutoRefreshEnabled: false,
+      yahooWeeklyRefreshIntervalMs: 86_400_000,
+      yahooWeeklyPreviewTtlMs: 3_600_000,
+      operationsMaximumEvidenceAgeHours: 36,
+      leagueErrors: []
+    },
+    yahooAccount: {
+      status: () => ({ enabled: true, clientConfigured: true, encryptedTokenStorageConfigured: true, connected: true }),
+      readClient: () => ({
+        leagueSettings: async () => ({}),
+        draftResults: async () => ({ payload: {}, picks: [] }),
+        player: async (key) => { lookedUp.push(key); return { name: 'Qualified Player' }; }
+      })
+    },
+    draftServices: new Map(),
+    weeklyServices: new Map(),
+    now: () => new Date('2026-09-08T12:30:00.000Z')
+  });
+
+  const result = await operations.rehearse({ leagueId: league.id });
+  assert.equal(result.ready, true);
+  assert.deepEqual(lookedUp, ['470.p.40059']);
+  assert.match(result.checks.find((check) => check.name === 'player-lookup').details, /current-season key used/);
+});
+
 test('operational HTTP routes expose readiness, draft sync control, and transient weekly refresh', async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'huddle-ops-http-'));
   const calls = [];
