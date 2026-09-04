@@ -3,7 +3,7 @@ name: Publish Huddle September 2026 videos
 on:
   push:
     branches: [docs/publish-linkedin-videos-20260904]
-    paths: [docs/media/publish-manifest.json]
+    paths: [docs/media/publish-manifest.json, .github/workflows/publish-huddle-videos.yml]
 
 permissions: {}
 
@@ -30,7 +30,7 @@ jobs:
           ref: main
           path: publish
       - name: Install video inspection tools
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg
       - name: Fetch exact approved files and verify checksums
         shell: python
         run: |
@@ -68,7 +68,7 @@ jobs:
         working-directory: publish
         run: |
           ffmpeg -v error -y -ss 1 -i docs/assets/huddle-linkedin-article-1920x1080.mp4 -frames:v 1 -vf scale=1280:-1 -q:v 2 docs/assets/huddle-linkedin-overview-thumbnail.jpg
-          ffmpeg -v error -y -ss 1 -i docs/assets/huddle-linkedin-article-1920x1080.mp4 -filter_complex "fps=3,scale=800:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=96[p];[s1][p]paletteuse=dither=bayer:bayer_scale=4" -loop 0 docs/assets/huddle-linkedin-overview-preview.gif
+          ffmpeg -v error -y -ss 1 -i docs/assets/huddle-linkedin-article-1920x1080.mp4 -filter_complex "fps=1,scale=800:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=96[p];[s1][p]paletteuse=dither=bayer:bayer_scale=4" -loop 0 docs/assets/huddle-linkedin-overview-preview.gif
           test $(stat -c%s docs/assets/huddle-linkedin-overview-preview.gif) -lt 10000000
       - name: Add landscape preview and both video links to README
         shell: python
