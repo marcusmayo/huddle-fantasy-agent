@@ -8,7 +8,13 @@ const test = require('node:test');
 const { isTruncated, normalizeRankedPlayer, stripPlayerImageFields } = require('../src/providers/fantasypros');
 const { FantasyProsClient } = require('../src/providers/fantasypros');
 const { sanitizePlayerPool } = require('../src/media/player-headshots');
-const { YahooDraftPoller, YahooReadOnlyClient, extractDraftResults, extractYahooPlayer } = require('../src/providers/yahoo');
+const {
+  YahooDraftPoller,
+  YahooReadOnlyClient,
+  extractDraftResults,
+  extractYahooPlayer,
+  qualifyYahooPlayerKey
+} = require('../src/providers/yahoo');
 const { DraftService } = require('../src/services/draft-service');
 const { MemoryStateStore } = require('../src/storage/json-state-store');
 const demoLeague = require('../config/leagues/yahoo-example.json');
@@ -42,6 +48,14 @@ test('FantasyPros player identity and Yahoo cross-reference normalize', () => {
     player_yahoo_id: '40059'
   }, 'RB');
   assert.equal(documentedId.yahooPlayerKey, '40059');
+});
+
+test('Yahoo player IDs are qualified with the imported league game key', () => {
+  assert.equal(qualifyYahooPlayerKey('40059', '470.l.153454'), '470.p.40059');
+  assert.equal(qualifyYahooPlayerKey('461.p.40059', '470.l.153454'), '470.p.40059');
+  assert.equal(qualifyYahooPlayerKey('470.p.40059', '470.l.153454'), '470.p.40059');
+  assert.equal(qualifyYahooPlayerKey('not-a-yahoo-id', '470.l.153454'), null);
+  assert.equal(qualifyYahooPlayerKey('40059', 'not-a-league-key'), null);
 });
 
 test('FantasyPros payload cache strips image fields recursively', () => {
