@@ -730,11 +730,11 @@ async function rehearseYahoo() {
   const status = $('#yahoo-rehearsal-status');
   button.disabled = true;
   status.classList.remove('hidden');
-  status.textContent = 'Checking read-only settings, draft-results, and player endpoints…';
+  status.textContent = 'Checking read-only settings, draft results, player identity, and draft depth…';
   try {
     const result = await api(scoped('/yahoo/rehearsal'), { method: 'POST', body: '{}' });
     status.textContent = result.ready
-      ? `Yahoo rehearsal passed: ${result.checks.map((check) => `${check.name} ${check.durationMs}ms`).join(' · ')}. No data was changed or retained.`
+      ? `Yahoo rehearsal passed: ${result.checks.map((check) => `${check.name} ${check.durationMs}ms`).join(' · ')}. Yahoo was not changed; any depth identities are held in memory only.`
       : `Yahoo rehearsal needs attention: ${result.checks.filter((check) => !check.ok).map((check) => `${check.name}: ${check.error.message}`).join(' · ')}`;
     return result;
   } catch (error) {

@@ -390,3 +390,22 @@ test('Yahoo provider exposes GET-only league methods', () => {
   assert.equal(client.addPlayer, undefined);
   assert.equal(client.submitDraftPick, undefined);
 });
+
+test('Yahoo available-player reads can filter a league pool by draft position', async () => {
+  const requests = [];
+  const client = new YahooReadOnlyClient({
+    accessToken: 'not-a-real-token',
+    baseUrl: 'https://fantasysports.yahooapis.com/fantasy/v2',
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      return { ok: true, json: async () => ({}) };
+    }
+  });
+  await client.availablePlayers('470.l.153454', { position: 'DEF', status: 'A', start: 0, count: 100 });
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].options.method, 'GET');
+  assert.equal(
+    requests[0].url,
+    'https://fantasysports.yahooapis.com/fantasy/v2/league/470.l.153454/players;status=A;position=DEF;start=0;count=100?format=json'
+  );
+});

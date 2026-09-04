@@ -126,7 +126,7 @@ Preflight must show:
 - Yahoo crosswalk coverage at or above 80%;
 - draft pool depth at or above the league's teams multiplied by drafted roster slots (126 for DR Fantasy);
 - QB/RB/WR/TE/K/DEF depth at or above starter demand plus the configured 20% buffer;
-- a passed read-only Yahoo rehearsal for settings, draft results, and player lookup;
+- a passed read-only Yahoo rehearsal for settings, draft results, player lookup, and any required position-depth lookup;
 - Yahoo draft auto-sync enabled;
 - no quarantined or unwritable league state.
 
@@ -134,13 +134,13 @@ If preflight reports `FANTASYPROS_KEY_MISSING`, configure `FANTASYPROS_API_KEY` 
 
 One full FantasyPros refresh can use up to 13 requests: six rankings, six projections, and one canonical player-metadata/external-ID request. The seven identity-and-ranking requests are live-draft essentials. If the remaining local daily budget can cover those seven but not all projections, Huddle now completes the essential refresh, fetches as many projections as the budget permits, and marks the evidence partial. Missing projections use clearly disclosed deterministic rank estimates. If fewer than seven requests remain and no fresh cache can cover the difference, preflight stays blocked until the local budget resets. Do not repeatedly force refresh. The normal startup/24-hour schedule uses cached data and the configured local budget, and Yahoo-mapped Tank01/Sleeper candidates can extend late-round coverage.
 
-FantasyPros may return only ten D/ST ranking rows. For leagues that start two defenses, Huddle fills position depth from Sleeper's daily-cached NFL identity map, limited to one active team defense per NFL club with a numeric Yahoo ID. These rows are explicitly marked as unranked identity-depth fallback evidence, receive deterministic rank-based projections, and remain below provider-ranked defenses. Sleeper-only skill-position players are not admitted through this fallback.
+FantasyPros may return only ten D/ST ranking rows. If a position remains below its configured safety depth after the provider refresh, the Yahoo rehearsal performs a filtered, GET-only available-player read for that position. It admits only unique, current-season Yahoo identities, adds only enough rows to close the shortfall, holds them in memory, and never persists the raw response. These rows are explicitly unranked depth evidence, receive deterministic projections, and remain below provider-ranked players. The existing Sleeper identity fallback remains a secondary source when safe numeric Yahoo IDs are available.
 
 ### 5. Rehearse the exact league
 
 Before the real draft:
 
-1. Select **Run Yahoo read rehearsal** and require all three GET-only checks to pass. `npm run preflight` performs the same rehearsal automatically.
+1. Select **Run Yahoo read rehearsal** and require the three baseline GET-only checks to pass. When provider evidence is shallow at a position, a fourth GET-only depth check runs automatically. `npm run preflight` performs the same rehearsal and recalculates readiness from the augmented in-memory evidence.
 2. Create a Yahoo-source draft session with the confirmed draft slot.
 3. Confirm the **Yahoo draft sync** panel reaches **Running**.
 4. Use **Sync now** once.

@@ -5,8 +5,9 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { YahooDraftPoller, qualifyYahooPlayerKey } = require('../providers/yahoo');
 const { YahooTransientWeeklyAdapter } = require('../providers/yahoo-transient-weekly');
-const { normalizeYahooWeeklyBundle } = require('../providers/yahoo-weekly-normalizer');
+const { extractPlayers, normalizeYahooWeeklyBundle } = require('../providers/yahoo-weekly-normalizer');
 const { draftedRosterSize, positionTargets } = require('../domain/league');
+const { ensureDraftProjections, identityKey, yahooId } = require('./player-evidence');
 
 const DRAFT_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
 
@@ -78,6 +79,7 @@ class YahooOperationsService {
     this.started = false;
     this.startedAt = null;
     this.nextWeeklyRefreshAt = null;
+    this.draftDepthSupplement = Promise.resolve();
   }
 
   iso() {
@@ -375,6 +377,126 @@ class YahooOperationsService {
     };
   }
 
+  supplementDraftDepth(entry, client) {
+    const run = this.draftDepthSupplement.then(() => this._supplementDraftDepth(entry, client));
+    this.draftDepthSupplement = run.catch(() => undefined);
+    return run;
+  }
+
+  async _supplementDraftDepth(entry, client) {
+    const before = this.crosswalk();
+    if (!before.positionShortfalls.length) {
+      return { requestedPositions: [], added: 0, addedByPosition: {}, remainingShortfalls: [] };
+    }
+    if (typeof client.availablePlayers !== 'function') {
+      throw operationsError('YAHOO_DRAFT_DEPTH_UNAVAILABLE', 'Yahoo available-player reads are unavailable');
+    }
+
+    const existing = this.runtime.playerPool.players || [];
+    const additions = [];
+    const seenYahooIds = new Set(existing.map(yahooId).filter(Boolean));
+    const seenIdentities = new Set(existing.map(identityKey).filter((key) => !key.startsWith('|')));
+    const seenDefenseTeams = new Set(existing
+      .filter((player) => player.position === 'DEF')
+      .map((player) => String(player.team || '').toUpperCase())
+      .filter((team) => team && team !== 'FA'));
+    const requestedPositions = [];
+    const addedByPosition = {};
+
+    for (const shortage of before.positionShortfalls) {
+      requestedPositions.push(shortage.position);
+      const payload = await client.availablePlayers(entry.yahooLeagueKey, {
+        start: 0,
+        count: 100,
+        status: 'A',
+        position: shortage.position
+      });
+      const candidates = extractPlayers(payload, { available: true })
+        .filter((player) => player.position === shortage.position);
+      for (const candidate of candidates) {
+        if ((addedByPosition[shortage.position] || 0) >= shortage.shortfall) break;
+        const qualifiedKey = qualifyYahooPlayerKey(candidate.yahooPlayerKey, entry.yahooLeagueKey);
+        const numericId = yahooId({ yahooPlayerKey: qualifiedKey });
+        const normalizedCandidate = {
+          name: candidate.name,
+          position: candidate.position
+        };
+        const identity = identityKey(normalizedCandidate);
+        const team = String(candidate.nflTeam || 'FA').toUpperCase();
+        if (!qualifiedKey || !numericId || seenYahooIds.has(numericId) || seenIdentities.has(identity)) continue;
+        if (candidate.position === 'DEF' && (team === 'FA' || seenDefenseTeams.has(team))) continue;
+        additions.push({
+          id: `yahoo:${qualifiedKey}`,
+          yahooPlayerKey: qualifiedKey,
+          name: candidate.name,
+          position: candidate.position,
+          team,
+          expertRank: null,
+          adp: null,
+          tier: 99,
+          byeWeek: candidate.byeWeek,
+          injuryStatus: candidate.injuryStatus || null,
+          risk: 0.4,
+          projectedPoints: candidate.projectedPoints,
+          floor: null,
+          ceiling: null,
+          projectionSource: candidate.projectedPoints ? 'yahoo-api' : 'missing',
+          evidenceRole: 'yahoo-available-depth',
+          sourceConsensus: 0.05,
+          sourceRanks: {
+            fantasyPros: null,
+            fantasyProsNormalized: null,
+            tank01: null,
+            tank01Normalized: null
+          },
+          tank01Projection: null,
+          sourceDisagreementSlots: null,
+          sourceDisagreement: false,
+          sleeperTrend: null
+        });
+        seenYahooIds.add(numericId);
+        seenIdentities.add(identity);
+        if (candidate.position === 'DEF') seenDefenseTeams.add(team);
+        addedByPosition[shortage.position] = (addedByPosition[shortage.position] || 0) + 1;
+      }
+    }
+
+    if (additions.length) {
+      const completed = ensureDraftProjections([...existing, ...additions]);
+      const source = String(this.runtime.playerPool.source || 'player-evidence');
+      this.runtime.playerPool.players = completed.players;
+      this.runtime.playerPool.source = source.split('+').includes('yahoo') ? source : `${source}+yahoo`;
+      this.runtime.playerPool.sourceEvidence = {
+        ...(this.runtime.playerPool.sourceEvidence || {}),
+        yahooRole: 'league scoring, player availability, and current-season depth identities are authoritative filters',
+        coverage: {
+          ...(this.runtime.playerPool.sourceEvidence?.coverage || {}),
+          yahooAvailableDepthPlayers: (this.runtime.playerPool.sourceEvidence?.coverage?.yahooAvailableDepthPlayers || 0) + additions.length
+        },
+        fetchedAt: {
+          ...(this.runtime.playerPool.sourceEvidence?.fetchedAt || {}),
+          yahoo: this.iso()
+        },
+        projectionCoverage: completed.coverage
+      };
+    }
+
+    const after = this.crosswalk();
+    if (after.positionShortfalls.length) {
+      throw operationsError(
+        'YAHOO_DRAFT_DEPTH_INCOMPLETE',
+        `Yahoo available-player reads could not fill ${after.positionShortfalls.map((item) => `${item.position} (${item.loaded}/${item.required})`).join(', ')}`,
+        { requestedPositions, added: additions.length, addedByPosition, remainingShortfalls: after.positionShortfalls }
+      );
+    }
+    return {
+      requestedPositions,
+      added: additions.length,
+      addedByPosition,
+      remainingShortfalls: []
+    };
+  }
+
   async rehearse({ leagueId }) {
     const entry = this.entry(leagueId);
     if (entry.config.platform !== 'yahoo' || !entry.yahooLeagueKey || !entry.yahooTeamKey) {
@@ -406,6 +528,8 @@ class YahooOperationsService {
         };
       }
     };
+    const depthBefore = this.crosswalk();
+    const depthShortfalls = depthBefore.positionShortfalls;
     const checks = await Promise.all([
       timedCheck('league-settings', () => client.leagueSettings(entry.yahooLeagueKey), () => 'Read-only league settings received'),
       timedCheck('draft-results', () => client.draftResults(entry.yahooLeagueKey), (value) => `${value.picks?.length || 0} completed picks visible`),
@@ -423,8 +547,19 @@ class YahooOperationsService {
             code: 'YAHOO_PLAYER_CROSSWALK_UNUSABLE',
             message: 'No numeric Yahoo player ID can be qualified for the imported league season'
           }
-        })
-    ]);
+        }),
+      depthShortfalls.length
+        ? timedCheck(
+          'draft-depth',
+          () => this.supplementDraftDepth(entry, client),
+          (value) => value.added
+            ? `Added ${value.added} current-season Yahoo player identit${value.added === 1 ? 'y' : 'ies'}; all position depth checks pass`
+            : 'All position depth checks pass'
+        )
+        : null
+    ].filter(Boolean));
+    const depthAfter = this.crosswalk();
+    const localEvidenceAdded = Math.max(0, depthAfter.players - depthBefore.players);
     return {
       leagueId: entry.id,
       observedAt: this.iso(),
@@ -432,7 +567,10 @@ class YahooOperationsService {
       accountConnected: this.yahooAccount.status().connected,
       checks,
       mutations: false,
-      rawPayloadPersisted: false
+      rawPayloadPersisted: false,
+      normalizedEvidencePersisted: false,
+      localEvidenceUpdated: localEvidenceAdded > 0,
+      localEvidenceAdded
     };
   }
 
