@@ -60,10 +60,23 @@ input, select { background: #07130f; color: var(--ink); }
 button { background: var(--green); color: #10180b; border-color: var(--green); font-weight: 800; cursor: pointer; }
 button:disabled { opacity: .5; cursor: wait; }
 button.ghost { width: auto; background: transparent; color: var(--muted); border-color: var(--line); margin: 0; }
+button.danger { color: #ffd49b; border-color: #7e5925; }
 .hidden { display: none !important; }
 .draft-meta { display: grid; grid-template-columns: repeat(3, 1fr) auto; align-items: center; gap: 16px; border-top: 1px solid var(--line); padding: 20px 0; }
 .draft-meta div { display: flex; flex-direction: column; gap: 6px; }
 .draft-meta strong { font-size: 1.1rem; }
+.draft-meta .draft-session-actions { flex-direction: row; align-items: center; }
+.history-manager { margin: 16px 0 36px; }
+.history-manager h2 { margin-bottom: 6px; }
+.history-manager .muted { margin-bottom: 0; }
+.history-count { color: var(--muted); font-size: .78rem; white-space: nowrap; }
+.history-list { display: grid; gap: 10px; margin-top: 18px; }
+.history-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 13px 14px; border: 1px solid var(--line); border-radius: 10px; background: #091712; }
+.history-row-copy { display: grid; gap: 4px; min-width: 0; }
+.history-row-copy small { color: var(--muted); }
+.history-row-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
+.history-row-actions button { margin: 0; }
+.session-status { color: var(--green); font-size: .68rem; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
 .warning { background: #3e2b12; border: 1px solid #7e5925; color: #ffd49b; padding: 13px 16px; border-radius: 10px; margin-bottom: 16px; }
 .evidence-panel { margin-bottom: 16px; padding: 16px 20px; }
 .evidence-panel summary { cursor: pointer; color: var(--green); font-weight: 800; letter-spacing: .04em; }
@@ -194,6 +207,7 @@ td small { display: block; color: var(--muted); margin-top: 3px; }
 .weekly-head h2 { margin-bottom: 8px; }
 .weekly-controls { grid-template-columns: repeat(3, 1fr); align-items: end; }
 .weekly-controls button { grid-column: auto; }
+.season-status { grid-column: 1 / -1; display: block; padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px; color: var(--green); background: #091712; font-size: .75rem; font-weight: 750; }
 .weekly-empty { display: grid; gap: 14px; margin-bottom: 50px; }
 .weekly-empty h2 { margin-bottom: 0; }
 .weekly-import-grid { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end; }
@@ -258,6 +272,9 @@ textarea { width: 100%; border: 1px solid var(--line); border-radius: 10px; padd
   .board-size-controls button { flex: 1; }
   .evidence-grid { grid-template-columns: 1fr; }
   .draft-meta { grid-template-columns: repeat(2, 1fr); }
+  .draft-meta .draft-session-actions { grid-column: 1 / -1; }
+  .history-row { grid-template-columns: 1fr; }
+  .history-row-actions { justify-content: flex-start; }
   .player-line { align-items: flex-start; }
   .score-ring { flex-basis: 78px; height: 78px; }
   .fleet-actions { align-items: flex-end; flex-direction: column; }

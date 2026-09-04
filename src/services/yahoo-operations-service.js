@@ -232,6 +232,9 @@ class YahooOperationsService {
     const service = this.draftServices.get(entry.id);
     if (!service) throw operationsError('LEAGUE_STATE_UNAVAILABLE', `League state is unavailable: ${entry.id}`);
     const session = service.getSession(sessionId);
+    if (session.status !== 'active') {
+      throw operationsError('DRAFT_SESSION_COMPLETED', 'Reopen the completed draft session before starting Yahoo synchronization');
+    }
     if (session.sourceMode !== 'yahoo') {
       throw operationsError('YAHOO_DRAFT_MODE_REQUIRED', 'The draft session must use Yahoo source mode');
     }
@@ -296,6 +299,10 @@ class YahooOperationsService {
         } else if (event.code === 'DRAFT_SLOT_RECONCILED') {
           current.draftSlot = event.draftSlot;
           current.draftSlotSource = 'yahoo-draft-result';
+        } else if (event.code === 'DRAFT_COMPLETED') {
+          current.state = 'completed';
+          current.completedAt = this.iso();
+          current.observedPicks = event.observedPicks;
         } else if (event.level === 'warning') {
           current.state = 'degraded';
           current.lastError = { code: event.code, message: event.message || 'A Yahoo player could not be matched', pick: event.pick || null };

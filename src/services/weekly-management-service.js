@@ -90,6 +90,68 @@ class WeeklyManagementService {
     return first ? this.getWeek(first.week, first.season) : null;
   }
 
+  completeWeek(week, season) {
+    const resolvedSeason = Number(season);
+    const resolvedWeek = Number(week);
+    const entry = this.state.weekly.weeks[this.key(resolvedSeason, resolvedWeek)];
+    if (!entry) return this.getWeek(resolvedWeek, resolvedSeason);
+    if (entry.status === 'completed') return this.summary(entry);
+    const now = new Date().toISOString();
+    entry.status = 'completed';
+    entry.completedAt = now;
+    entry.updatedAt = now;
+    this.draftService.persist();
+    return this.summary(entry);
+  }
+
+  reopenWeek(week, season) {
+    const resolvedSeason = Number(season);
+    const resolvedWeek = Number(week);
+    const entry = this.state.weekly.weeks[this.key(resolvedSeason, resolvedWeek)];
+    if (!entry) return this.getWeek(resolvedWeek, resolvedSeason);
+    entry.status = 'open';
+    delete entry.completedAt;
+    entry.updatedAt = new Date().toISOString();
+    this.draftService.persist();
+    return this.summary(entry);
+  }
+
+  deleteWeek(week, season) {
+    const resolvedSeason = Number(season);
+    const resolvedWeek = Number(week);
+    const key = this.key(resolvedSeason, resolvedWeek);
+    const entry = this.state.weekly.weeks[key];
+    if (!entry) return this.getWeek(resolvedWeek, resolvedSeason);
+    const removedRuns = this.state.weekly.runs.filter((run) => run.season === resolvedSeason && run.week === resolvedWeek);
+    const removedEventIds = new Set([entry.eventId, ...removedRuns.map((run) => run.eventId)].filter(Boolean));
+    delete this.state.weekly.weeks[key];
+    this.state.weekly.runs = this.state.weekly.runs.filter((run) => run.season !== resolvedSeason || run.week !== resolvedWeek);
+    this.state.weekly.appliedEventIds = this.state.weekly.appliedEventIds.filter((eventId) => !removedEventIds.has(eventId));
+    this.draftService.persist();
+    return { leagueId: this.league.id, season: resolvedSeason, week: resolvedWeek, deleted: true };
+  }
+
+  deleteWeeks({ season } = {}) {
+    const resolvedSeason = season === undefined || season === null || season === '' ? null : Number(season);
+    const matches = (itemSeason) => resolvedSeason === null || Number(itemSeason) === resolvedSeason;
+    const entries = Object.entries(this.state.weekly.weeks).filter(([, entry]) => matches(entry.review.season));
+    const removedRuns = this.state.weekly.runs.filter((run) => matches(run.season));
+    const removedEventIds = new Set([
+      ...entries.map(([, entry]) => entry.eventId),
+      ...removedRuns.map((run) => run.eventId)
+    ].filter(Boolean));
+    for (const [key] of entries) delete this.state.weekly.weeks[key];
+    this.state.weekly.runs = this.state.weekly.runs.filter((run) => !matches(run.season));
+    this.state.weekly.appliedEventIds = this.state.weekly.appliedEventIds.filter((eventId) => !removedEventIds.has(eventId));
+    this.draftService.persist();
+    return {
+      leagueId: this.league.id,
+      season: resolvedSeason,
+      deletedReviews: entries.length,
+      deletedRuns: removedRuns.length
+    };
+  }
+
   previewSnapshot(snapshot, { expectedWeek, source, preferSharedProjections = false } = {}) {
     const normalized = { ...structuredClone(snapshot), source: source || snapshot?.source || 'transient-preview' };
     const review = buildWeeklyReview({
@@ -136,6 +198,7 @@ class WeeklyManagementService {
       eventId: stableEventId,
       snapshot: compacted.snapshot,
       review: compacted.review,
+      status: 'open',
       createdAt: existing?.createdAt || now,
       updatedAt: now,
       revisions: (existing?.revisions || 0) + 1
@@ -162,9 +225,12 @@ class WeeklyManagementService {
 
   status() {
     const latest = this.latest();
+    const weeks = this.listWeeks();
     return {
       leagueId: this.league.id,
-      storedWeeks: this.listWeeks().length,
+      storedWeeks: weeks.length,
+      openReviews: weeks.filter((item) => item.status === 'open').length,
+      completedReviews: weeks.filter((item) => item.status === 'completed').length,
       latest: latest ? {
         season: latest.season,
         week: latest.week,
@@ -185,6 +251,8 @@ class WeeklyManagementService {
       observedAt: review.observedAt,
       updatedAt: entry.updatedAt,
       revisions: entry.revisions,
+      status: entry.status || 'open',
+      completedAt: entry.completedAt || null,
       targetResult: review.targetResult?.result || null,
       targetScore: review.targetResult?.score ?? null,
       standingRank: review.targetResult?.standingRank ?? null,

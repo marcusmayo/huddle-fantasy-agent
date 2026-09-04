@@ -79,7 +79,7 @@ test('weekly management exposes a searchable complete available-player board and
   assert.match(html, /id="weekly-season-help"/);
   assert.match(client, /function renderWeeklyPlayerBoard\(/);
   assert.match(client, /review\.availablePlayers/);
-  assert.match(client, /Historical seasons require their archived Yahoo league/);
+  assert.match(client, /Historical .* view/);
   assert.match(client, /authoritativeYahooSeason\(\)/);
   assert.match(styles, /\.weekly-player-scroll \{[^}]*overflow: auto/);
   assert.match(styles, /\.weekly-player-scroll thead th \{[^}]*position: sticky/);

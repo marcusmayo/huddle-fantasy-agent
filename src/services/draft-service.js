@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto');
 const { buildRecommendationCard, STYLES } = require('../domain/draft-board');
+const { draftedRosterSize } = require('../domain/league');
 
 const POSITIONS = new Set(['QB', 'RB', 'WR', 'TE', 'K', 'DEF']);
 const EVIDENCE_PURPOSES = new Set(['available_players', 'team_roster', 'waiver_players']);
@@ -99,7 +100,9 @@ class DraftService {
   }
 
   listSessions() {
-    return Object.values(this.state.sessions).map((session) => this.decorate(session));
+    return Object.values(this.state.sessions)
+      .map((session) => this.decorate(session))
+      .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
   }
 
   getSession(id) {
@@ -128,6 +131,45 @@ class DraftService {
     return this.decorate(session);
   }
 
+  completeSession(id, { reason = 'operator-completed' } = {}) {
+    const session = this.state.sessions[id];
+    if (!session) return this.getSession(id);
+    if (session.status === 'completed') return this.decorate(session);
+    const now = this.currentIso();
+    session.status = 'completed';
+    session.completionReason = String(reason || 'operator-completed').slice(0, 80);
+    session.completedAt = now;
+    session.updatedAt = now;
+    this.persist();
+    return this.decorate(session);
+  }
+
+  reopenSession(id) {
+    const session = this.state.sessions[id];
+    if (!session) return this.getSession(id);
+    if (session.status === 'active') return this.decorate(session);
+    session.status = 'active';
+    delete session.completionReason;
+    delete session.completedAt;
+    session.updatedAt = this.currentIso();
+    this.persist();
+    return this.decorate(session);
+  }
+
+  deleteSession(id) {
+    const session = this.state.sessions[id];
+    if (!session) return this.getSession(id);
+    delete this.state.sessions[id];
+    this.persist();
+    return {
+      leagueId: this.league.id,
+      sessionId: id,
+      deleted: true,
+      status: session.status,
+      picks: session.picks.length
+    };
+  }
+
   recordPick(id, input) {
     const session = this.state.sessions[id];
     if (!session) return this.getSession(id);
@@ -147,6 +189,11 @@ class DraftService {
     const eventId = input.eventId || `manual:${session.picks.length + 1}:${playerId}`;
     if (session.appliedEventIds.includes(eventId)) {
       return { applied: false, reason: 'duplicate-event', session: this.decorate(session) };
+    }
+    if (session.status !== 'active') {
+      const error = new Error('Draft session is completed; reopen it before recording another pick');
+      error.code = 'DRAFT_SESSION_COMPLETED';
+      throw error;
     }
     if (session.picks.some((pick) => pick.playerId === playerId || pick.playerName.toLowerCase() === player.name.toLowerCase())) {
       return { applied: false, reason: 'player-already-drafted', session: this.decorate(session) };
@@ -172,6 +219,12 @@ class DraftService {
     });
     session.appliedEventIds.push(eventId);
     session.updatedAt = this.currentIso();
+    const totalPicks = draftedRosterSize(this.league.roster) * this.league.teamCount;
+    if (session.picks.length >= totalPicks) {
+      session.status = 'completed';
+      session.completionReason = 'draft-board-complete';
+      session.completedAt = session.updatedAt;
+    }
     this.persist();
     return { applied: true, reason: null, session: this.decorate(session) };
   }
@@ -418,7 +471,8 @@ class DraftService {
     return {
       ...structuredClone(session),
       currentOverall: session.picks.length + 1,
-      availableCount: this.playerPool.players.length - draftedFromPool
+      availableCount: this.playerPool.players.length - draftedFromPool,
+      totalPicks: draftedRosterSize(this.league.roster) * this.league.teamCount
     };
   }
 
