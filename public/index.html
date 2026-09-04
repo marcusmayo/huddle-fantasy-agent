@@ -224,7 +224,10 @@
           <p class="muted">Import one normalized result snapshot for this league. Huddle stores the week, calculates the optimal lineup, and returns either an add/drop recommendation or an explicit HOLD.</p>
         </div>
         <form id="weekly-controls" class="weekly-controls">
-          <label>Season <input id="weekly-season" type="number" min="2020" max="2100" required></label>
+          <label>Season
+            <input id="weekly-season" type="number" min="2020" max="2100" required>
+            <small id="weekly-season-help" class="field-help"></small>
+          </label>
           <label>Week <input id="weekly-week" type="number" min="1" max="18" value="1" required></label>
           <label>Saved review
             <select id="weekly-history"><option value="">Latest</option></select>
@@ -268,6 +271,37 @@
           <ul id="waiver-reasons"></ul>
           <p id="waiver-priority" class="explanation"></p>
           <div id="waiver-plan" class="weekly-list"></div>
+        </section>
+
+        <section id="weekly-player-board" class="panel weekly-player-board">
+          <div class="section-head weekly-player-board-head">
+            <div>
+              <p class="eyebrow">AVAILABLE PLAYERS</p>
+              <h2>Waiver and free-agent board</h2>
+              <p id="weekly-player-count" class="muted"></p>
+            </div>
+            <div class="weekly-player-controls">
+              <label>Search <input id="weekly-player-search" type="search" placeholder="Player or NFL team" autocomplete="off"></label>
+              <label>Position
+                <select id="weekly-player-position">
+                  <option value="ALL">All positions</option>
+                  <option value="QB">QB</option>
+                  <option value="RB">RB</option>
+                  <option value="WR">WR</option>
+                  <option value="TE">TE</option>
+                  <option value="K">K</option>
+                  <option value="DEF">Defense</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <div class="table-wrap weekly-player-scroll">
+            <table>
+              <thead><tr><th>Rank</th><th>Player</th><th>Pos</th><th>Week</th><th>Remaining</th><th>Claim guidance</th><th>Evidence</th></tr></thead>
+              <tbody id="weekly-player-body"></tbody>
+            </table>
+          </div>
+          <p class="field-help">This board is read-only. Search every candidate Huddle received; submit claims in Yahoo. Evidence: FP = FantasyPros, T01 = Tank01, SLP = Sleeper.</p>
         </section>
 
         <div class="weekly-grid">

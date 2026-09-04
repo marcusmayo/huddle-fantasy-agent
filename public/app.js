@@ -25,6 +25,8 @@ const state = {
   mode: localStorage.getItem('huddle-mode') === 'weekly' ? 'weekly' : 'draft',
   weeklyReview: null,
   weeklyWeeks: [],
+  weeklyPlayerSearch: '',
+  weeklyPlayerPosition: 'ALL',
   yahooDraftSync: null,
   yahooWeeklyStatus: null,
   unresolvedPlayers: []
@@ -565,6 +567,10 @@ async function selectLeague(leagueId) {
   $('#draft-slot').max = state.league.teamCount;
   $('#draft-slot').value = state.league.draft?.draftSlot || '';
   const yahooEligible = yahooSyncEligible();
+  const yahooSeason = Number(state.league.provenance?.season);
+  $('#weekly-season-help').textContent = yahooEligible && Number.isInteger(yahooSeason)
+    ? `Yahoo source season ${yahooSeason}. Historical seasons require their archived Yahoo league.`
+    : 'Manual snapshots use the season entered here.';
   const yahooOption = $('#source-mode').querySelector('option[value="yahoo"]');
   yahooOption.disabled = !yahooEligible;
   if (!yahooEligible && $('#source-mode').value === 'yahoo') $('#source-mode').value = 'manual';
@@ -732,6 +738,88 @@ function movementLabel(value) {
   return value > 0 ? `▲ ${value} place${value === 1 ? '' : 's'}` : `▼ ${Math.abs(value)} place${value === -1 ? '' : 's'}`;
 }
 
+function authoritativeYahooSeason() {
+  const season = Number(state.league?.provenance?.season);
+  return yahooSyncEligible() && Number.isInteger(season) ? season : null;
+}
+
+function weeklyPlayerIdentity(player) {
+  return String(player?.yahooPlayerKey || player?.playerId || player?.id || player?.name || '').trim().toLowerCase();
+}
+
+function weeklyProjection(player, field) {
+  const value = player?.[field];
+  return value !== null && value !== undefined && Number.isFinite(Number(value)) ? Number(value) : null;
+}
+
+function renderWeeklyPlayerBoard(review = state.weeklyReview) {
+  const body = $('#weekly-player-body');
+  const count = $('#weekly-player-count');
+  if (!review) {
+    body.innerHTML = '<tr><td colspan="7" class="empty-board">Run a weekly review to load available players.</td></tr>';
+    count.textContent = 'No available-player review loaded.';
+    return;
+  }
+  const recommendation = review.waiver?.recommendation || {};
+  const guidance = new Map();
+  for (const item of recommendation.claimPlan || []) {
+    guidance.set(weeklyPlayerIdentity(item.add), {
+      priority: item.priority,
+      label: item.priority === 1 ? 'Recommended claim' : `Fallback #${item.priority}`,
+      detail: `Drop ${item.drop.name} · ${item.expectedPointsGained >= 0 ? '+' : ''}${item.expectedPointsGained} pts`,
+      className: 'claim-priority'
+    });
+  }
+  for (const item of recommendation.consideredAlternatives || []) {
+    const identity = weeklyPlayerIdentity(item.add);
+    if (!guidance.has(identity)) guidance.set(identity, {
+      priority: 100 + item.priority,
+      label: `Below threshold #${item.priority}`,
+      detail: `Drop ${item.drop.name} · ${item.expectedPointsGained >= 0 ? '+' : ''}${item.expectedPointsGained} pts`,
+      className: 'below-threshold'
+    });
+  }
+  const allPlayers = [...(review.availablePlayers || [])].sort((a, b) => {
+    const aGuidance = guidance.get(weeklyPlayerIdentity(a));
+    const bGuidance = guidance.get(weeklyPlayerIdentity(b));
+    if (aGuidance || bGuidance) return (aGuidance?.priority ?? 999) - (bGuidance?.priority ?? 999);
+    const remaining = (weeklyProjection(b, 'remainingProjectedPoints') ?? -Infinity) - (weeklyProjection(a, 'remainingProjectedPoints') ?? -Infinity);
+    if (remaining) return remaining;
+    const weekly = (weeklyProjection(b, 'projectedPoints') ?? -Infinity) - (weeklyProjection(a, 'projectedPoints') ?? -Infinity);
+    return weekly || String(a.name).localeCompare(String(b.name));
+  });
+  const query = state.weeklyPlayerSearch.trim().toLowerCase();
+  const position = state.weeklyPlayerPosition;
+  const visible = allPlayers.filter((player) => {
+    const matchesPosition = position === 'ALL' || player.position === position;
+    const haystack = `${player.name || ''} ${player.nflTeam || ''} ${player.position || ''}`.toLowerCase();
+    return matchesPosition && (!query || haystack.includes(query));
+  });
+  const persistence = review.persistence || {};
+  const reviewed = Number(persistence.availablePlayersObserved || allPlayers.length);
+  const retained = persistence.compacted ? ` · ${allPlayers.length} retained from ${reviewed} originally reviewed` : '';
+  const source = review.source === 'yahoo-live-transient-v1' ? 'Live Yahoo preview' : 'Saved normalized snapshot';
+  count.textContent = `${source} · ${visible.length} of ${allPlayers.length} loaded players shown${retained}`;
+  body.innerHTML = visible.length ? visible.map((player) => {
+    const item = guidance.get(weeklyPlayerIdentity(player));
+    const sources = [
+      player.sourceCoverage?.fantasyPros ? 'FP' : '',
+      player.sourceCoverage?.tank01 ? 'T01' : '',
+      player.sourceCoverage?.sleeper ? 'SLP' : ''
+    ].filter(Boolean);
+    const playerRank = allPlayers.indexOf(player) + 1;
+    return `<tr class="${item?.className || ''}">
+      <td>${playerRank}</td>
+      <td><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.nflTeam || 'FA')} · ${escapeHtml(player.availabilityStatus || 'available')}</small></td>
+      <td><span class="position">${escapeHtml(player.position)}</span></td>
+      <td>${weeklyProjection(player, 'projectedPoints') ?? '—'}</td>
+      <td>${weeklyProjection(player, 'remainingProjectedPoints') ?? '—'}</td>
+      <td class="weekly-player-guidance">${item ? `<strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.detail)}</small>` : '<span class="muted">Available · not in top claim plan</span>'}</td>
+      <td class="weekly-player-evidence">${sources.length ? sources.map((source) => `<span class="badge">${source}</span>`).join(' ') : '<span class="muted">No shared projection</span>'}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="7" class="empty-board">No available players match this search and position.</td></tr>';
+}
+
 function renderWeekly(review) {
   state.weeklyReview = review;
   const hasReview = Boolean(review);
@@ -740,6 +828,7 @@ function renderWeekly(review) {
   if (!review) {
     $('#weekly-rerun').disabled = false;
     $('#weekly-rerun').title = '';
+    renderWeeklyPlayerBoard(null);
     return;
   }
   const transientYahoo = review.persistence?.persisted === false && review.source === 'yahoo-live-transient-v1';
@@ -747,6 +836,12 @@ function renderWeekly(review) {
   $('#weekly-rerun').title = transientYahoo ? 'Yahoo previews are recalculated with Refresh from Yahoo and are not persisted.' : '';
   $('#weekly-season').value = review.season;
   $('#weekly-week').value = review.week;
+  const yahooSeason = authoritativeYahooSeason();
+  $('#weekly-season-help').textContent = yahooSeason
+    ? review.season === yahooSeason
+      ? `Yahoo source season ${yahooSeason}.`
+      : `Showing saved ${review.season} data. A Yahoo refresh will use the authoritative ${yahooSeason} season.`
+    : 'Manual snapshots use the season entered here.';
   $('#weekly-history').value = weeklyKey(review);
   const target = review.targetResult || {};
   $('#weekly-result').textContent = target.result || 'PENDING';
@@ -777,6 +872,7 @@ function renderWeekly(review) {
     : waiver.action === 'HOLD' && considered.length
       ? `<article><strong>Closest reviewed move</strong><span>${escapeHtml(considered[0].add.name)} for ${escapeHtml(considered[0].drop.name)} (+${considered[0].expectedPointsGained}; below threshold)</span></article>`
       : '';
+  renderWeeklyPlayerBoard(review);
 
   $('#weekly-standings').innerHTML = review.standings.map((team) => `<tr class="${team.teamId === target.teamId ? 'target-team-row' : ''}">
     <td>${team.standingRank ?? '—'}</td><td><strong>${escapeHtml(team.name)}</strong><small>${escapeHtml(team.result || 'pending')}</small></td>
@@ -836,11 +932,19 @@ async function refreshWeeklyFromYahoo() {
   button.disabled = true;
   $('#weekly-message').textContent = 'Reading Yahoo standings, matchup, roster, transactions, and available players…';
   try {
+    const yahooSeason = authoritativeYahooSeason();
+    let season = Number($('#weekly-season').value);
+    if (yahooSeason && season !== yahooSeason) {
+      const requestedSeason = season;
+      season = yahooSeason;
+      $('#weekly-season').value = yahooSeason;
+      showToast(`Yahoo refresh changed from ${requestedSeason} to ${state.league.name}'s authoritative ${yahooSeason} season.`);
+    }
     const result = await api(scoped('/weekly/yahoo/refresh'), {
       method: 'POST',
       body: JSON.stringify({
         week: Number($('#weekly-week').value),
-        season: Number($('#weekly-season').value)
+        season
       })
     });
     state.yahooWeeklyStatus = result;
@@ -1426,6 +1530,14 @@ async function init() {
   $('#weekly-import').addEventListener('click', importWeekly);
   $('#weekly-rerun').addEventListener('click', rerunWeekly);
   $('#weekly-yahoo-refresh').addEventListener('click', refreshWeeklyFromYahoo);
+  $('#weekly-player-search').addEventListener('input', (event) => {
+    state.weeklyPlayerSearch = event.target.value;
+    renderWeeklyPlayerBoard();
+  });
+  $('#weekly-player-position').addEventListener('change', (event) => {
+    state.weeklyPlayerPosition = event.target.value;
+    renderWeeklyPlayerBoard();
+  });
   $('#weekly-import-another').addEventListener('click', () => {
     $('#weekly-review').classList.add('hidden');
     $('#weekly-empty').classList.remove('hidden');

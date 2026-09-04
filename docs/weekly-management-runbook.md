@@ -10,10 +10,10 @@ For the dated startup, deployment, and operator checklist, use the [September 8,
 
 1. Select the league from the portfolio dashboard.
 2. Choose **Weekly management**.
-3. Set the season and week.
+3. Set the season and week. For an imported Yahoo league, Huddle displays and enforces the season attached to that league key. Import the archived Yahoo league separately for a historical season.
 4. Click **Refresh from Yahoo** for a live, expiring preview. If live normalization fails, upload normalized JSON, paste an approved export, or choose **Load editable template**.
 5. For manual data, select **Import and run this league**. A Yahoo live preview is intentionally not persisted.
-6. Review the result, standing movement, actual-versus-optimal lineup, risks, transaction log, and waiver decision.
+6. Review the result, standing movement, actual-versus-optimal lineup, risks, transaction log, waiver decision, and the searchable available-player board. Filter the board by position or search by player/NFL team; recommended and fallback claims remain pinned first.
 7. If the result is `ADD_DROP`, confirm availability and waiver state in Yahoo before acting. If it is `HOLD`, preserve FAAB or priority.
 
 The example contract is in `config/fixtures/weekly-snapshot.example.json`. A snapshot must include:
@@ -72,6 +72,7 @@ POST that payload to `/api/fleet/weekly/run`. The response reports `succeeded`, 
 - Waiver candidates must be explicitly available in this league. Live Yahoo refreshes paginate the available-player endpoint up to the configured cap (500 by default), and the engine compares league-scored remaining projection against a legal, unlocked bench drop.
 - A candidate must clear the snapshot's `holdThreshold`, defaulting to two projected points. Qualifying moves are returned as an ordered five-claim fallback plan. Otherwise the result is first-class `HOLD`, with zero FAAB, preserve-priority guidance, and the closest below-threshold move disclosed.
 - Explicit normalized imports compact saved free-agent history to the configured top-candidate limit (25 by default). The original candidate count and compaction metadata remain visible; transient Yahoo previews are never persisted.
+- The available-player board renders every candidate retained in the review. A live transient Yahoo preview can show the complete retrieved pool up to the configured cap; a compacted saved review clearly reports how many candidates were retained from the original pool.
 - Sleeper rising/falling activity is a small tie-break only. Yahoo availability, scoring, roster, and waiver rules remain authoritative filters.
 
 Every import is persisted under the league's own state file with a stable event ID, revision count, run log, source evidence, and recommendation. Replaying the same event ID is idempotent.
@@ -88,6 +89,8 @@ curl -fsS -X POST \
   -H 'content-type: application/json' \
   -d '{"season":2026,"week":1}'
 ```
+
+The submitted season must match the season attached to the imported Yahoo league key. The dashboard corrects an older saved-review year automatically before refreshing; the API rejects a mismatch before making any Yahoo request.
 
 Read it until its expiry:
 

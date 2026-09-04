@@ -434,10 +434,19 @@ class YahooOperationsService {
     if (!Number.isInteger(resolvedWeek) || resolvedWeek < 1 || resolvedWeek > 18) {
       throw operationsError('INVALID_WEEK', 'Yahoo weekly preview requires a week from 1 to 18');
     }
+    const yahooSeason = Number(entry.config.provenance?.season);
+    const resolvedSeason = Number(season || yahooSeason || this.runtime.season);
+    if (Number.isInteger(yahooSeason) && resolvedSeason !== yahooSeason) {
+      throw operationsError(
+        'YAHOO_SEASON_MISMATCH',
+        `${entry.config.name} is a Yahoo ${yahooSeason} league; it cannot be refreshed as ${resolvedSeason}. Select ${yahooSeason} or import the archived ${resolvedSeason} Yahoo league separately.`,
+        { requestedSeason: resolvedSeason, yahooSeason, yahooLeagueKey: entry.yahooLeagueKey }
+      );
+    }
     const attempt = {
       leagueId: entry.id,
       week: resolvedWeek,
-      season: Number(season || this.runtime.season),
+      season: resolvedSeason,
       lastAttemptAt: this.iso(),
       lastSuccessAt: null,
       expiresAt: null,
