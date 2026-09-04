@@ -1,0 +1,26 @@
+{
+  "date": "2026-09-04",
+  "kind": "Silent editorial feature overview, not live app footage",
+  "files": [
+    {
+      "path": "docs/assets/huddle-linkedin-article-1920x1080.mp4",
+      "bytes": 29353311,
+      "sha256": "0e6d7549f205c07d806a5da5281cd951c074af833073df236c6ff2e7b4eb3841",
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "seconds": 60,
+      "full_decode": "passed"
+    },
+    {
+      "path": "docs/assets/huddle-linkedin-feed-1080x1350.mp4",
+      "bytes": 29297538,
+      "sha256": "797434c9cef79614aa528efa820e54eef88eb8bda9d986117bb6bc730e061332",
+      "width": 1080,
+      "height": 1350,
+      "fps": 30,
+      "seconds": 60,
+      "full_decode": "passed"
+    }
+  ]
+}

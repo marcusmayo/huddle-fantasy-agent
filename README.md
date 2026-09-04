@@ -4,6 +4,20 @@ Huddle is a read-only fantasy football decision agent for league-specific drafti
 
 The public example profile is a synthetic six-team, two-quarterback, full-PPR demo with six-point passing touchdowns. It never attempts Yahoo synchronization. Real league IDs, team names, OAuth references, and commissioner settings belong only in untracked local configuration or a secret manager.
 
+<!-- HUDDLE-LINKEDIN-VIDEOS:START -->
+## Huddle in 60 seconds
+
+**Current feature overview — September 2026.** Draft-day guidance and weekly management, with you in control.
+
+[![Watch Huddle's 60-second feature overview: Yahoo connection, draft recommendations, weekly reviews, waivers and human control](docs/assets/huddle-linkedin-overview-preview.gif)](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-linkedin-article-1920x1080.mp4)
+
+**[Watch / download the landscape video (1920 × 1080)](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-linkedin-article-1920x1080.mp4)** · **[Download the LinkedIn feed video (1080 × 1350)](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-linkedin-feed-1080x1350.mp4)**
+
+The animated preview above is derived from the landscape video; select it for the full-resolution MP4. Both videos are 60-second, silent, text-led feature overviews, not recordings of a live Yahoo account. No real league results or credentials appear. Huddle recommends; the user makes every pick, lineup change and waiver claim in Yahoo.
+
+[Video file verification](docs/assets/huddle-linkedin-video-validation.json) · [Static thumbnail](docs/assets/huddle-linkedin-overview-thumbnail.jpg) · [Earlier walkthrough — August 9, 2026](docs/assets/huddle-product-demo.mp4)
+<!-- HUDDLE-LINKEDIN-VIDEOS:END -->
+
 ## Current MVP status
 
 | Capability | Status |
