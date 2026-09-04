@@ -59,13 +59,9 @@ Open `http://127.0.0.1:8787`. The synthetic demo needs no credentials and never 
 
 In your local `.env`, set the Yahoo credentials, registered callback URL and encryption key shown in [.env.example](.env.example), then set `HUDDLE_YAHOO_OAUTH_ENABLED=true`. Add provider keys for live rankings and screenshot analysis. Keep credentials and real league details out of Git.
 
-Choose **Connect Yahoo → Import this league**, confirm the settings, and run this in another terminal while the server is active:
+Choose **Connect Yahoo → Import this league**, confirm the settings, then open **Draft room**. The **Draft readiness** panel checks automatically for connected, imported Yahoo leagues. Select **Check draft readiness** to rerun it—no terminal required.
 
-```bash
-npm run preflight
-```
-
-**Open a live draft only when preflight reports `READY`.** It checks account access, league settings, player identities, data freshness, draft depth and read-only Yahoo access. Rerun after a server/Codespace restart. Review any projection warnings and confirm the polling allowance with Yahoo.
+**Open a live draft only when the panel shows `READY`.** It checks account access, settings, player identities, data freshness, draft depth and read-only Yahoo access. Blockers and warnings appear separately. Recheck after a restart, settings/data changes, or 15 minutes; review projection warnings and confirm the polling allowance with Yahoo.
 
 Snake drafts and standard/flex/superflex rosters are supported; auction drafts are not. Refresh league settings after commissioner changes. See the [live operations plan](docs/september-8-operations.md) for setup and rehearsal details.
 
@@ -75,7 +71,7 @@ Snake drafts and standard/flex/superflex rosters are supported; auction drafts a
 npm run check
 ```
 
-The documented suite has **124 tests**, including full drafts and 18-week reviews for league sizes from three through ten teams, plus isolation, OAuth, identity matching and readiness checks. These are application tests, not production load or security certification.
+The documented suite has **134 tests**, including full drafts and 18-week reviews for league sizes from three through ten teams, plus isolation, OAuth, identity matching and readiness checks. These are application tests, not production load or security certification.
 
 This is a **personal-use MVP**, not a commercial multi-user service. Before launch: validate each league's first live payload, confirm Yahoo polling/history-retention permissions, and add user isolation, authenticated administration, managed secrets, monitoring and commercial data licenses. There is no fixed league-count limit, but hosted concurrency is not validated. Player photos stay off unless separately licensed.
 

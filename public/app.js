@@ -2,6 +2,10 @@
 
 const state = {
   leagues: [],
+  draftReadiness: null,
+  readinessRunning: false,
+  readinessError: null,
+  sessionStarting: false,
   defaultLeagueId: null,
   leagueId: null,
   league: null,
@@ -550,6 +554,8 @@ function showMode(mode) {
   state.mode = mode;
   localStorage.setItem('huddle-mode', mode);
   const weekly = mode === 'weekly';
+  renderDraftReadiness();
+  if (!weekly) refreshDraftReadiness({ automatic: true });
   $('#draft-mode').classList.toggle('active', !weekly);
   $('#draft-mode').classList.toggle('ghost', weekly);
   $('#weekly-mode').classList.toggle('active', weekly);
@@ -676,9 +682,6 @@ async function selectLeague(leagueId) {
   $('#refresh-yahoo-draft-slot').disabled = !state.yahooOAuth?.connected;
   $('#refresh-yahoo-settings').classList.toggle('hidden', !yahooEligible);
   $('#refresh-yahoo-settings').disabled = !state.yahooOAuth?.connected;
-  $('#rehearse-yahoo').classList.toggle('hidden', !yahooEligible);
-  $('#rehearse-yahoo').disabled = !state.yahooOAuth?.connected;
-  $('#yahoo-rehearsal-status').classList.add('hidden');
   $('#weekly-yahoo-refresh').disabled = !yahooEligible || !state.yahooOAuth?.connected;
   $('#weekly-yahoo-refresh').title = yahooEligible
     ? state.yahooOAuth?.connected ? 'Refresh this league from Yahoo' : 'Connect Yahoo before refreshing'
@@ -702,6 +705,7 @@ async function selectLeague(leagueId) {
   }
   if (sessionId) await resumeSession(sessionId);
   else if (yahooEligible && state.yahooOAuth?.connected) await refreshYahooDraftPosition({ silent: true });
+  refreshDraftReadiness({ automatic: true });
 }
 
 async function refreshYahooSettings() {
@@ -724,24 +728,96 @@ async function refreshYahooSettings() {
   }
 }
 
-async function rehearseYahoo() {
-  if (!yahooSyncEligible()) return null;
-  const button = $('#rehearse-yahoo');
-  const status = $('#yahoo-rehearsal-status');
-  button.disabled = true;
-  status.classList.remove('hidden');
-  status.textContent = 'Checking read-only settings, draft results, player identity, and draft depth…';
-  try {
-    const result = await api(scoped('/yahoo/rehearsal'), { method: 'POST', body: '{}' });
-    status.textContent = result.ready
-      ? `Yahoo rehearsal passed: ${result.checks.map((check) => `${check.name} ${check.durationMs}ms`).join(' · ')}. Yahoo was not changed; any depth identities are held in memory only.`
-      : `Yahoo rehearsal needs attention: ${result.checks.filter((check) => !check.ok).map((check) => `${check.name}: ${check.error.message}`).join(' · ')}`;
-    return result;
-  } catch (error) {
-    status.textContent = `Yahoo rehearsal failed: ${error.message}`;
+let readinessRequest = null;
+
+function renderDraftReadiness() {
+  const panel = $('#draft-readiness');
+  panel.classList.toggle('hidden', state.mode === 'weekly');
+  const snapshot = state.draftReadiness;
+  const report = snapshot?.report;
+  const running = state.readinessRunning || snapshot?.state === 'running';
+  const ready = !state.readinessError && !running && report?.readyForLiveDraft;
+  const demo = report && !report.leagues.length && state.league?.platform === 'demo';
+  const label = running ? 'CHECKING' : state.readinessError ? 'CHECK FAILED' : demo ? 'DEMO / MANUAL'
+    : ready ? 'READY' : !snapshot || snapshot.state === 'unchecked' ? 'NOT CHECKED' : 'NOT READY';
+  $('#draft-readiness-state').textContent = label;
+  panel.dataset.state = ready ? 'ready' : running ? 'running' : 'blocked';
+  panel.setAttribute('aria-busy', String(Boolean(running)));
+  $('#check-draft-readiness').disabled = Boolean(running);
+  $('#check-draft-readiness').textContent = running ? 'Checking…' : 'Check draft readiness';
+  $('#draft-readiness-message').textContent = state.readinessError || (running ? snapshot?.stage || 'Starting checks…'
+    : demo ? 'Demo and manual drafts need no Yahoo check. Connect Yahoo and import a league for live use.'
+    : ready ? 'Ready for live Yahoo drafting. Review warnings below; you still make every pick in Yahoo.'
+    : 'Check here before a live Yahoo draft. Resolve blockers, then check again. No terminal required.');
+  $('#draft-readiness-time').textContent = snapshot?.checkedAt
+    ? `Last checked ${new Date(snapshot.checkedAt).toLocaleTimeString()} · recheck after changes or 15 minutes`
+    : 'The full check runs automatically when this dashboard opens with a connected, imported Yahoo league.';
+  const crosswalk = report?.playerEvidence?.crosswalk;
+  $('#draft-readiness-checks').innerHTML = report ? [
+    `<li><strong>Yahoo account:</strong> ${report.account.connected ? 'Connected' : 'Not connected'}</li>`,
+    `<li><strong>Imported leagues:</strong> ${report.leagues.filter((league) => league.ready).length}/${report.leagues.length} locally operable</li>`,
+    `<li><strong>Player identities:</strong> ${crosswalk.mapped}/${crosswalk.players} mapped · ${Math.round(crosswalk.requiredCoverage * 100)}% required</li>`,
+    `<li><strong>Draft pool:</strong> ${crosswalk.players}/${crosswalk.requiredPlayers || 0} players required</li>`,
+    `<li><strong>Position depth:</strong> ${escapeHtml((crosswalk.positions || []).map((item) => `${item.position} ${item.loaded}/${item.required}`).join(' · '))}</li>`,
+    `<li><strong>Data age:</strong> ${report.playerEvidence.ageHours == null ? 'Unknown' : `${report.playerEvidence.ageHours} hours`}</li>`,
+    ...(report.yahooRehearsals || []).map((item) => `<li><strong>Yahoo check — ${escapeHtml(report.leagues.find((league) => league.leagueId === item.leagueId)?.name || item.leagueId)}:</strong> ${item.ready ? 'Passed' : 'Failed'} ${escapeHtml((item.checks || []).map((check) => `${check.name}: ${check.ok ? 'pass' : 'fail'}`).join(' · '))}</li>`)
+  ].join('') : '';
+  $('#draft-readiness-blockers').innerHTML = (report?.blockers || []).map((text) => `<li>${escapeHtml(text)}</li>`).join('');
+  $('#draft-readiness-blockers-section').classList.toggle('hidden', !report?.blockers?.length || Boolean(demo));
+  $('#draft-readiness-warnings').innerHTML = (report?.warnings || []).map((text) => `<li>${escapeHtml(text)}</li>`).join('');
+  $('#draft-readiness-warnings-section').classList.toggle('hidden', !report?.warnings?.length || Boolean(demo));
+  const submit = $('#session-form button[type="submit"]');
+  submit.disabled = Boolean(state.sessionStarting || ($('#source-mode').value === 'yahoo' && !ready));
+  submit.title = $('#source-mode').value === 'yahoo' && !ready ? 'Pass Check draft readiness first' : '';
+}
+
+async function checkDraftReadiness({ reuse = false } = {}) {
+  if (readinessRequest) return readinessRequest;
+  state.readinessRunning = true;
+  state.readinessError = null;
+  renderDraftReadiness();
+  readinessRequest = (async () => {
+    const options = { signal: AbortSignal.timeout(15_000) };
+    state.draftReadiness = await api('/api/operations/preflight', {
+      ...options, method: 'POST', body: JSON.stringify({ reuse })
+    });
+    const deadline = Date.now() + 180_000;
+    while (state.draftReadiness.state === 'running') {
+      renderDraftReadiness();
+      if (Date.now() > deadline) throw new Error('Check is taking longer than expected. Recheck to reconnect to its progress; live drafting remains blocked.');
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      state.draftReadiness = await api('/api/operations/preflight', { signal: AbortSignal.timeout(15_000) });
+    }
+    if (state.draftReadiness.state === 'blocked') $('#draft-readiness-details').open = true;
+    return state.draftReadiness;
+  })().catch((error) => {
+    state.draftReadiness = null;
+    state.readinessError = `Readiness could not be verified: ${error.message}`;
     return null;
-  } finally {
-    button.disabled = !state.yahooOAuth?.connected;
+  }).finally(() => {
+    state.readinessRunning = false;
+    readinessRequest = null;
+    renderDraftReadiness();
+  });
+  return readinessRequest;
+}
+
+async function refreshDraftReadiness({ automatic = false } = {}) {
+  if (readinessRequest) return readinessRequest;
+  try {
+    state.draftReadiness = await api('/api/operations/preflight', { signal: AbortSignal.timeout(15_000) });
+    state.readinessError = null;
+    renderDraftReadiness();
+    if (state.draftReadiness.state === 'running'
+      || (automatic && state.draftReadiness.state === 'unchecked' && state.draftReadiness.automaticCheckEligible)) {
+      return checkDraftReadiness({ reuse: true });
+    }
+    return state.draftReadiness;
+  } catch (error) {
+    state.draftReadiness = null;
+    state.readinessError = `Readiness could not be verified: ${error.message}`;
+    renderDraftReadiness();
+    return null;
   }
 }
 
@@ -1172,10 +1248,20 @@ async function clearWeeklySeason() {
 async function createSession(event) {
   event.preventDefault();
   const button = event.submitter;
+  state.sessionStarting = true;
   button.disabled = true;
   try {
     const sourceMode = $('#source-mode').value;
-    if (sourceMode === 'yahoo') await refreshYahooDraftPosition({ silent: true });
+    if (sourceMode === 'yahoo') {
+      await refreshYahooDraftPosition({ silent: true });
+      const readiness = await refreshDraftReadiness();
+      if (!readiness?.report.readyForLiveDraft) {
+        $('#draft-readiness-details').open = true;
+        $('#draft-readiness').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        showToast('Use Check draft readiness and resolve blockers before opening a live Yahoo draft.');
+        return;
+      }
+    }
     const session = await api(scoped('/draft/sessions'), {
       method: 'POST',
       body: JSON.stringify({ draftSlot: Number($('#draft-slot').value), sourceMode })
@@ -1191,7 +1277,8 @@ async function createSession(event) {
   } catch (error) {
     $('#draft-slot-status').textContent = error.message;
   } finally {
-    button.disabled = false;
+    state.sessionStarting = false;
+    renderDraftReadiness();
   }
 }
 
@@ -1761,7 +1848,8 @@ async function init() {
   $('#session-form').addEventListener('submit', createSession);
   $('#refresh-yahoo-settings').addEventListener('click', refreshYahooSettings);
   $('#refresh-yahoo-draft-slot').addEventListener('click', () => refreshYahooDraftPosition());
-  $('#rehearse-yahoo').addEventListener('click', rehearseYahoo);
+  $('#check-draft-readiness').addEventListener('click', () => checkDraftReadiness());
+  $('#source-mode').addEventListener('change', renderDraftReadiness);
   $('#yahoo-draft-sync-once').addEventListener('click', () => controlYahooDraftSync('once'));
   $('#yahoo-draft-sync-start').addEventListener('click', () => controlYahooDraftSync('start'));
   $('#yahoo-draft-sync-stop').addEventListener('click', () => controlYahooDraftSync('stop'));
@@ -1819,6 +1907,8 @@ async function init() {
   state.providerStatusAt = Date.now();
   await loadFleet();
   showMode(state.mode);
+  refreshDraftReadiness({ automatic: state.mode === 'draft' });
+  setInterval(() => refreshDraftReadiness(), 30_000);
   const callback = new URLSearchParams(window.location.search);
   if (callback.get('yahoo') === 'connected') {
     history.replaceState({}, '', window.location.pathname);

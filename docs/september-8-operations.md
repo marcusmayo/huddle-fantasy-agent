@@ -104,19 +104,11 @@ The encrypted token file and league state are local runtime data and must not be
 
 ### 4. Refresh player evidence and pass preflight
 
-With Huddle running, use a second terminal:
-
-```bash
-npm run preflight
-```
+With Huddle running, open **Draft room → Check draft readiness**. It also runs automatically when you open the dashboard with a connected account and imported Yahoo leagues. No terminal is needed; `npm run preflight` is an optional diagnostic for the same running-server check.
 
 Preflight automatically refreshes and persists provider evidence when the snapshot is missing, stale, below the Yahoo crosswalk threshold, or too shallow to cover every selection in the largest imported draft. A deliberate forced refresh remains available through `POST /api/data/sources/sync`, but should not be used repeatedly because one complete refresh can consume up to 13 FantasyPros requests.
 
-The readiness line must say:
-
-```text
-Huddle live-draft readiness: READY
-```
+The **Draft readiness** panel must show **READY**. Expand **Checks, blockers and warnings** for details and the last-check time. Recheck after a restart, account/settings/data changes, or 15 minutes.
 
 Preflight must show:
 
@@ -140,7 +132,7 @@ FantasyPros may return only ten D/ST ranking rows. If a position remains below i
 
 Before the real draft:
 
-1. Select **Run Yahoo read rehearsal** and require the three baseline GET-only checks to pass. When provider evidence is shallow at a position, a fourth GET-only depth check runs automatically. `npm run preflight` performs the same rehearsal and recalculates readiness from the augmented in-memory evidence.
+1. Select **Check draft readiness** and require the three baseline GET-only checks to pass. When provider evidence is shallow at a position, a fourth GET-only depth check runs automatically. The in-app check refreshes evidence as needed, runs the rehearsal and recalculates readiness from the augmented in-memory evidence; the optional CLI uses this same check.
 2. Create a Yahoo-source draft session with the confirmed draft slot.
 3. Confirm the **Yahoo draft sync** panel reaches **Running**.
 4. Use **Sync now** once.
@@ -158,7 +150,7 @@ Before the real draft:
 3. Start Huddle with `npm start`.
 4. Keep the terminal and Huddle browser tab active so the Codespace does not sleep.
 5. Open Yahoo and Huddle side by side.
-6. Run `npm run preflight`. Do not start the live session unless it says `READY`.
+6. Select **Check draft readiness** in the app. Do not start the live session unless the panel shows `READY`.
 7. Check `/api/operations/weekly/status` and `/api/provider-status` for unexpected provider or token failures.
 
 ### 15 minutes before the draft

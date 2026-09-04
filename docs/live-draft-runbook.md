@@ -1,21 +1,21 @@
 # Live draft runbook
 
-For the dated Codespaces checklist, exact preflight commands, attended-draft procedure, and weekly handoff, use the [September 8, 2026 operations plan](september-8-operations.md).
+For the dated Codespaces checklist, in-app readiness checks and optional CLI diagnostics, attended-draft procedure, and weekly handoff, use the [September 8, 2026 operations plan](september-8-operations.md).
 
 ## The day before
 
 1. Connect Yahoo, import the real league, and confirm the league and target team shown in `/api/league`.
 2. Use **Refresh league settings** and confirm the roster/scoring warnings are gone or understood. Use **Refresh slot from Yahoo** after Yahoo publishes the draft order. If Yahoo still reports it as pending, verify and enter the slot from the Yahoo draft room.
 3. Put the FantasyPros key in `.env`. Add `TANK01_API_KEY` only if the optional RapidAPI second opinion is enabled; never put either key in a request body or repository file. Sleeper trends require no key.
-4. Run `npm run preflight`. It automatically refreshes live provider evidence when the saved snapshot is missing, stale, below the Yahoo crosswalk threshold, or too shallow for the complete draft. It also checks QB/RB/WR/TE/K/DEF depth and rehearses the Yahoo league-settings, draft-results, and player endpoints through the read-only client. Do not use live Yahoo mode unless it returns `READY`.
-5. If preflight reports `FANTASYPROS_KEY_MISSING`, add `FANTASYPROS_API_KEY` to the Codespace secrets/environment, restart the Codespace, and rerun preflight.
+4. Open **Draft room → Check draft readiness**. The full check also starts automatically when the dashboard opens with a connected, imported Yahoo league. It automatically refreshes live provider evidence when the saved snapshot is missing, stale, below the Yahoo crosswalk threshold, or too shallow for the complete draft. It also checks QB/RB/WR/TE/K/DEF depth and rehearses the Yahoo league-settings, draft-results, and player endpoints through the read-only client. Do not use live Yahoo mode unless it returns `READY`.
+5. If preflight reports `FANTASYPROS_KEY_MISSING`, add `FANTASYPROS_API_KEY` to the Codespace secrets/environment, restart the Codespace, and select **Check draft readiness** again.
 6. Create a practice Yahoo-source session, confirm the sync panel reaches `Running`, use **Sync now**, and rehearse manual pick entry as the fallback.
 
 ## Draft-day startup
 
 1. Start Huddle at least 15 minutes before the room opens.
 2. Create a session using the Yahoo-confirmed draft slot. Huddle refreshes it before opening Yahoo mode and reconciles it from the target team's first observed completed pick if Yahoo changes or delays the team metadata.
-3. Use Yahoo source mode only when `npm run preflight` reports `READY`. Creating the session starts the completed-pick poller automatically; active Yahoo sessions resume after a process restart.
+3. Use Yahoo source mode only when the **Draft readiness** panel shows `READY`. Creating the session starts the completed-pick poller automatically; active Yahoo sessions resume after a process restart.
 4. Keep Yahoo and the Huddle dashboard side by side. Huddle is advisory; submit every selection in Yahoo.
 
 ## During the draft
@@ -36,7 +36,7 @@ For the dated Codespaces checklist, exact preflight commands, attended-draft pro
 
 ## Yahoo live mode acceptance checklist
 
-`npm run preflight` automates the local portions of this gate. Do not enable the poller until all items pass:
+**Check draft readiness** runs this gate inside the active app; `npm run preflight` is an optional view of the same check. Do not enable the poller until all items pass:
 
 - OAuth refresh succeeds without logging tokens.
 - `leagueSettings` returns the locally configured league ID and settings match the normalized profile.
