@@ -5,8 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { isTruncated, normalizeRankedPlayer, stripPlayerImageFields } = require('../src/providers/fantasypros');
-const { FantasyProsClient } = require('../src/providers/fantasypros');
+const { FantasyProsClient, isTruncated, normalizeRankedPlayer, POSITIONS, stripPlayerImageFields } = require('../src/providers/fantasypros');
 const { sanitizePlayerPool } = require('../src/media/player-headshots');
 const {
   YahooDraftPoller,
@@ -144,6 +143,56 @@ test('FantasyPros keeps every ranked player when projection rows are limited', a
   assert.equal(pool.players[1].projectedPoints, null);
   assert.equal(pool.players[1].yahooPlayerKey, '1002');
   assert.deepEqual(pool.projectionCoverage, { projected: 1, ranked: 2, coverage: 0.5 });
+});
+
+test('FantasyPros prioritizes Yahoo identities and rankings when only twelve daily requests remain', async () => {
+  const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'huddle-fantasypros-adaptive-budget-'));
+  fs.writeFileSync(path.join(cacheDir, `.request-usage-${new Date().toISOString().slice(0, 10)}.json`), JSON.stringify({ used: 12 }));
+  const requested = [];
+  const client = new FantasyProsClient({
+    apiKey: 'test-key',
+    cacheDir,
+    dailyRequestBudget: 24,
+    fetchImpl: async (value) => {
+      const url = new URL(value);
+      requested.push(url);
+      if (url.pathname.endsWith('/players')) return {
+        ok: true,
+        json: async () => ({ players: POSITIONS.map((position, index) => ({
+          player_id: `${position.toLowerCase()}-1`,
+          player_yahoo_id: String(40_000 + index)
+        })) }),
+        headers: new Headers()
+      };
+      const position = url.searchParams.get('position');
+      const payload = url.pathname.endsWith('/projections')
+        ? { players: [{ fpid: `${position.toLowerCase()}-1`, stats: [{ points_ppr: 100 }] }] }
+        : { players: [{
+          player_id: `${position.toLowerCase()}-1`,
+          player_name: `${position} Test`,
+          player_position_id: position,
+          rank_ecr: 1
+        }] };
+      return { ok: true, json: async () => payload, headers: new Headers() };
+    }
+  });
+
+  const pool = await client.loadDraftPool({ season: 2026, scoring: 'PPR', force: true });
+  assert.equal(requested.length, 12);
+  assert.equal(requested.filter((url) => url.pathname.endsWith('/players')).length, 1);
+  assert.equal(requested.filter((url) => url.pathname.endsWith('/consensus-rankings')).length, 6);
+  assert.equal(requested.filter((url) => url.pathname.endsWith('/projections')).length, 5);
+  assert.equal(pool.players.length, 6);
+  assert.equal(pool.players.every((player) => /^\d+$/.test(player.yahooPlayerKey)), true);
+  assert.deepEqual(pool.projectionCoverage, { projected: 5, ranked: 6, coverage: 0.8333 });
+  assert.deepEqual(pool.requestCoverage, {
+    mode: 'essential-plus-partial-projections',
+    essentialRequests: 7,
+    fullRequests: 13,
+    skippedProjectionPositions: ['DST']
+  });
+  assert.equal(pool.complete, false);
+  assert.equal(client.quotaStatus().estimatedRemaining, 0);
 });
 
 test('FantasyPros refresh fails before network calls when the local daily budget is exhausted', async () => {
