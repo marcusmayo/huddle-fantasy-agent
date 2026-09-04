@@ -25,7 +25,7 @@ Do not set `HUDDLE_YAHOO_OAUTH_ENABLED=true` until all of these are complete:
 - OAuth state is single-use and expires in memory after ten minutes.
 - Access and refresh tokens are encrypted at rest with AES-256-GCM and written with owner-only permissions.
 - The transient weekly adapter fetches provider responses in memory and passes them directly to a versioned normalizer. Raw provider responses are never returned to callers or sent to Huddle's JSON state store.
-- A transient weekly preview does not modify league state. A separate, explicit commit step is required after normalization and operator review.
+- Scheduled weekly previews do not modify league state. The dashboard's explicit **Update week from Yahoo** action stores only the compact normalized result as the latest revision for that season/week; raw responses remain transient.
 - Screenshot image bytes are never persisted. Operator-confirmed screenshot metadata expires after at most 30 days.
 - Yahoo-derived AI material must not be used for model training, grounding, or product improvement.
 

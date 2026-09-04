@@ -34,7 +34,7 @@ function leagueSummary(entry, service, weeklyService, runtime) {
     stateError: failure ? { code: failure.code, message: failure.message } : null,
     sessions: sessions.length,
     activeSessions: sessions.filter((session) => session.status === 'active').length,
-    weekly: weeklyService?.status() || { storedWeeks: 0, openReviews: 0, completedReviews: 0, latest: null, execution: 'recommendation-only' }
+    weekly: weeklyService?.status() || { storedWeeks: 0, latest: null, execution: 'recommendation-only' }
   };
 }
 

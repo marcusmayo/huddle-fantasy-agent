@@ -175,7 +175,7 @@ test('Yahoo operations readiness and one-shot draft sync are fail-loud and idemp
   operations.stop();
 });
 
-test('Yahoo weekly operations return an expiring transient review and never save it', async () => {
+test('Yahoo weekly operations keep scheduled previews transient and save explicit week revisions without raw payloads', async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'huddle-weekly-ops-'));
   const store = new MemoryStateStore();
   const drafts = new DraftService({ league, playerPool: structuredClone(pool), store });
@@ -199,10 +199,11 @@ test('Yahoo weekly operations return an expiring transient review and never save
     yahooWeeklyRefreshIntervalMs: 86_400_000, yahooWeeklyPreviewTtlMs: 3_600_000,
     operationsMaximumEvidenceAgeHours: 36, leagueErrors: []
   };
+  let currentWeek = 1;
   const yahooAccount = {
     status: () => ({ enabled: true, clientConfigured: true, encryptedTokenStorageConfigured: true, connected: true, mode: 'read-only' }),
     readClient: () => client,
-    discoverLeagues: async () => ({ leagues: [{ leagueKey: '999.l.1', currentWeek: 1, season: 2026 }] })
+    discoverLeagues: async () => ({ leagues: [{ leagueKey: '999.l.1', currentWeek, season: 2026 }] })
   };
   const operations = new YahooOperationsService({
     runtime, yahooAccount, draftServices: new Map([[league.id, drafts]]), weeklyServices: new Map([[league.id, weekly]]),
@@ -220,6 +221,29 @@ test('Yahoo weekly operations return an expiring transient review and never save
   assert.equal(fleet.trigger, 'test');
   assert.equal(operations.weeklyFleetStatus().latestRun.succeeded, 1);
   assert.equal(JSON.stringify(store.load()), before);
+  currentWeek = 2;
+  const rollover = await operations.refreshWeeklyFleet({ trigger: 'week-rollover' });
+  assert.equal(rollover.results[0].week, 2);
+  assert.equal(operations.weeklyStatus(league.id).week, 2);
+  assert.equal(JSON.stringify(store.load()), before);
+
+  const saved = await operations.previewWeekly({ leagueId: league.id, week: 1, season: 2026, persistNormalized: true });
+  assert.equal(saved.persistence, 'normalized-week-revision');
+  assert.equal(saved.savedRevision, 1);
+  assert.equal(saved.review.persistence.persisted, true);
+  assert.equal(weekly.listWeeks().length, 1);
+  assert.equal(weekly.listWeeks()[0].revisions, 1);
+  assert.doesNotMatch(JSON.stringify(store.load()), /RAW_WEEKLY_YAHOO_MUST_NOT_PERSIST/);
+
+  const revised = await operations.previewWeekly({ leagueId: league.id, week: 1, season: 2026, persistNormalized: true });
+  assert.equal(revised.savedRevision, 2);
+  assert.equal(weekly.listWeeks().length, 1);
+  assert.equal(weekly.listWeeks()[0].revisions, 2);
+
+  const nextWeek = await operations.previewWeekly({ leagueId: league.id, week: 2, season: 2026, persistNormalized: true });
+  assert.equal(nextWeek.savedRevision, 1);
+  assert.deepEqual(weekly.listWeeks().map((item) => [item.season, item.week, item.revisions]), [[2026, 2, 1], [2026, 1, 2]]);
+  assert.equal(weekly.getWeek(1, 2026).week, 1);
 });
 
 test('Yahoo weekly preview rejects a season that does not match the imported league', async () => {
@@ -477,7 +501,7 @@ test('Yahoo rehearsal qualifies numeric and stale player IDs for the imported le
   assert.match(result.checks.find((check) => check.name === 'player-lookup').details, /current-season key used/);
 });
 
-test('operational HTTP routes expose readiness, draft sync control, and transient weekly refresh', async () => {
+test('operational HTTP routes expose readiness, draft sync control, and saved weekly refresh', async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'huddle-ops-http-'));
   const calls = [];
   const yahooOperations = {
@@ -491,7 +515,10 @@ test('operational HTTP routes expose readiness, draft sync control, and transien
     stopDraftSync: ({ leagueId, sessionId }) => ({ leagueId, sessionId, state: 'stopped', observedPicks: 1 }),
     weeklyStatus: (leagueId, options = {}) => ({ leagueId, state: 'ready', review: options.includeReview ? { week: 1 } : null }),
     weeklyFleetStatus: () => ({ scheduled: true, latestRun: { complete: true, succeeded: 1, failed: 0 }, leagues: [] }),
-    previewWeekly: async ({ leagueId, week, season }) => ({ leagueId, week: Number(week), season: Number(season), state: 'ready', review: { week: Number(week), season: Number(season) } }),
+    previewWeekly: async ({ leagueId, week, season, persistNormalized }) => {
+      calls.push(['weekly', leagueId, persistNormalized]);
+      return { leagueId, week: Number(week), season: Number(season), state: 'ready', savedRevision: 1, review: { week: Number(week), season: Number(season) } };
+    },
     refreshWeeklyFleet: async () => ({ complete: true, succeeded: 1, failed: 0, results: [] }),
     rehearse: async ({ leagueId }) => ({ leagueId, ready: true, checks: [], mutations: false }),
     runScheduledWeeklyRefresh: async () => ({ complete: true, succeeded: 1, failed: 0, results: [] }),
@@ -528,6 +555,7 @@ test('operational HTTP routes expose readiness, draft sync control, and transien
     });
     assert.equal(weeklyResponse.status, 200);
     assert.equal((await weeklyResponse.json()).review.week, 1);
+    assert.deepEqual(calls.find((item) => item[0] === 'weekly'), ['weekly', league.id, true]);
     const weeklyFleet = await (await fetch(`${base}/api/operations/weekly/status`)).json();
     assert.equal(weeklyFleet.latestRun.complete, true);
     const rehearsal = await (await fetch(`${base}/api/leagues/${league.id}/yahoo/rehearsal`, { method: 'POST' })).json();

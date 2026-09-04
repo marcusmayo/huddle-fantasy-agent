@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { YahooDraftPoller, qualifyYahooPlayerKey } = require('../providers/yahoo');
 const { YahooTransientWeeklyAdapter } = require('../providers/yahoo-transient-weekly');
 const { normalizeYahooWeeklyBundle } = require('../providers/yahoo-weekly-normalizer');
@@ -365,7 +366,9 @@ class YahooOperationsService {
       week: item?.week || null,
       season: item?.season || null,
       error: item?.error || null,
-      persistence: 'transient-memory-only',
+      persistence: item?.provenance?.normalizedReviewPersisted ? 'normalized-week-revision' : 'transient-memory-only',
+      savedRevision: item?.savedRevision || null,
+      savedAt: item?.savedAt || null,
       ageMinutes: lastAttemptMs == null ? null : Math.max(0, Math.round(((this.now().getTime() - lastAttemptMs) / 60_000) * 10) / 10),
       candidateCoverage: item?.provenance?.availablePlayers || null,
       review: includeReview && item?.review && !this.isPreviewStale(item) ? structuredClone(item.review) : null
@@ -433,7 +436,7 @@ class YahooOperationsService {
     };
   }
 
-  async previewWeekly({ leagueId, week, season }) {
+  async previewWeekly({ leagueId, week, season, persistNormalized = false }) {
     const entry = this.entry(leagueId);
     const service = this.weeklyServices.get(entry.id);
     if (!service) throw operationsError('LEAGUE_STATE_UNAVAILABLE', `Weekly service is unavailable: ${entry.id}`);
@@ -457,6 +460,8 @@ class YahooOperationsService {
       lastAttemptAt: this.iso(),
       lastSuccessAt: null,
       expiresAt: null,
+      savedRevision: null,
+      savedAt: null,
       review: null,
       error: null
     };
@@ -470,8 +475,29 @@ class YahooOperationsService {
         season: attempt.season,
         weeklyService: service
       });
-      attempt.review = result.review;
-      attempt.provenance = result.provenance;
+      if (persistNormalized) {
+        service.importSnapshot(
+          { ...result.normalizedSnapshot, source: 'yahoo-normalized-weekly-v1' },
+          {
+            expectedWeek: resolvedWeek,
+            eventId: `yahoo-weekly:${entry.id}:${resolvedSeason}:${resolvedWeek}:${crypto.randomUUID()}`,
+            source: 'yahoo-normalized-weekly-v1',
+            preferSharedProjections: true
+          }
+        );
+        const summary = service.listWeeks().find((item) => item.season === resolvedSeason && item.week === resolvedWeek);
+        attempt.review = service.getWeek(resolvedWeek, resolvedSeason);
+        attempt.savedRevision = summary?.revisions || 1;
+        attempt.savedAt = summary?.updatedAt || this.iso();
+        attempt.provenance = {
+          ...result.provenance,
+          ingestion: 'normalized-week-revision',
+          normalizedReviewPersisted: true
+        };
+      } else {
+        attempt.review = result.review;
+        attempt.provenance = result.provenance;
+      }
       attempt.lastSuccessAt = this.iso();
       attempt.expiresAt = new Date(this.now().getTime() + this.runtime.yahooWeeklyPreviewTtlMs).toISOString();
       this.weeklyPreviews.set(entry.id, attempt);

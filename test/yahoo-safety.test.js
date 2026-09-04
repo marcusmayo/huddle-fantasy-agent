@@ -381,6 +381,8 @@ test('Yahoo weekly adapter calculates a transient review without saving raw prov
     weeklyService: weekly
   });
   assert.equal(result.review.persistence.persisted, false);
+  assert.equal(result.normalizedSnapshot.week, weeklySnapshot.week);
+  assert.doesNotMatch(JSON.stringify(result.normalizedSnapshot), new RegExp(sentinel));
   assert.equal(result.provenance.rawPayloadPersisted, false);
   assert.equal(JSON.stringify(store.load()), before);
   assert.doesNotMatch(JSON.stringify(store.load()), new RegExp(sentinel));

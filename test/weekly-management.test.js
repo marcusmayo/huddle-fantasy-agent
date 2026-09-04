@@ -226,18 +226,18 @@ test('weekly state is persisted beside draft state without overwriting it and ev
   assert.ok(persisted.weekly.weeks['2026:4']);
 });
 
-test('weekly reviews can be deleted individually or cleared by season without crossing league state', () => {
+test('weekly workspaces can be revised, deleted individually, or cleared by season without crossing league state', () => {
   const store = new MemoryStateStore();
   const currentLeague = league();
   const draftService = new DraftService({ league: currentLeague, playerPool, store });
   const weeklyService = new WeeklyManagementService({ league: currentLeague, playerPool, draftService });
   weeklyService.importSnapshot(snapshot(), { eventId: 'review:2026:4' });
+  weeklyService.importSnapshot(snapshot({ candidateProjection: 130 }), { eventId: 'review:2026:4:revision-2' });
   weeklyService.importSnapshot({ ...snapshot({ week: 5 }), season: 2024 }, { eventId: 'review:2024:5' });
   assert.deepEqual(weeklyService.listWeeks().map((item) => [item.season, item.week]), [[2026, 4], [2024, 5]]);
-  assert.equal(weeklyService.completeWeek(4, 2026).status, 'completed');
-  assert.equal(weeklyService.status().completedReviews, 1);
-  assert.equal(weeklyService.reopenWeek(4, 2026).status, 'open');
-  assert.equal(weeklyService.status().openReviews, 2);
+  assert.equal(weeklyService.listWeeks()[0].revisions, 2);
+  assert.equal('status' in weeklyService.listWeeks()[0], false);
+  assert.equal(weeklyService.status().storedWeeks, 2);
 
   assert.equal(weeklyService.deleteWeek(5, 2024).deleted, true);
   assert.deepEqual(weeklyService.listWeeks().map((item) => [item.season, item.week]), [[2026, 4]]);
@@ -289,15 +289,9 @@ test('league-scoped weekly HTTP API imports, reruns, and reports fleet capabilit
       method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}'
     })).json();
     assert.equal(rerun.review.waiver.recommendation.action, 'ADD_DROP');
-
-    const completed = await (await fetch(`${base}/api/leagues/weekly-one/weekly/weeks/4/complete?season=2026`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}'
-    })).json();
-    assert.equal(completed.review.status, 'completed');
-    const reopened = await (await fetch(`${base}/api/leagues/weekly-one/weekly/weeks/4/reopen?season=2026`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}'
-    })).json();
-    assert.equal(reopened.review.status, 'open');
+    const revisedWeeks = await (await fetch(`${base}/api/leagues/weekly-one/weekly/weeks`)).json();
+    assert.equal(revisedWeeks.weeks[0].revisions, 2);
+    assert.equal('status' in revisedWeeks.weeks[0], false);
 
     const deleted = await (await fetch(`${base}/api/leagues/weekly-one/weekly/weeks/4?season=2026`, { method: 'DELETE' })).json();
     assert.equal(deleted.deleted, true);
@@ -348,8 +342,9 @@ test('weekly management controls are present in the Huddle dashboard', () => {
   assert.match(html, /id="weekly-import"/);
   assert.match(html, /id="weekly-yahoo-refresh"/);
   assert.match(html, /id="weekly-delete-review"/);
-  assert.match(html, /id="weekly-complete-review"/);
+  assert.doesNotMatch(html, /id="weekly-complete-review"/);
   assert.match(html, /id="weekly-clear-season"/);
+  assert.match(html, /Each fantasy week is a living workspace/);
   assert.match(html, /id="draft-session-history"/);
   assert.match(html, /id="yahoo-draft-sync"/);
   assert.match(html, /HOLD/);

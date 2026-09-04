@@ -194,13 +194,13 @@ The automated weekly preview runs only while Huddle is running. A Codespace is a
 1. Start Huddle.
 2. Select the real league and **Weekly management**.
 3. Confirm the displayed Yahoo source season and set the week. A live Yahoo refresh is locked to the imported league's season; historical seasons require the archived Yahoo league to be imported separately.
-4. Click **Refresh from Yahoo**.
-5. Confirm the preview reports `yahoo-live-transient-v1`, the expected week, every league team, the correct target roster, and current free agents.
+4. Click **Update week from Yahoo**.
+5. Confirm the saved week reports the expected season/week, every league team, the correct target roster, current free agents, and an incremented revision number.
 6. Review matchup, standings, actual-versus-optimal lineup, injuries/byes, transactions, the ordered waiver claim plan or `HOLD` decision, and the searchable available-player board. Confirm the displayed number of paginated Yahoo free agents is plausible for the league.
 7. Confirm availability, lock status, FAAB, priority, and deadline in Yahoo.
 8. Make lineup and waiver changes manually in Yahoo.
 
-The preview expires after 60 minutes and is not written to league history. Manual normalized JSON import remains available for an approved persistence workflow or if the live Yahoo adapter fails validation.
+The in-process result expires after 60 minutes, but the compact normalized weekly revision remains in league history. Raw Yahoo responses are discarded. Manual normalized JSON import remains available if the live Yahoo adapter fails validation.
 
 ### Always-on weekly workflow
 

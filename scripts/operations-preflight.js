@@ -12,7 +12,7 @@ function printHuman(report) {
   console.log(`Position depth: ${(report.playerEvidence.crosswalk.positions || []).map((item) => `${item.position} ${item.loaded}/${item.required}${item.shortfall ? ` (-${item.shortfall})` : ''}`).join(' · ') || 'unavailable'}`);
   console.log(`Evidence: ${report.playerEvidence.source || 'not loaded'} · ${report.playerEvidence.ageHours == null ? 'age unknown' : `${report.playerEvidence.ageHours}h old`}`);
   console.log(`Draft polling: ${report.yahooAutomation.draftAutoSyncEnabled ? 'enabled' : 'disabled'} · ${report.yahooAutomation.draftPollSeconds}s`);
-  console.log(`Weekly preview: ${report.yahooAutomation.weeklyAutoRefreshEnabled ? 'scheduled' : 'manual'} · transient only`);
+  console.log(`Weekly management: ${report.yahooAutomation.weeklyAutoRefreshEnabled ? 'scheduled current-week preview' : 'manual preview'} · explicit normalized week saves`);
   if (report.preflightEvidenceRefresh) {
     console.log(`Preflight evidence refresh: ${report.preflightEvidenceRefresh.status}`);
   }

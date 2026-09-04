@@ -26,7 +26,6 @@ const state = {
   mode: localStorage.getItem('huddle-mode') === 'weekly' ? 'weekly' : 'draft',
   weeklyReview: null,
   weeklyReviewPersisted: false,
-  weeklyReviewStatus: null,
   weeklyWeeks: [],
   weeklySelectedSeason: null,
   weeklyPlayerSearch: '',
@@ -369,7 +368,7 @@ function renderLeagueFleet() {
         <span class="league-state"><i></i>${league.activeSessions ? `${league.activeSessions} active draft` : 'ready'}</span>
         <strong>${escapeHtml(league.name)}</strong>
         <span>${escapeHtml(league.targetTeam)} · ${league.teamCount} teams</span>
-        <small>${sourceLabel} · ${league.sessions} draft session${league.sessions === 1 ? '' : 's'} · ${league.weekly?.storedWeeks || 0} weekly review${league.weekly?.storedWeeks === 1 ? '' : 's'}${league.weekly?.openReviews ? ` (${league.weekly.openReviews} open)` : ''} · ${escapeHtml(league.verificationStatus || 'unverified')}</small>
+        <small>${sourceLabel} · ${league.sessions} draft session${league.sessions === 1 ? '' : 's'} · ${league.weekly?.storedWeeks || 0} saved week${league.weekly?.storedWeeks === 1 ? '' : 's'} · ${escapeHtml(league.verificationStatus || 'unverified')}</small>
       </button>
       <div class="league-card-actions" aria-label="Arrange ${escapeHtml(league.name)}">
         <button type="button" class="ghost compact" data-league-move="-1" ${index === 0 ? 'disabled' : ''} aria-label="Move ${escapeHtml(league.name)} left">←</button>
@@ -648,7 +647,6 @@ async function selectLeague(leagueId) {
   state.weeklyWeeks = [];
   state.weeklyReview = null;
   state.weeklyReviewPersisted = false;
-  state.weeklyReviewStatus = null;
   localStorage.setItem('huddle-active-league', leagueId);
   $('#league-select').value = leagueId;
   state.league = await api(scoped());
@@ -850,13 +848,13 @@ function setWeeklySeason(value, { persist = true } = {}) {
   if (persist && state.leagueId) localStorage.setItem(weeklySeasonKey(), String(season));
   const savedCount = state.weeklyWeeks.filter((review) => review.season === season).length;
   const yahooSeason = authoritativeYahooSeason();
-  $('#weekly-season-status').textContent = `Viewing ${season} season · ${savedCount} saved review${savedCount === 1 ? '' : 's'}`;
+  $('#weekly-season-status').textContent = `Viewing ${season} season · ${savedCount} saved week${savedCount === 1 ? '' : 's'}`;
   $('#weekly-season-help').textContent = yahooSeason
     ? season === yahooSeason
-      ? `Yahoo source season ${yahooSeason}. Refresh from Yahoo stays in this season.`
+      ? `Yahoo source season ${yahooSeason}. Yahoo updates stay in this season.`
       : `Historical ${season} view. This league's live Yahoo source is ${yahooSeason}.`
     : `Manual snapshots will be assigned to season ${season}.`;
-  $('#weekly-clear-season').textContent = `Clear ${season} reviews`;
+  $('#weekly-clear-season').textContent = `Clear ${season} history`;
   $('#weekly-clear-season').disabled = savedCount === 0;
   return season;
 }
@@ -942,13 +940,10 @@ function renderWeekly(review) {
   state.weeklyReview = review;
   const savedSummary = review && state.weeklyWeeks.find((item) => weeklyKey(item) === weeklyKey(review));
   state.weeklyReviewPersisted = Boolean(review && review.persistence?.persisted !== false && savedSummary);
-  state.weeklyReviewStatus = state.weeklyReviewPersisted ? savedSummary.status : null;
   const hasReview = Boolean(review);
   $('#weekly-empty').classList.toggle('hidden', hasReview);
   $('#weekly-review').classList.toggle('hidden', !hasReview);
   $('#weekly-delete-review').disabled = !state.weeklyReviewPersisted;
-  $('#weekly-complete-review').disabled = !state.weeklyReviewPersisted;
-  $('#weekly-complete-review').textContent = state.weeklyReviewStatus === 'completed' ? 'Reopen review' : 'Complete review';
   if (!review) {
     $('#weekly-rerun').disabled = true;
     $('#weekly-rerun').title = 'Choose a saved review before recalculating it.';
@@ -958,8 +953,11 @@ function renderWeekly(review) {
   }
   const transientYahoo = review.persistence?.persisted === false && review.source === 'yahoo-live-transient-v1';
   $('#weekly-rerun').disabled = transientYahoo || !state.weeklyReviewPersisted;
-  $('#weekly-rerun').title = transientYahoo ? 'Yahoo previews are recalculated with Refresh from Yahoo and are not persisted.' : '';
+  $('#weekly-rerun').title = transientYahoo ? 'Save this Yahoo preview with Update week from Yahoo before recalculating it.' : '';
   setWeeklySeason(review.season);
+  if (savedSummary) {
+    $('#weekly-season-status').textContent = `Viewing ${review.season} season · Week ${review.week} · saved revision ${savedSummary.revisions} · updated ${new Date(savedSummary.updatedAt).toLocaleString()}`;
+  }
   $('#weekly-week').value = review.week;
   $('#weekly-history').value = state.weeklyReviewPersisted ? weeklyKey(review) : '';
   const target = review.targetResult || {};
@@ -1029,18 +1027,21 @@ async function loadWeekly(reviewKey, { season } = {}) {
   state.weeklyWeeks = result.weeks;
   state.yahooWeeklyStatus = yahoo;
   const seasonWeeks = result.weeks.filter((week) => week.season === selectedSeason);
-  $('#weekly-history').innerHTML = `<option value="">${seasonWeeks.length ? `Latest saved · ${selectedSeason}` : `No saved reviews · ${selectedSeason}`}</option>` + seasonWeeks.map((week) =>
-    `<option value="${week.season}:${week.week}">${week.season} · Week ${week.week} · ${escapeHtml(week.status)} · ${escapeHtml(week.waiverAction)}</option>`).join('');
+  $('#weekly-history').innerHTML = `<option value="">${seasonWeeks.length ? `Latest saved week · ${selectedSeason}` : `No saved weeks · ${selectedSeason}`}</option>` + seasonWeeks.map((week) =>
+    `<option value="${week.season}:${week.week}">${week.season} · Week ${week.week} · revision ${week.revisions} · ${escapeHtml(week.waiverAction)}</option>`).join('');
   setWeeklySeason(selectedSeason);
   if (!reviewKey && yahoo?.review && yahoo.review.season === selectedSeason) {
     renderWeekly(yahoo.review);
+    $('#weekly-week').value = yahoo.week;
     const coverage = yahoo.candidateCoverage;
-    $('#weekly-message').textContent = `Live Yahoo Week ${yahoo.week} preview · ${coverage ? `${coverage.retrieved} available players across ${coverage.pages} page${coverage.pages === 1 ? '' : 's'} · ` : ''}transient until ${new Date(yahoo.expiresAt).toLocaleString()}`;
+    $('#weekly-message').textContent = yahoo.persistence === 'normalized-week-revision'
+      ? `Yahoo Week ${yahoo.week} saved as revision ${yahoo.savedRevision}. ${coverage ? `${coverage.retrieved} available players were reviewed. ` : ''}Refresh again whenever the league changes.`
+      : `Current Yahoo Week ${yahoo.week} preview · ${coverage ? `${coverage.retrieved} available players across ${coverage.pages} page${coverage.pages === 1 ? '' : 's'} · ` : ''}select Update week from Yahoo to save it.`;
     return;
   }
   if (!seasonWeeks.length && !reviewKey) {
     renderWeekly(null);
-    $('#weekly-message').textContent = `No saved weekly reviews for ${selectedSeason}. ${authoritativeYahooSeason() === selectedSeason ? 'Refresh from Yahoo to preview this season, or import a normalized snapshot.' : 'Import a normalized historical snapshot to add one.'}`;
+    $('#weekly-message').textContent = `No saved weeks for ${selectedSeason}. ${authoritativeYahooSeason() === selectedSeason ? 'Update this week from Yahoo to create its first saved revision, or import a normalized snapshot.' : 'Import a normalized historical snapshot to add one.'}`;
     return;
   }
   const selected = reviewKey || `${seasonWeeks[0].season}:${seasonWeeks[0].week}`;
@@ -1074,10 +1075,11 @@ async function refreshWeeklyFromYahoo() {
       })
     });
     state.yahooWeeklyStatus = result;
-    renderWeekly(result.review);
+    await refreshFleetSummary();
+    await loadWeekly(`${result.season}:${result.week}`);
     const coverage = result.candidateCoverage;
-    $('#weekly-message').textContent = `Yahoo Week ${result.week} review ready. ${coverage ? `${coverage.retrieved} available players were reviewed across ${coverage.pages} page${coverage.pages === 1 ? '' : 's'}. ` : ''}It is transient and expires ${new Date(result.expiresAt).toLocaleString()}.`;
-    showToast(`Yahoo Week ${result.week} refreshed. Review the lineup and ${result.review.waiver.recommendation.action} guidance; make all changes in Yahoo.`);
+    $('#weekly-message').textContent = `Yahoo Week ${result.week} saved as revision ${result.savedRevision}. ${coverage ? `${coverage.retrieved} available players were reviewed across ${coverage.pages} page${coverage.pages === 1 ? '' : 's'}. ` : ''}Update again whenever rosters, waivers, injuries, or projections change.`;
+    showToast(`Yahoo Week ${result.week} revision ${result.savedRevision} saved. Review the guidance and make all changes in Yahoo.`);
   } catch (error) {
     $('#weekly-message').textContent = error.message;
   } finally {
@@ -1142,27 +1144,12 @@ async function changeWeeklySeason() {
 async function deleteWeeklyReview() {
   const review = state.weeklyReview;
   if (!review || !state.weeklyReviewPersisted) return;
-  if (!window.confirm(`Permanently delete ${state.league.name}'s saved ${review.season} Week ${review.week} review? This cannot be undone.`)) return;
+  if (!window.confirm(`Permanently delete ${state.league.name}'s saved ${review.season} Week ${review.week}? This cannot be undone.`)) return;
   try {
     await api(scoped(`/weekly/weeks/${review.week}?season=${review.season}`), { method: 'DELETE' });
     await refreshFleetSummary();
     await loadWeekly(undefined, { season: review.season });
-    showToast(`${review.season} Week ${review.week} review deleted.`);
-  } catch (error) {
-    showToast(error.message);
-  }
-}
-
-async function toggleWeeklyReviewComplete() {
-  const review = state.weeklyReview;
-  if (!review || !state.weeklyReviewPersisted) return;
-  const reopening = state.weeklyReviewStatus === 'completed';
-  const action = reopening ? 'reopen' : 'complete';
-  try {
-    await api(scoped(`/weekly/weeks/${review.week}/${action}?season=${review.season}`), { method: 'POST', body: '{}' });
-    await refreshFleetSummary();
-    await loadWeekly(`${review.season}:${review.week}`);
-    showToast(`${review.season} Week ${review.week} review ${reopening ? 'reopened' : 'completed'}.`);
+    showToast(`${review.season} Week ${review.week} deleted.`);
   } catch (error) {
     showToast(error.message);
   }
@@ -1171,12 +1158,12 @@ async function toggleWeeklyReviewComplete() {
 async function clearWeeklySeason() {
   const season = state.weeklySelectedSeason;
   const count = state.weeklyWeeks.filter((review) => review.season === season).length;
-  if (!count || !window.confirm(`Permanently delete all ${count} saved ${season} weekly review${count === 1 ? '' : 's'} for ${state.league.name}? Other seasons and leagues will not be changed.`)) return;
+  if (!count || !window.confirm(`Permanently delete all ${count} saved ${season} week${count === 1 ? '' : 's'} for ${state.league.name}? Other seasons and leagues will not be changed.`)) return;
   try {
     await api(scoped(`/weekly/weeks?season=${season}`), { method: 'DELETE' });
     await refreshFleetSummary();
     await loadWeekly(undefined, { season });
-    showToast(`Cleared ${count} saved ${season} review${count === 1 ? '' : 's'} for ${state.league.name}.`);
+    showToast(`Cleared ${count} saved ${season} week${count === 1 ? '' : 's'} for ${state.league.name}.`);
   } catch (error) {
     showToast(error.message);
   }
@@ -1735,7 +1722,6 @@ async function init() {
   $('#weekly-import').addEventListener('click', importWeekly);
   $('#weekly-rerun').addEventListener('click', rerunWeekly);
   $('#weekly-yahoo-refresh').addEventListener('click', refreshWeeklyFromYahoo);
-  $('#weekly-complete-review').addEventListener('click', toggleWeeklyReviewComplete);
   $('#weekly-delete-review').addEventListener('click', deleteWeeklyReview);
   $('#weekly-clear-season').addEventListener('click', clearWeeklySeason);
   $('#weekly-season').addEventListener('change', changeWeeklySeason);
