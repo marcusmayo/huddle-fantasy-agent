@@ -277,6 +277,10 @@ class YahooDraftPoller {
       observedPicks: picks.length,
       unresolvedPicks: [...new Set([...persistentUnresolvedPicks, ...unresolvedPicks])].sort((a, b) => a - b)
     });
+    if (saved.status === 'completed') {
+      this.stop();
+      this.onStatus({ level: 'info', code: 'DRAFT_COMPLETED', observedPicks: picks.length });
+    }
     return saved;
   }
 

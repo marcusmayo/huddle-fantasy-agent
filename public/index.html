@@ -74,12 +74,27 @@
       </form>
     </section>
 
+    <section id="draft-session-history" class="panel history-manager hidden" aria-labelledby="draft-session-history-title">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">DRAFT HISTORY</p>
+          <h2 id="draft-session-history-title">Sessions for this league</h2>
+          <p class="muted">Resume an active room, complete it so it no longer counts as active, or permanently delete an obsolete session.</p>
+        </div>
+        <span id="draft-session-count" class="history-count"></span>
+      </div>
+      <div id="draft-session-list" class="history-list"></div>
+    </section>
+
     <section id="draft-room" class="hidden">
       <div class="draft-meta">
         <div><span class="eyebrow">CURRENT PICK</span><strong id="current-pick">—</strong></div>
         <div><span class="eyebrow">YOUR NEXT TURN</span><strong id="next-turn">—</strong></div>
         <div><span class="eyebrow">PLAYER DATA</span><strong id="coverage">—</strong></div>
-        <button id="new-session" class="ghost">New session</button>
+        <div class="draft-session-actions">
+          <button id="complete-session" class="ghost">Complete session</button>
+          <button id="new-session" class="ghost">Exit to sessions</button>
+        </div>
       </div>
 
       <div id="evidence-warning" class="warning hidden"></div>
@@ -230,10 +245,14 @@
           </label>
           <label>Week <input id="weekly-week" type="number" min="1" max="18" value="1" required></label>
           <label>Saved review
-            <select id="weekly-history"><option value="">Latest</option></select>
+            <select id="weekly-history"><option value="">No saved reviews</option></select>
           </label>
+          <output id="weekly-season-status" class="season-status">Viewing current season</output>
           <button id="weekly-rerun" type="button" class="ghost">Re-run league</button>
           <button id="weekly-yahoo-refresh" type="button">Refresh from Yahoo</button>
+          <button id="weekly-complete-review" type="button" class="ghost">Complete review</button>
+          <button id="weekly-delete-review" type="button" class="ghost danger">Delete saved review</button>
+          <button id="weekly-clear-season" type="button" class="ghost danger">Clear season reviews</button>
         </form>
       </div>
 

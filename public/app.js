@@ -6,6 +6,7 @@ const state = {
   leagueId: null,
   league: null,
   session: null,
+  draftSessions: [],
   recommendation: null,
   boardPosition: 'ALL',
   availablePlayers: [],
@@ -24,7 +25,10 @@ const state = {
   timer: null,
   mode: localStorage.getItem('huddle-mode') === 'weekly' ? 'weekly' : 'draft',
   weeklyReview: null,
+  weeklyReviewPersisted: false,
+  weeklyReviewStatus: null,
   weeklyWeeks: [],
+  weeklySelectedSeason: null,
   weeklyPlayerSearch: '',
   weeklyPlayerPosition: 'ALL',
   yahooDraftSync: null,
@@ -241,6 +245,10 @@ function sessionKey() {
   return `huddle-session-id:${state.leagueId}`;
 }
 
+function weeklySeasonKey() {
+  return `huddle-weekly-season:${state.leagueId}`;
+}
+
 function playerLabel(player) {
   return `${player.name} · ${player.position} · ${player.team}`;
 }
@@ -361,7 +369,7 @@ function renderLeagueFleet() {
         <span class="league-state"><i></i>${league.activeSessions ? `${league.activeSessions} active draft` : 'ready'}</span>
         <strong>${escapeHtml(league.name)}</strong>
         <span>${escapeHtml(league.targetTeam)} · ${league.teamCount} teams</span>
-        <small>${sourceLabel} · ${league.sessions} draft session${league.sessions === 1 ? '' : 's'} · ${league.weekly?.storedWeeks || 0} weekly review${league.weekly?.storedWeeks === 1 ? '' : 's'} · ${escapeHtml(league.verificationStatus || 'unverified')}</small>
+        <small>${sourceLabel} · ${league.sessions} draft session${league.sessions === 1 ? '' : 's'} · ${league.weekly?.storedWeeks || 0} weekly review${league.weekly?.storedWeeks === 1 ? '' : 's'}${league.weekly?.openReviews ? ` (${league.weekly.openReviews} open)` : ''} · ${escapeHtml(league.verificationStatus || 'unverified')}</small>
       </button>
       <div class="league-card-actions" aria-label="Arrange ${escapeHtml(league.name)}">
         <button type="button" class="ghost compact" data-league-move="-1" ${index === 0 ? 'disabled' : ''} aria-label="Move ${escapeHtml(league.name)} left">←</button>
@@ -401,6 +409,85 @@ function renderLeagueSelector() {
   if (state.leagueId) $('#league-select').value = state.leagueId;
 }
 
+function renderDraftSessions() {
+  const sessions = state.draftSessions;
+  const active = sessions.filter((session) => session.status === 'active').length;
+  $('#draft-session-count').textContent = `${active} active · ${sessions.length} total`;
+  $('#draft-session-list').innerHTML = sessions.length ? sessions.map((session) => {
+    const updated = session.updatedAt ? new Date(session.updatedAt).toLocaleString() : 'time unavailable';
+    const progress = `${session.picks.length} of ${session.totalPicks} picks`;
+    return `<article class="history-row">
+      <div class="history-row-copy">
+        <span class="session-status">${escapeHtml(session.status)}</span>
+        <strong>${escapeHtml(session.sourceMode)} session · slot ${session.draftSlot}</strong>
+        <small>${progress} · updated ${escapeHtml(updated)}${session.completedAt ? ` · completed ${escapeHtml(new Date(session.completedAt).toLocaleString())}` : ''}</small>
+      </div>
+      <div class="history-row-actions">
+        ${session.status === 'active'
+          ? `<button type="button" class="ghost compact" data-session-resume="${escapeHtml(session.id)}">Resume</button><button type="button" class="ghost compact" data-session-complete="${escapeHtml(session.id)}">Complete</button>`
+          : `<button type="button" class="ghost compact" data-session-reopen="${escapeHtml(session.id)}">Reopen</button>`}
+        <button type="button" class="ghost compact danger" data-session-delete="${escapeHtml(session.id)}">Delete</button>
+      </div>
+    </article>`;
+  }).join('') : '<p class="muted">No saved draft sessions for this league.</p>';
+  $('#draft-session-history').classList.toggle('hidden', state.mode !== 'draft' || Boolean(state.session));
+  document.querySelectorAll('[data-session-resume]').forEach((button) => button.addEventListener('click', () => resumeSession(button.dataset.sessionResume)));
+  document.querySelectorAll('[data-session-complete]').forEach((button) => button.addEventListener('click', () => completeDraftSession(button.dataset.sessionComplete)));
+  document.querySelectorAll('[data-session-reopen]').forEach((button) => button.addEventListener('click', () => reopenDraftSession(button.dataset.sessionReopen)));
+  document.querySelectorAll('[data-session-delete]').forEach((button) => button.addEventListener('click', () => deleteDraftSession(button.dataset.sessionDelete)));
+}
+
+async function loadDraftSessions() {
+  if (!state.leagueId) return;
+  const result = await api(scoped('/draft/sessions'));
+  state.draftSessions = result.sessions;
+  renderDraftSessions();
+}
+
+async function completeDraftSession(sessionId = state.session?.id) {
+  const session = state.draftSessions.find((item) => item.id === sessionId) || state.session;
+  if (!sessionId || !session) return;
+  if (!window.confirm(`Complete this ${state.league.name} draft session at ${session.picks.length} of ${session.totalPicks} picks? It can be reopened later.`)) return;
+  try {
+    await api(scoped(`/draft/sessions/${encodeURIComponent(sessionId)}/complete`), { method: 'POST', body: '{}' });
+    if (state.session?.id === sessionId) {
+      clearInterval(state.timer);
+      localStorage.removeItem(sessionKey());
+      state.session = null;
+      state.yahooDraftSync = null;
+      $('#draft-room').classList.add('hidden');
+      $('#setup').classList.remove('hidden');
+    }
+    await Promise.all([loadDraftSessions(), refreshFleetSummary()]);
+    showToast('Draft session completed. It no longer counts as active and can be reopened from Draft history.');
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function reopenDraftSession(sessionId) {
+  try {
+    await api(scoped(`/draft/sessions/${encodeURIComponent(sessionId)}/reopen`), { method: 'POST', body: '{}' });
+    await Promise.all([loadDraftSessions(), refreshFleetSummary()]);
+    showToast('Draft session reopened. Select Resume when you are ready to use it.');
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function deleteDraftSession(sessionId) {
+  const session = state.draftSessions.find((item) => item.id === sessionId);
+  if (!session || !window.confirm(`Permanently delete this ${state.league.name} ${session.status} draft session and its ${session.picks.length} recorded picks? This cannot be undone.`)) return;
+  try {
+    await api(scoped(`/draft/sessions/${encodeURIComponent(sessionId)}`), { method: 'DELETE' });
+    if (localStorage.getItem(sessionKey()) === sessionId) localStorage.removeItem(sessionKey());
+    await Promise.all([loadDraftSessions(), refreshFleetSummary()]);
+    showToast('Draft session permanently deleted.');
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
 function showEmptyFleet() {
   clearInterval(state.timer);
   state.leagueId = null;
@@ -437,6 +524,7 @@ async function removeLeague(leagueId) {
   try {
     const result = await api(`/api/leagues/${encodeURIComponent(leagueId)}`, { method: 'DELETE' });
     localStorage.removeItem(`huddle-session-id:${leagueId}`);
+    localStorage.removeItem(`huddle-weekly-season:${leagueId}`);
     state.defaultLeagueId = result.defaultLeagueId;
     state.leagues = applySavedLeagueOrder(result.fleet.leagues);
     saveLeagueOrder();
@@ -470,6 +558,7 @@ function showMode(mode) {
   $('#app-context').textContent = weekly ? 'HUDDLE / WEEKLY MANAGEMENT' : 'HUDDLE / DRAFT ROOM';
   $('#app-title').textContent = weekly ? 'Win the week, league by league.' : 'Make the next pick count.';
   $('#weekly-room').classList.toggle('hidden', !weekly);
+  $('#draft-session-history').classList.toggle('hidden', weekly || Boolean(state.session));
   if (weekly) {
     clearInterval(state.timer);
     $('#setup').classList.add('hidden');
@@ -485,6 +574,7 @@ function showMode(mode) {
       $('#draft-room').classList.add('hidden');
       $('#setup').classList.remove('hidden');
       $('#sync-label').textContent = 'Ready · recommendation only';
+      loadDraftSessions().catch((error) => showToast(error.message));
     }
   }
 }
@@ -554,6 +644,11 @@ async function selectLeague(leagueId) {
   clearInterval(state.timer);
   state.leagueId = leagueId;
   state.session = null;
+  state.draftSessions = [];
+  state.weeklyWeeks = [];
+  state.weeklyReview = null;
+  state.weeklyReviewPersisted = false;
+  state.weeklyReviewStatus = null;
   localStorage.setItem('huddle-active-league', leagueId);
   $('#league-select').value = leagueId;
   state.league = await api(scoped());
@@ -568,9 +663,8 @@ async function selectLeague(leagueId) {
   $('#draft-slot').value = state.league.draft?.draftSlot || '';
   const yahooEligible = yahooSyncEligible();
   const yahooSeason = Number(state.league.provenance?.season);
-  $('#weekly-season-help').textContent = yahooEligible && Number.isInteger(yahooSeason)
-    ? `Yahoo source season ${yahooSeason}. Historical seasons require their archived Yahoo league.`
-    : 'Manual snapshots use the season entered here.';
+  const storedWeeklySeason = validWeeklySeason(localStorage.getItem(weeklySeasonKey()));
+  setWeeklySeason(storedWeeklySeason || (yahooEligible && Number.isInteger(yahooSeason) ? yahooSeason : new Date().getFullYear()), { persist: false });
   const yahooOption = $('#source-mode').querySelector('option[value="yahoo"]');
   yahooOption.disabled = !yahooEligible;
   if (!yahooEligible && $('#source-mode').value === 'yahoo') $('#source-mode').value = 'manual';
@@ -595,6 +689,7 @@ async function selectLeague(leagueId) {
   $('#setup').classList.toggle('hidden', state.mode === 'weekly');
   $('#sync-label').textContent = state.mode === 'weekly' ? `Weekly review · ${state.league.name}` : 'Ready · recommendation only';
   renderLeagueFleet();
+  await loadDraftSessions();
 
   if (state.mode === 'weekly') {
     $('#weekly-room').classList.remove('hidden');
@@ -743,6 +838,29 @@ function authoritativeYahooSeason() {
   return yahooSyncEligible() && Number.isInteger(season) ? season : null;
 }
 
+function validWeeklySeason(value) {
+  const season = Number(value);
+  return Number.isInteger(season) && season >= 2020 && season <= 2100 ? season : null;
+}
+
+function setWeeklySeason(value, { persist = true } = {}) {
+  const season = validWeeklySeason(value) || authoritativeYahooSeason() || new Date().getFullYear();
+  state.weeklySelectedSeason = season;
+  $('#weekly-season').value = season;
+  if (persist && state.leagueId) localStorage.setItem(weeklySeasonKey(), String(season));
+  const savedCount = state.weeklyWeeks.filter((review) => review.season === season).length;
+  const yahooSeason = authoritativeYahooSeason();
+  $('#weekly-season-status').textContent = `Viewing ${season} season · ${savedCount} saved review${savedCount === 1 ? '' : 's'}`;
+  $('#weekly-season-help').textContent = yahooSeason
+    ? season === yahooSeason
+      ? `Yahoo source season ${yahooSeason}. Refresh from Yahoo stays in this season.`
+      : `Historical ${season} view. This league's live Yahoo source is ${yahooSeason}.`
+    : `Manual snapshots will be assigned to season ${season}.`;
+  $('#weekly-clear-season').textContent = `Clear ${season} reviews`;
+  $('#weekly-clear-season').disabled = savedCount === 0;
+  return season;
+}
+
 function weeklyPlayerIdentity(player) {
   return String(player?.yahooPlayerKey || player?.playerId || player?.id || player?.name || '').trim().toLowerCase();
 }
@@ -822,27 +940,28 @@ function renderWeeklyPlayerBoard(review = state.weeklyReview) {
 
 function renderWeekly(review) {
   state.weeklyReview = review;
+  const savedSummary = review && state.weeklyWeeks.find((item) => weeklyKey(item) === weeklyKey(review));
+  state.weeklyReviewPersisted = Boolean(review && review.persistence?.persisted !== false && savedSummary);
+  state.weeklyReviewStatus = state.weeklyReviewPersisted ? savedSummary.status : null;
   const hasReview = Boolean(review);
   $('#weekly-empty').classList.toggle('hidden', hasReview);
   $('#weekly-review').classList.toggle('hidden', !hasReview);
+  $('#weekly-delete-review').disabled = !state.weeklyReviewPersisted;
+  $('#weekly-complete-review').disabled = !state.weeklyReviewPersisted;
+  $('#weekly-complete-review').textContent = state.weeklyReviewStatus === 'completed' ? 'Reopen review' : 'Complete review';
   if (!review) {
-    $('#weekly-rerun').disabled = false;
-    $('#weekly-rerun').title = '';
+    $('#weekly-rerun').disabled = true;
+    $('#weekly-rerun').title = 'Choose a saved review before recalculating it.';
+    setWeeklySeason(state.weeklySelectedSeason);
     renderWeeklyPlayerBoard(null);
     return;
   }
   const transientYahoo = review.persistence?.persisted === false && review.source === 'yahoo-live-transient-v1';
-  $('#weekly-rerun').disabled = transientYahoo;
+  $('#weekly-rerun').disabled = transientYahoo || !state.weeklyReviewPersisted;
   $('#weekly-rerun').title = transientYahoo ? 'Yahoo previews are recalculated with Refresh from Yahoo and are not persisted.' : '';
-  $('#weekly-season').value = review.season;
+  setWeeklySeason(review.season);
   $('#weekly-week').value = review.week;
-  const yahooSeason = authoritativeYahooSeason();
-  $('#weekly-season-help').textContent = yahooSeason
-    ? review.season === yahooSeason
-      ? `Yahoo source season ${yahooSeason}.`
-      : `Showing saved ${review.season} data. A Yahoo refresh will use the authoritative ${yahooSeason} season.`
-    : 'Manual snapshots use the season entered here.';
-  $('#weekly-history').value = weeklyKey(review);
+  $('#weekly-history').value = state.weeklyReviewPersisted ? weeklyKey(review) : '';
   const target = review.targetResult || {};
   $('#weekly-result').textContent = target.result || 'PENDING';
   $('#weekly-score').textContent = `${target.score ?? '—'} vs ${target.opponentScore ?? '—'} · ${target.opponentName || 'opponent'}`;
@@ -898,28 +1017,35 @@ function renderWeekly(review) {
   ].map(([label, value]) => `<article><strong>${escapeHtml(label)}</strong><span>${escapeHtml(value)}</span></article>`).join('');
 }
 
-async function loadWeekly(reviewKey) {
+async function loadWeekly(reviewKey, { season } = {}) {
+  const explicitParts = reviewKey ? reviewKey.split(':').map(Number) : null;
+  const selectedSeason = setWeeklySeason(
+    explicitParts?.[0] || validWeeklySeason(season) || state.weeklySelectedSeason || authoritativeYahooSeason() || new Date().getFullYear()
+  );
   const [result, yahoo] = await Promise.all([
     api(scoped('/weekly/weeks')),
     reviewKey ? Promise.resolve(null) : api(scoped('/weekly/yahoo/latest')).catch(() => null)
   ]);
   state.weeklyWeeks = result.weeks;
   state.yahooWeeklyStatus = yahoo;
-  $('#weekly-history').innerHTML = '<option value="">Latest</option>' + result.weeks.map((week) =>
-    `<option value="${week.season}:${week.week}">${week.season} · Week ${week.week} · ${escapeHtml(week.waiverAction)}</option>`).join('');
-  if (!reviewKey && yahoo?.review) {
+  const seasonWeeks = result.weeks.filter((week) => week.season === selectedSeason);
+  $('#weekly-history').innerHTML = `<option value="">${seasonWeeks.length ? `Latest saved · ${selectedSeason}` : `No saved reviews · ${selectedSeason}`}</option>` + seasonWeeks.map((week) =>
+    `<option value="${week.season}:${week.week}">${week.season} · Week ${week.week} · ${escapeHtml(week.status)} · ${escapeHtml(week.waiverAction)}</option>`).join('');
+  setWeeklySeason(selectedSeason);
+  if (!reviewKey && yahoo?.review && yahoo.review.season === selectedSeason) {
     renderWeekly(yahoo.review);
     const coverage = yahoo.candidateCoverage;
     $('#weekly-message').textContent = `Live Yahoo Week ${yahoo.week} preview · ${coverage ? `${coverage.retrieved} available players across ${coverage.pages} page${coverage.pages === 1 ? '' : 's'} · ` : ''}transient until ${new Date(yahoo.expiresAt).toLocaleString()}`;
     return;
   }
-  if (!result.weeks.length) {
+  if (!seasonWeeks.length && !reviewKey) {
     renderWeekly(null);
+    $('#weekly-message').textContent = `No saved weekly reviews for ${selectedSeason}. ${authoritativeYahooSeason() === selectedSeason ? 'Refresh from Yahoo to preview this season, or import a normalized snapshot.' : 'Import a normalized historical snapshot to add one.'}`;
     return;
   }
-  const selected = reviewKey || `${result.weeks[0].season}:${result.weeks[0].week}`;
-  const [season, week] = selected.split(':').map(Number);
-  const review = await api(scoped(`/weekly/weeks/${week}?season=${season}`));
+  const selected = reviewKey || `${seasonWeeks[0].season}:${seasonWeeks[0].week}`;
+  const [reviewSeason, week] = selected.split(':').map(Number);
+  const review = await api(scoped(`/weekly/weeks/${week}?season=${reviewSeason}`));
   renderWeekly(review);
 }
 
@@ -937,7 +1063,7 @@ async function refreshWeeklyFromYahoo() {
     if (yahooSeason && season !== yahooSeason) {
       const requestedSeason = season;
       season = yahooSeason;
-      $('#weekly-season').value = yahooSeason;
+      setWeeklySeason(yahooSeason);
       showToast(`Yahoo refresh changed from ${requestedSeason} to ${state.league.name}'s authoritative ${yahooSeason} season.`);
     }
     const result = await api(scoped('/weekly/yahoo/refresh'), {
@@ -967,6 +1093,7 @@ async function importWeekly() {
     const snapshot = JSON.parse($('#weekly-json').value);
     const week = Number(snapshot.week || $('#weekly-week').value);
     const season = Number(snapshot.season || $('#weekly-season').value);
+    setWeeklySeason(season);
     const result = await api(scoped(`/weekly/weeks/${week}/import?season=${season}`), {
       method: 'POST',
       body: JSON.stringify({ snapshot: { ...snapshot, week, season }, eventId: `dashboard:${state.leagueId}:${season}:${week}:${Date.now()}` })
@@ -982,7 +1109,7 @@ async function importWeekly() {
 }
 
 async function rerunWeekly() {
-  if (!state.weeklyReview) return;
+  if (!state.weeklyReview || !state.weeklyReviewPersisted) return;
   const button = $('#weekly-rerun');
   button.disabled = true;
   try {
@@ -994,6 +1121,64 @@ async function rerunWeekly() {
     showToast(error.message);
   } finally {
     button.disabled = false;
+  }
+}
+
+async function changeWeeklySeason() {
+  const season = validWeeklySeason($('#weekly-season').value);
+  if (!season) {
+    showToast('Season must be a four-digit year from 2020 through 2100.');
+    $('#weekly-season').value = state.weeklySelectedSeason || authoritativeYahooSeason() || new Date().getFullYear();
+    return;
+  }
+  setWeeklySeason(season);
+  try {
+    await loadWeekly(undefined, { season });
+  } catch (error) {
+    $('#weekly-message').textContent = error.message;
+  }
+}
+
+async function deleteWeeklyReview() {
+  const review = state.weeklyReview;
+  if (!review || !state.weeklyReviewPersisted) return;
+  if (!window.confirm(`Permanently delete ${state.league.name}'s saved ${review.season} Week ${review.week} review? This cannot be undone.`)) return;
+  try {
+    await api(scoped(`/weekly/weeks/${review.week}?season=${review.season}`), { method: 'DELETE' });
+    await refreshFleetSummary();
+    await loadWeekly(undefined, { season: review.season });
+    showToast(`${review.season} Week ${review.week} review deleted.`);
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function toggleWeeklyReviewComplete() {
+  const review = state.weeklyReview;
+  if (!review || !state.weeklyReviewPersisted) return;
+  const reopening = state.weeklyReviewStatus === 'completed';
+  const action = reopening ? 'reopen' : 'complete';
+  try {
+    await api(scoped(`/weekly/weeks/${review.week}/${action}?season=${review.season}`), { method: 'POST', body: '{}' });
+    await refreshFleetSummary();
+    await loadWeekly(`${review.season}:${review.week}`);
+    showToast(`${review.season} Week ${review.week} review ${reopening ? 'reopened' : 'completed'}.`);
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function clearWeeklySeason() {
+  const season = state.weeklySelectedSeason;
+  const count = state.weeklyWeeks.filter((review) => review.season === season).length;
+  if (!count || !window.confirm(`Permanently delete all ${count} saved ${season} weekly review${count === 1 ? '' : 's'} for ${state.league.name}? Other seasons and leagues will not be changed.`)) return;
+  try {
+    await api(scoped(`/weekly/weeks?season=${season}`), { method: 'DELETE' });
+    await refreshFleetSummary();
+    await loadWeekly(undefined, { season });
+    showToast(`Cleared ${count} saved ${season} review${count === 1 ? '' : 's'} for ${state.league.name}.`);
+  } catch (error) {
+    showToast(error.message);
   }
 }
 
@@ -1011,6 +1196,7 @@ async function createSession(event) {
     localStorage.setItem(sessionKey(), session.id);
     state.yahooDraftSync = session.yahooSync || null;
     state.session = session;
+    $('#draft-session-history').classList.add('hidden');
     showDraftRoom();
     await refresh();
     startPolling();
@@ -1025,6 +1211,14 @@ async function createSession(event) {
 async function resumeSession(id) {
   try {
     state.session = await api(scoped(`/draft/sessions/${id}`));
+    if (state.session.status !== 'active') {
+      localStorage.removeItem(sessionKey());
+      state.session = null;
+      await loadDraftSessions();
+      showToast('That draft session is completed. Reopen it from Draft history before resuming.');
+      return;
+    }
+    localStorage.setItem(sessionKey(), id);
     showDraftRoom();
     await refresh();
     startPolling();
@@ -1035,7 +1229,11 @@ async function resumeSession(id) {
 
 function showDraftRoom() {
   $('#setup').classList.add('hidden');
+  $('#draft-session-history').classList.add('hidden');
   $('#draft-room').classList.remove('hidden');
+  $('#complete-session').disabled = state.session.status !== 'active';
+  $('#complete-session').textContent = state.session.status === 'active' ? 'Complete session' : 'Draft completed';
+  $('#pick-form button[type="submit"]').disabled = state.session.status !== 'active';
   const yahooMode = state.session.sourceMode === 'yahoo' && yahooSyncEligible();
   $('#sync-label').textContent = yahooMode
     ? `Yahoo sync · ${state.league.name}`
@@ -1438,6 +1636,13 @@ async function refresh() {
     state.providerStatusAt = Date.now();
   }
   state.session = session;
+  if (session.status === 'completed') {
+    clearInterval(state.timer);
+    $('#complete-session').disabled = true;
+    $('#complete-session').textContent = 'Draft completed';
+    localStorage.removeItem(sessionKey());
+  }
+  $('#pick-form button[type="submit"]').disabled = session.status !== 'active';
   if (yahooSync) renderYahooDraftSync(yahooSync);
   renderUnresolvedPlayers(unresolved);
   renderRecommendation(card);
@@ -1520,7 +1725,7 @@ async function resetSession() {
   $('#manual-player-toggle').textContent = 'Player not found?';
   $('#draft-room').classList.add('hidden');
   $('#setup').classList.remove('hidden');
-  await refreshFleetSummary();
+  await Promise.all([refreshFleetSummary(), loadDraftSessions()]);
 }
 
 async function init() {
@@ -1530,6 +1735,10 @@ async function init() {
   $('#weekly-import').addEventListener('click', importWeekly);
   $('#weekly-rerun').addEventListener('click', rerunWeekly);
   $('#weekly-yahoo-refresh').addEventListener('click', refreshWeeklyFromYahoo);
+  $('#weekly-complete-review').addEventListener('click', toggleWeeklyReviewComplete);
+  $('#weekly-delete-review').addEventListener('click', deleteWeeklyReview);
+  $('#weekly-clear-season').addEventListener('click', clearWeeklySeason);
+  $('#weekly-season').addEventListener('change', changeWeeklySeason);
   $('#weekly-player-search').addEventListener('input', (event) => {
     state.weeklyPlayerSearch = event.target.value;
     renderWeeklyPlayerBoard();
@@ -1571,6 +1780,7 @@ async function init() {
   $('#yahoo-draft-sync-start').addEventListener('click', () => controlYahooDraftSync('start'));
   $('#yahoo-draft-sync-stop').addEventListener('click', () => controlYahooDraftSync('stop'));
   $('#pick-form').addEventListener('submit', recordPick);
+  $('#complete-session').addEventListener('click', () => completeDraftSession());
   $('#new-session').addEventListener('click', resetSession);
   $('#league-select').addEventListener('change', (event) => selectLeague(event.target.value));
   $('#player-search').addEventListener('input', (event) => {

@@ -226,6 +226,28 @@ test('weekly state is persisted beside draft state without overwriting it and ev
   assert.ok(persisted.weekly.weeks['2026:4']);
 });
 
+test('weekly reviews can be deleted individually or cleared by season without crossing league state', () => {
+  const store = new MemoryStateStore();
+  const currentLeague = league();
+  const draftService = new DraftService({ league: currentLeague, playerPool, store });
+  const weeklyService = new WeeklyManagementService({ league: currentLeague, playerPool, draftService });
+  weeklyService.importSnapshot(snapshot(), { eventId: 'review:2026:4' });
+  weeklyService.importSnapshot({ ...snapshot({ week: 5 }), season: 2024 }, { eventId: 'review:2024:5' });
+  assert.deepEqual(weeklyService.listWeeks().map((item) => [item.season, item.week]), [[2026, 4], [2024, 5]]);
+  assert.equal(weeklyService.completeWeek(4, 2026).status, 'completed');
+  assert.equal(weeklyService.status().completedReviews, 1);
+  assert.equal(weeklyService.reopenWeek(4, 2026).status, 'open');
+  assert.equal(weeklyService.status().openReviews, 2);
+
+  assert.equal(weeklyService.deleteWeek(5, 2024).deleted, true);
+  assert.deepEqual(weeklyService.listWeeks().map((item) => [item.season, item.week]), [[2026, 4]]);
+  assert.equal(weeklyService.importSnapshot({ ...snapshot({ week: 5 }), season: 2024 }, { eventId: 'review:2024:5' }).applied, true);
+
+  const cleared = weeklyService.deleteWeeks({ season: 2026 });
+  assert.equal(cleared.deletedReviews, 1);
+  assert.deepEqual(weeklyService.listWeeks().map((item) => [item.season, item.week]), [[2024, 5]]);
+});
+
 test('fleet weekly run isolates a failed league and preserves the successful league review', async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'huddle-weekly-fleet-'));
   const app = buildApp(runtime(tempDir), { storeFactory: () => new MemoryStateStore() });
@@ -268,9 +290,53 @@ test('league-scoped weekly HTTP API imports, reruns, and reports fleet capabilit
     })).json();
     assert.equal(rerun.review.waiver.recommendation.action, 'ADD_DROP');
 
+    const completed = await (await fetch(`${base}/api/leagues/weekly-one/weekly/weeks/4/complete?season=2026`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}'
+    })).json();
+    assert.equal(completed.review.status, 'completed');
+    const reopened = await (await fetch(`${base}/api/leagues/weekly-one/weekly/weeks/4/reopen?season=2026`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}'
+    })).json();
+    assert.equal(reopened.review.status, 'open');
+
+    const deleted = await (await fetch(`${base}/api/leagues/weekly-one/weekly/weeks/4?season=2026`, { method: 'DELETE' })).json();
+    assert.equal(deleted.deleted, true);
+    const afterDelete = await (await fetch(`${base}/api/leagues/weekly-one/weekly/weeks`)).json();
+    assert.equal(afterDelete.weeks.length, 0);
+
     const manifest = await (await fetch(`${base}/api/fleet/manifest`)).json();
     assert.ok(manifest.capabilities.includes('isolated-weekly-management'));
-    assert.equal(manifest.leagues.find((item) => item.id === 'weekly-one').weekly.storedWeeks, 1);
+    assert.equal(manifest.leagues.find((item) => item.id === 'weekly-one').weekly.storedWeeks, 0);
+  } finally {
+    await close(app);
+  }
+});
+
+test('league-scoped draft HTTP API completes, reopens, and deletes a session', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'huddle-draft-lifecycle-api-'));
+  const app = buildApp(runtime(tempDir), { storeFactory: () => new MemoryStateStore() });
+  const base = await listen(app);
+  try {
+    const createdResponse = await fetch(`${base}/api/leagues/weekly-one/draft/sessions`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ draftSlot: 1, sourceMode: 'manual' })
+    });
+    const created = await createdResponse.json();
+    assert.equal(createdResponse.status, 201);
+
+    const completed = await (await fetch(`${base}/api/leagues/weekly-one/draft/sessions/${created.id}/complete`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}'
+    })).json();
+    assert.equal(completed.session.status, 'completed');
+
+    const reopened = await (await fetch(`${base}/api/leagues/weekly-one/draft/sessions/${created.id}/reopen`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}'
+    })).json();
+    assert.equal(reopened.session.status, 'active');
+
+    const deleted = await (await fetch(`${base}/api/leagues/weekly-one/draft/sessions/${created.id}`, { method: 'DELETE' })).json();
+    assert.equal(deleted.deleted, true);
+    const sessions = await (await fetch(`${base}/api/leagues/weekly-one/draft/sessions`)).json();
+    assert.equal(sessions.sessions.length, 0);
   } finally {
     await close(app);
   }
@@ -281,6 +347,10 @@ test('weekly management controls are present in the Huddle dashboard', () => {
   assert.match(html, /id="weekly-mode"/);
   assert.match(html, /id="weekly-import"/);
   assert.match(html, /id="weekly-yahoo-refresh"/);
+  assert.match(html, /id="weekly-delete-review"/);
+  assert.match(html, /id="weekly-complete-review"/);
+  assert.match(html, /id="weekly-clear-season"/);
+  assert.match(html, /id="draft-session-history"/);
   assert.match(html, /id="yahoo-draft-sync"/);
   assert.match(html, /HOLD/);
   assert.match(html, /Actual vs optimal/);

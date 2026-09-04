@@ -151,6 +151,20 @@ async function handleDraftRoutes(request, response, service, parts, { visionClie
     json(response, 200, service.getSession(sessionId));
     return true;
   }
+  if (parts.length === 2 && request.method === 'DELETE') {
+    if (yahooOperations && entry) yahooOperations.stopDraftSync({ leagueId: entry.id, sessionId });
+    json(response, 200, service.deleteSession(sessionId));
+    return true;
+  }
+  if (parts[2] === 'complete' && request.method === 'POST') {
+    if (yahooOperations && entry) yahooOperations.stopDraftSync({ leagueId: entry.id, sessionId });
+    json(response, 200, { session: service.completeSession(sessionId) });
+    return true;
+  }
+  if (parts[2] === 'reopen' && request.method === 'POST') {
+    json(response, 200, { session: service.reopenSession(sessionId) });
+    return true;
+  }
   if (parts[2] === 'yahoo-sync' && yahooOperations && entry) {
     if (parts.length === 3 && request.method === 'GET') {
       json(response, 200, yahooOperations.draftStatus(entry.id, sessionId));
@@ -218,6 +232,10 @@ async function handleWeeklyRoutes(request, response, service, parts, url) {
     json(response, 200, { weeks: service.listWeeks() });
     return true;
   }
+  if (parts[0] === 'weeks' && parts.length === 1 && request.method === 'DELETE') {
+    json(response, 200, service.deleteWeeks({ season: url.searchParams.get('season') }));
+    return true;
+  }
   if (parts[0] === 'latest' && request.method === 'GET') {
     json(response, 200, { review: service.latest() });
     return true;
@@ -227,6 +245,18 @@ async function handleWeeklyRoutes(request, response, service, parts, url) {
   const season = Number(url.searchParams.get('season') || new Date().getFullYear());
   if (parts.length === 2 && request.method === 'GET') {
     json(response, 200, service.getWeek(week, season));
+    return true;
+  }
+  if (parts.length === 2 && request.method === 'DELETE') {
+    json(response, 200, service.deleteWeek(week, season));
+    return true;
+  }
+  if (parts[2] === 'complete' && request.method === 'POST') {
+    json(response, 200, { review: service.completeWeek(week, season) });
+    return true;
+  }
+  if (parts[2] === 'reopen' && request.method === 'POST') {
+    json(response, 200, { review: service.reopenWeek(week, season) });
     return true;
   }
   if (parts[2] === 'import' && request.method === 'POST') {

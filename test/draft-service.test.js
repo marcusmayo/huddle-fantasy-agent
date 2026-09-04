@@ -56,6 +56,34 @@ test('an authoritative Yahoo observation can correct a saved session draft slot'
   assert.equal(drafts.recommendation(session.id).draftSlot, 3);
 });
 
+test('draft sessions can be completed, reopened, and permanently deleted', () => {
+  const drafts = service();
+  const session = drafts.createSession({ draftSlot: 2 });
+  drafts.recordPick(session.id, { eventId: 'lifecycle:1', playerId: 'demo-rb-1' });
+  const completed = drafts.completeSession(session.id);
+  assert.equal(completed.status, 'completed');
+  assert.equal(completed.completionReason, 'operator-completed');
+  assert.ok(completed.completedAt);
+  assert.throws(() => drafts.recordPick(session.id, { eventId: 'lifecycle:2', playerId: 'demo-rb-2' }), (error) => error.code === 'DRAFT_SESSION_COMPLETED');
+  assert.equal(drafts.reopenSession(session.id).status, 'active');
+  assert.equal(drafts.recordPick(session.id, { eventId: 'lifecycle:2', playerId: 'demo-rb-2' }).applied, true);
+  const deleted = drafts.deleteSession(session.id);
+  assert.equal(deleted.deleted, true);
+  assert.equal(deleted.picks, 2);
+  assert.throws(() => drafts.getSession(session.id), (error) => error.code === 'SESSION_NOT_FOUND');
+});
+
+test('a draft session completes automatically at the league draft depth', () => {
+  const tinyLeague = { ...structuredClone(league), teamCount: 2, roster: { QB: 1, IR: 2 } };
+  const drafts = new DraftService({ league: tinyLeague, playerPool, store: new MemoryStateStore() });
+  const session = drafts.createSession({ draftSlot: 1 });
+  drafts.recordPick(session.id, { eventId: 'full:1', playerId: 'demo-qb-1' });
+  const result = drafts.recordPick(session.id, { eventId: 'full:2', playerId: 'demo-qb-2' });
+  assert.equal(result.session.totalPicks, 2);
+  assert.equal(result.session.status, 'completed');
+  assert.equal(result.session.completionReason, 'draft-board-complete');
+});
+
 test('an unlisted player can be recorded with operator-supplied identity', () => {
   const drafts = service();
   const session = drafts.createSession({ draftSlot: 1 });
