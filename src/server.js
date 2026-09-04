@@ -251,14 +251,6 @@ async function handleWeeklyRoutes(request, response, service, parts, url) {
     json(response, 200, service.deleteWeek(week, season));
     return true;
   }
-  if (parts[2] === 'complete' && request.method === 'POST') {
-    json(response, 200, { review: service.completeWeek(week, season) });
-    return true;
-  }
-  if (parts[2] === 'reopen' && request.method === 'POST') {
-    json(response, 200, { review: service.reopenWeek(week, season) });
-    return true;
-  }
   if (parts[2] === 'import' && request.method === 'POST') {
     const body = await readBody(request, 3_000_000);
     const snapshot = body.snapshot || body;
@@ -500,7 +492,8 @@ function createHandler({ runtime, draftServices, weeklyServices, weeklyFleetRunn
             return json(response, 200, await yahooOperations.previewWeekly({
               leagueId: entry.id,
               week: body.week || url.searchParams.get('week'),
-              season: body.season || url.searchParams.get('season')
+              season: body.season || url.searchParams.get('season'),
+              persistNormalized: true
             }));
           }
         }

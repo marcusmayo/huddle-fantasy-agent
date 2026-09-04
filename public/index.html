@@ -236,7 +236,7 @@
         <div>
           <p class="eyebrow">LEAGUE-SCOPED REVIEW</p>
           <h2 id="weekly-league-name">Weekly team management</h2>
-          <p class="muted">Import one normalized result snapshot for this league. Huddle stores the week, calculates the optimal lineup, and returns either an add/drop recommendation or an explicit HOLD.</p>
+          <p class="muted">Each fantasy week is a living workspace. Update it as often as needed; Huddle revises that week, retains prior weeks as season history, and returns either add/drop guidance or an explicit HOLD.</p>
         </div>
         <form id="weekly-controls" class="weekly-controls">
           <label>Season
@@ -244,22 +244,21 @@
             <small id="weekly-season-help" class="field-help"></small>
           </label>
           <label>Week <input id="weekly-week" type="number" min="1" max="18" value="1" required></label>
-          <label>Saved review
-            <select id="weekly-history"><option value="">No saved reviews</option></select>
+          <label>Saved week
+            <select id="weekly-history"><option value="">No saved weeks</option></select>
           </label>
           <output id="weekly-season-status" class="season-status">Viewing current season</output>
-          <button id="weekly-rerun" type="button" class="ghost">Re-run league</button>
-          <button id="weekly-yahoo-refresh" type="button">Refresh from Yahoo</button>
-          <button id="weekly-complete-review" type="button" class="ghost">Complete review</button>
-          <button id="weekly-delete-review" type="button" class="ghost danger">Delete saved review</button>
-          <button id="weekly-clear-season" type="button" class="ghost danger">Clear season reviews</button>
+          <button id="weekly-rerun" type="button" class="ghost">Recalculate saved week</button>
+          <button id="weekly-yahoo-refresh" type="button">Update week from Yahoo</button>
+          <button id="weekly-delete-review" type="button" class="ghost danger">Delete saved week</button>
+          <button id="weekly-clear-season" type="button" class="ghost danger">Clear season history</button>
         </form>
       </div>
 
       <section id="weekly-empty" class="panel weekly-empty">
         <p class="eyebrow">FIRST WEEKLY RUN</p>
         <h2>Import this league’s weekly snapshot</h2>
-        <p class="muted">Use Refresh from Yahoo for a transient read-only review, or import normalized JSON manually. Yahoo previews are held in memory only. No add, drop, lineup, or waiver action is submitted.</p>
+        <p class="muted">Update from Yahoo to save a compact normalized revision for this week, or import normalized JSON manually. Raw Yahoo responses are discarded. No add, drop, lineup, or waiver action is submitted.</p>
         <div class="weekly-import-grid">
           <label class="weekly-file">Snapshot JSON file <input id="weekly-file" type="file" accept="application/json,.json"></label>
           <button id="weekly-template" type="button" class="ghost">Load editable template</button>
@@ -399,7 +398,7 @@
   </dialog>
   <footer class="provider-attribution">
     <span>Fantasy data provided by <a href="https://football.fantasysports.yahoo.com/" target="_blank" rel="noreferrer">Yahoo Fantasy</a>.</span>
-    <span>Huddle is an independent, recommendation-only assistant. Yahoo data is processed through a transient, read-only boundary.</span>
+    <span>Huddle is an independent, recommendation-only assistant. Raw Yahoo responses are transient; saved weeks contain compact normalized results only.</span>
   </footer>
   <div id="app-toast" class="app-toast hidden" role="status" aria-live="assertive"></div>
   <script src="/app.js" defer></script>

@@ -88,6 +88,7 @@ class YahooTransientWeeklyAdapter {
     );
     return {
       review,
+      normalizedSnapshot: snapshot,
       provenance: {
         provider: 'Yahoo Fantasy',
         ingestion: 'transient-memory-only',

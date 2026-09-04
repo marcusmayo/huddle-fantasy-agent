@@ -90,32 +90,6 @@ class WeeklyManagementService {
     return first ? this.getWeek(first.week, first.season) : null;
   }
 
-  completeWeek(week, season) {
-    const resolvedSeason = Number(season);
-    const resolvedWeek = Number(week);
-    const entry = this.state.weekly.weeks[this.key(resolvedSeason, resolvedWeek)];
-    if (!entry) return this.getWeek(resolvedWeek, resolvedSeason);
-    if (entry.status === 'completed') return this.summary(entry);
-    const now = new Date().toISOString();
-    entry.status = 'completed';
-    entry.completedAt = now;
-    entry.updatedAt = now;
-    this.draftService.persist();
-    return this.summary(entry);
-  }
-
-  reopenWeek(week, season) {
-    const resolvedSeason = Number(season);
-    const resolvedWeek = Number(week);
-    const entry = this.state.weekly.weeks[this.key(resolvedSeason, resolvedWeek)];
-    if (!entry) return this.getWeek(resolvedWeek, resolvedSeason);
-    entry.status = 'open';
-    delete entry.completedAt;
-    entry.updatedAt = new Date().toISOString();
-    this.draftService.persist();
-    return this.summary(entry);
-  }
-
   deleteWeek(week, season) {
     const resolvedSeason = Number(season);
     const resolvedWeek = Number(week);
@@ -198,7 +172,6 @@ class WeeklyManagementService {
       eventId: stableEventId,
       snapshot: compacted.snapshot,
       review: compacted.review,
-      status: 'open',
       createdAt: existing?.createdAt || now,
       updatedAt: now,
       revisions: (existing?.revisions || 0) + 1
@@ -229,8 +202,6 @@ class WeeklyManagementService {
     return {
       leagueId: this.league.id,
       storedWeeks: weeks.length,
-      openReviews: weeks.filter((item) => item.status === 'open').length,
-      completedReviews: weeks.filter((item) => item.status === 'completed').length,
       latest: latest ? {
         season: latest.season,
         week: latest.week,
@@ -251,8 +222,6 @@ class WeeklyManagementService {
       observedAt: review.observedAt,
       updatedAt: entry.updatedAt,
       revisions: entry.revisions,
-      status: entry.status || 'open',
-      completedAt: entry.completedAt || null,
       targetResult: review.targetResult?.result || null,
       targetScore: review.targetResult?.score ?? null,
       standingRank: review.targetResult?.standingRank ?? null,
