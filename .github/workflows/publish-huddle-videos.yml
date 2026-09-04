@@ -48,7 +48,7 @@ jobs:
           for filename, (digest, size, width, height) in expected.items():
               url = manifest['videos'][filename]
               parsed = urlparse(url)
-              assert parsed.scheme == 'https' and parsed.hostname and parsed.hostname.endswith('.runwayml.com'), 'Unexpected source host'
+              assert parsed.scheme == 'https' and parsed.hostname == 'd2jqrm6oza8nb6.cloudfront.net' and parsed.path.startswith('/datasets/') and parsed.path.endswith('.mp4'), 'Unexpected source URL'
               target = assets / filename
               with urllib.request.urlopen(url, timeout=120) as response:
                   data = response.read(size + 1)
@@ -68,7 +68,7 @@ jobs:
         working-directory: publish
         run: |
           ffmpeg -v error -y -ss 1 -i docs/assets/huddle-linkedin-article-1920x1080.mp4 -frames:v 1 -vf scale=1280:-1 -q:v 2 docs/assets/huddle-linkedin-overview-thumbnail.jpg
-          ffmpeg -v error -y -i docs/assets/huddle-linkedin-article-1920x1080.mp4 -filter_complex "fps=3,scale=800:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=96[p];[s1][p]paletteuse=dither=bayer:bayer_scale=4" -loop 0 docs/assets/huddle-linkedin-overview-preview.gif
+          ffmpeg -v error -y -ss 1 -i docs/assets/huddle-linkedin-article-1920x1080.mp4 -filter_complex "fps=3,scale=800:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=96[p];[s1][p]paletteuse=dither=bayer:bayer_scale=4" -loop 0 docs/assets/huddle-linkedin-overview-preview.gif
           test $(stat -c%s docs/assets/huddle-linkedin-overview-preview.gif) -lt 10000000
       - name: Add landscape preview and both video links to README
         shell: python
