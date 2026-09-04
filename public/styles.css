@@ -213,6 +213,21 @@ textarea { width: 100%; border: 1px solid var(--line); border-radius: 10px; padd
 .weekly-move { color: var(--muted); font-size: 1rem; }
 .weekly-recommendation-meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
 .weekly-recommendation-meta span { padding: 7px 10px; border: 1px solid var(--line); border-radius: 99px; color: var(--muted); font-size: .75rem; }
+.weekly-player-board { margin-bottom: 16px; }
+.weekly-player-board-head { gap: 24px; }
+.weekly-player-board-head h2 { margin-bottom: 6px; }
+.weekly-player-board-head p { margin-bottom: 0; }
+.weekly-player-controls { display: grid; grid-template-columns: minmax(210px, 1.5fr) minmax(150px, 1fr); gap: 10px; width: min(520px, 55%); }
+.weekly-player-controls input, .weekly-player-controls select { padding: 9px 10px; }
+.weekly-player-scroll { max-height: min(56vh, 560px); margin-top: 16px; overflow: auto; scrollbar-gutter: stable; border-block: 1px solid var(--line); }
+.weekly-player-scroll table { border-collapse: separate; border-spacing: 0; }
+.weekly-player-scroll thead th { position: sticky; top: 0; z-index: 2; background: #0e1c17; box-shadow: 0 1px 0 var(--line); }
+.weekly-player-scroll tr.claim-priority td { background: #b8f34a0a; }
+.weekly-player-scroll tr.below-threshold td { background: #ff9d5708; }
+.weekly-player-guidance { min-width: 190px; }
+.weekly-player-guidance strong, .weekly-player-guidance small { display: block; }
+.weekly-player-guidance strong { color: var(--green); }
+.weekly-player-evidence { white-space: nowrap; }
 .weekly-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .weekly-grid > .panel { min-width: 0; }
 .weekly-list { display: grid; gap: 8px; }
@@ -249,6 +264,8 @@ textarea { width: 100%; border: 1px solid var(--line); border-radius: 10px; padd
   .form-grid { grid-template-columns: 1fr; }
   .roster-grid { grid-template-columns: repeat(3, 1fr); }
   .weekly-head, .weekly-grid { grid-template-columns: 1fr; }
+  .weekly-player-board-head { display: grid; }
+  .weekly-player-controls { width: 100%; }
   .weekly-scorecards { grid-template-columns: repeat(2, 1fr); }
 }
 
@@ -263,6 +280,7 @@ textarea { width: 100%; border: 1px solid var(--line); border-radius: 10px; padd
   .fleet-actions { align-items: stretch; }
   .roster-grid { grid-template-columns: repeat(2, 1fr); }
   .weekly-controls, .weekly-scorecards, .weekly-import-grid { grid-template-columns: 1fr; }
+  .weekly-player-controls { grid-template-columns: 1fr; }
   .yahoo-operation { align-items: flex-start; flex-direction: column; }
   .operation-actions { justify-content: flex-start; }
   .weekly-import-grid button, .weekly-import-actions button { width: 100%; }

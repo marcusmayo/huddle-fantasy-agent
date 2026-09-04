@@ -66,3 +66,21 @@ test('draft room includes fast search, a position filter, and a resizable board'
   assert.doesNotMatch(styles, /\.pick-panel \{[^}]*position: sticky/);
   assert.doesNotMatch(styles, /\.pick-panel \{[^}]*overflow-y: auto/);
 });
+
+test('weekly management exposes a searchable complete available-player board and Yahoo season guidance', () => {
+  const html = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+  const client = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(root, 'public/styles.css'), 'utf8');
+
+  assert.match(html, /id="weekly-player-board"/);
+  assert.match(html, /id="weekly-player-search"[^>]+type="search"/);
+  assert.match(html, /id="weekly-player-position"/);
+  assert.match(html, /id="weekly-player-body"/);
+  assert.match(html, /id="weekly-season-help"/);
+  assert.match(client, /function renderWeeklyPlayerBoard\(/);
+  assert.match(client, /review\.availablePlayers/);
+  assert.match(client, /Historical seasons require their archived Yahoo league/);
+  assert.match(client, /authoritativeYahooSeason\(\)/);
+  assert.match(styles, /\.weekly-player-scroll \{[^}]*overflow: auto/);
+  assert.match(styles, /\.weekly-player-scroll thead th \{[^}]*position: sticky/);
+});

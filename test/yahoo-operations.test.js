@@ -222,6 +222,46 @@ test('Yahoo weekly operations return an expiring transient review and never save
   assert.equal(JSON.stringify(store.load()), before);
 });
 
+test('Yahoo weekly preview rejects a season that does not match the imported league', async () => {
+  const store = new MemoryStateStore();
+  const drafts = new DraftService({ league, playerPool: structuredClone(pool), store });
+  const weekly = new WeeklyManagementService({ league, playerPool: structuredClone(pool), draftService: drafts });
+  let providerReads = 0;
+  const operations = new YahooOperationsService({
+    runtime: {
+      season: 2026,
+      playerPool: structuredClone(pool),
+      leagues: [{ id: league.id, config: league, stateFile: '/tmp/season-guard.json', yahooLeagueKey: '999.l.1', yahooTeamKey: '999.l.1.t.1', verificationStatus: 'verified' }],
+      yahooDraftAutoSyncEnabled: true,
+      yahooDraftPollIntervalMs: 15_000,
+      yahooDraftMinimumCrosswalkCoverage: 0.8,
+      yahooWeeklyAutoRefreshEnabled: true,
+      yahooWeeklyRefreshIntervalMs: 86_400_000,
+      yahooWeeklyPreviewTtlMs: 3_600_000,
+      operationsMaximumEvidenceAgeHours: 36,
+      leagueErrors: []
+    },
+    yahooAccount: {
+      status: () => ({ connected: true }),
+      readClient: () => {
+        providerReads += 1;
+        return {};
+      }
+    },
+    draftServices: new Map([[league.id, drafts]]),
+    weeklyServices: new Map([[league.id, weekly]])
+  });
+
+  await assert.rejects(
+    () => operations.previewWeekly({ leagueId: league.id, week: 1, season: 2024 }),
+    (error) => error.code === 'YAHOO_SEASON_MISMATCH'
+      && /Yahoo 2026 league/.test(error.message)
+      && error.details.requestedSeason === 2024
+  );
+  assert.equal(providerReads, 0);
+  assert.equal(operations.weeklyStatus(league.id).state, 'not-run');
+});
+
 test('demo profiles are excluded from Yahoo draft and scheduled weekly operations', async () => {
   const demo = { ...structuredClone(league), platform: 'demo', id: 'demo-only', name: 'Demo Only' };
   let discoveries = 0;
