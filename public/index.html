@@ -47,6 +47,21 @@
       <button id="weekly-mode" type="button" class="ghost">Weekly management</button>
     </nav>
 
+    <section id="draft-readiness" class="panel draft-readiness" aria-labelledby="draft-readiness-title" aria-busy="false">
+      <div class="section-head">
+        <div><p class="eyebrow">BEFORE YOUR LIVE DRAFT</p><h2 id="draft-readiness-title">Draft readiness <span id="draft-readiness-state" role="status" aria-live="polite">NOT CHECKED</span></h2></div>
+        <button id="check-draft-readiness" type="button">Check draft readiness</button>
+      </div>
+      <p id="draft-readiness-message" class="muted" role="status" aria-live="polite">Check account access, player data and draft depth here. No terminal required.</p>
+      <p id="draft-readiness-time" class="field-help"></p>
+      <details id="draft-readiness-details">
+        <summary>Checks, blockers and warnings</summary>
+        <ul id="draft-readiness-checks"></ul>
+        <div id="draft-readiness-blockers-section" class="hidden"><h3>Blockers — fix before drafting</h3><ul id="draft-readiness-blockers"></ul></div>
+        <div id="draft-readiness-warnings-section" class="hidden"><h3>Warnings — review before drafting</h3><ul id="draft-readiness-warnings"></ul></div>
+      </details>
+    </section>
+
     <section id="setup" class="panel setup-grid">
       <div>
         <p class="eyebrow">NEW SESSION</p>
@@ -61,8 +76,6 @@
         </label>
         <button id="refresh-yahoo-settings" type="button" class="ghost compact hidden">Refresh league settings</button>
         <button id="refresh-yahoo-draft-slot" type="button" class="ghost compact hidden">Refresh slot from Yahoo</button>
-        <button id="rehearse-yahoo" type="button" class="ghost compact hidden">Run Yahoo read rehearsal</button>
-        <small id="yahoo-rehearsal-status" class="field-help hidden"></small>
         <label>Sync source
           <select id="source-mode">
             <option value="manual">Manual now</option>

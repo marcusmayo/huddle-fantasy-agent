@@ -4,6 +4,8 @@ Implementation details for the September 2026 MVP, separated from the [product o
 
 ## Yahoo setup and readiness
 
+`npm run preflight` is an optional CLI view of the same running-server check. It no longer creates a separate offline instance or requires a second-terminal step for normal app use.
+
 Keep credentials in an untracked `.env` or secret manager. Configure these values using [.env.example](../.env.example):
 
 ```dotenv
@@ -23,7 +25,7 @@ The importer supports snake drafts; offense, distance-banded field goals, PATs a
 
 Yahoo draft slots are prefilled when published, can be refreshed while pending, and reconcile from the target team's first observed pick. Synthetic profiles never sync with Yahoo or show Yahoo-identifier errors.
 
-Run `npm run preflight` while the server is active. `READY` requires a connected account, operable imported leagues, sufficient player-key coverage, fresh evidence, full-draft and position-specific depth, and a successful read-only Yahoo rehearsal. Three baseline checks cover settings, completed picks and player identity. A conditional fourth `draft-depth` check fills position shortfalls with only enough unique current-season Yahoo identities to meet the safety buffer. Raw responses and supplemental identities stay in memory; rerun preflight after a restart.
+In **Draft room**, select **Check draft readiness**. The dashboard starts this check automatically for a connected account with imported Yahoo leagues. `READY` requires a connected account, operable imported leagues, sufficient player-key coverage, fresh evidence, full-draft and position-specific depth, and a successful read-only Yahoo rehearsal. Three baseline checks cover settings, completed picks and player identity. A conditional fourth `draft-depth` check fills position shortfalls with only enough unique current-season Yahoo identities to meet the safety buffer. Raw responses, supplemental identities and check results stay in memory. Results expire after 15 minutes and become invalid when account, league settings or player evidence changes. New Yahoo sessions are blocked server-side until the full check passes; manual and screenshot sessions remain available.
 
 Partial projections may remain a warning when disclosed deterministic estimates are available. They do not invalidate otherwise adequate identities/depth, but recommendations still need review in Yahoo. Confirm the configured 15-second draft polling cadence against the approved Yahoo allowance. See the [operations plan](september-8-operations.md) and [Yahoo safety gate](yahoo-integration-safety.md).
 
@@ -119,6 +121,8 @@ Local writes update Huddle state only. No route submits a Yahoo draft pick, line
 | `POST` | `/api/draft/sessions/:id/evidence-reviews` | Save confirmed tags without reranking |
 | `POST` | `/api/data/fantasypros/sync` | Backward-compatible evidence-refresh alias |
 | `POST` | `/api/data/sources/sync` | Refresh shared evidence within local budgets |
+| `GET` | `/api/operations/preflight` | Read full check status, last-check time, blockers and warnings without provider calls |
+| `POST` | `/api/operations/preflight` | Start the full check; returns 202 immediately. Concurrent callers share one job; `{"reuse":true}` reuses a recent result |
 | `GET` | `/api/operations/readiness` | Account, league, evidence, identity and automation readiness |
 | `GET` | `/api/operations/weekly/status` | Scheduled runs and current-week preview status |
 | `POST` | `/api/operations/weekly/refresh` | Refresh imported Yahoo leagues independently |

@@ -302,3 +302,18 @@ textarea { width: 100%; border: 1px solid var(--line); border-radius: 10px; padd
   .operation-actions { justify-content: flex-start; }
   .weekly-import-grid button, .weekly-import-actions button { width: 100%; }
 }
+
+/* Draft-day checks stay in the app; use the existing Huddle theme. */
+.draft-readiness { margin: 0 0 20px; }
+.draft-readiness .section-head { gap: 16px; flex-wrap: wrap; }
+.draft-readiness h2 { margin-bottom: 0; }
+.draft-readiness button { width: auto; flex-shrink: 0; }
+.draft-readiness [role="status"] { overflow-wrap: anywhere; }
+#draft-readiness-state { display: inline-block; margin-left: 12px; padding: 5px 9px; border: 1px solid var(--line); border-radius: 8px; font-size: .75rem; color: var(--orange); vertical-align: middle; letter-spacing: .04em; }
+.draft-readiness[data-state="ready"] #draft-readiness-state { color: var(--green); border-color: var(--green); }
+.draft-readiness[data-state="running"] #draft-readiness-state { color: var(--blue); }
+.draft-readiness summary { cursor: pointer; color: var(--ink); }
+.draft-readiness ul { padding-left: 20px; line-height: 1.65; overflow-wrap: anywhere; }
+.draft-readiness h3 { font-size: .9rem; margin: 14px 0 4px; }
+#draft-readiness-blockers { color: var(--orange); }
+#draft-readiness-warnings { color: var(--muted); }

@@ -14,6 +14,7 @@ const { SleeperClient } = require('./providers/sleeper');
 const { Tank01Client } = require('./providers/tank01');
 const { createYahooOAuthRuntime } = require('./providers/yahoo-oauth');
 const { DraftService } = require('./services/draft-service');
+const { DraftReadinessService } = require('./services/draft-readiness-service');
 const { FantasyProsRefreshController } = require('./services/fantasypros-refresh');
 const { LeagueOnboardingService } = require('./services/league-onboarding');
 const { reconcilePlayerEvidence } = require('./services/player-evidence');
@@ -114,7 +115,7 @@ function availablePlayers(runtime, service, sessionId) {
   };
 }
 
-async function handleDraftRoutes(request, response, service, parts, { visionClient, league, leagueEntry: entry, yahooOperations } = {}) {
+async function handleDraftRoutes(request, response, service, parts, { visionClient, league, leagueEntry: entry, yahooOperations, draftReadiness } = {}) {
   if (parts[0] !== 'sessions') return false;
   if (parts.length === 1 && request.method === 'GET') {
     json(response, 200, { sessions: service.listSessions() });
@@ -128,6 +129,7 @@ async function handleDraftRoutes(request, response, service, parts, { visionClie
       || !String(entry.verificationStatus || '').startsWith('verified'))) {
       throw Object.assign(new Error('Yahoo sync is available only for a verified Yahoo-imported league; use Manual or Screenshot mode for this demo/profile'), { code: 'YAHOO_SOURCE_NOT_AVAILABLE' });
     }
+    if (input.sourceMode === 'yahoo') draftReadiness?.assertReady();
     const session = service.createSession(input);
     let yahooSync = null;
     if (session.sourceMode === 'yahoo' && yahooOperations && entry) {
@@ -314,7 +316,7 @@ async function syncFantasyPros(runtime, fantasyProsClient, input = {}, { tank01C
   };
 }
 
-function createHandler({ runtime, draftServices, weeklyServices, weeklyFleetRunner, fantasyProsClient, fantasyProsRefresh, tank01Client, sleeperClient, visionClient, leagueOnboarding, yahooOAuth, yahooAccount, yahooOperations }) {
+function createHandler({ runtime, draftServices, weeklyServices, weeklyFleetRunner, fantasyProsClient, fantasyProsRefresh, tank01Client, sleeperClient, visionClient, leagueOnboarding, yahooOAuth, yahooAccount, yahooOperations, draftReadiness }) {
   return async function handler(request, response) {
     const url = new URL(request.url, 'http://huddle.local');
     const segments = url.pathname.split('/').filter(Boolean).map(decodeURIComponent);
@@ -378,6 +380,7 @@ function createHandler({ runtime, draftServices, weeklyServices, weeklyFleetRunn
         if (!code) throw Object.assign(new Error('Yahoo OAuth callback did not include an authorization code'), { code: 'YAHOO_OAUTH_CODE_MISSING' });
         const token = await yahooOAuth.client.exchangeCode({ code });
         yahooOAuth.tokenStore.set(context.credentialRef, token);
+        draftReadiness.invalidate();
         queueMicrotask(() => {
           yahooOperations.autoResumeDrafts();
           yahooOperations.runScheduledWeeklyRefresh('oauth-connected').catch(() => {});
@@ -402,12 +405,14 @@ function createHandler({ runtime, draftServices, weeklyServices, weeklyFleetRunn
       }
       if (request.method === 'DELETE' && url.pathname === '/api/yahoo/connection') {
         if (!runtime.complianceMaintenanceEnabled) throw Object.assign(new Error('Compliance maintenance routes are disabled'), { code: 'COMPLIANCE_MAINTENANCE_DISABLED' });
+        draftReadiness.invalidate();
         return json(response, 200, { deleted: yahooAccount.disconnect(), scope: 'yahoo-account' });
       }
       if (segments[0] === 'api' && segments[1] === 'yahoo' && segments[2] === 'connections' && segments[3]
         && request.method === 'DELETE') {
         if (!runtime.complianceMaintenanceEnabled) throw Object.assign(new Error('Compliance maintenance routes are disabled'), { code: 'COMPLIANCE_MAINTENANCE_DISABLED' });
         const entry = leagueEntry(runtime, segments[3]);
+        draftReadiness.invalidate();
         return json(response, 200, { leagueId: entry.id, deleted: yahooAccount.disconnect(), scope: 'yahoo-account' });
       }
       if (request.method === 'POST' && url.pathname === '/api/compliance/purge-expired') {
@@ -426,6 +431,14 @@ function createHandler({ runtime, draftServices, weeklyServices, weeklyFleetRunn
       }
       if (request.method === 'GET' && url.pathname === '/api/fleet/status') {
         return json(response, 200, fleetStatus(runtime, draftServices, weeklyServices));
+      }
+      if (url.pathname === '/api/operations/preflight') {
+        if (request.method === 'GET') return json(response, 200, draftReadiness.status());
+        if (request.method === 'POST') {
+          const body = await readBody(request);
+          draftReadiness.start({ reuse: body.reuse === true });
+          return json(response, 202, draftReadiness.status());
+        }
       }
       if (request.method === 'GET' && url.pathname === '/api/operations/readiness') {
         return json(response, 200, yahooOperations.readiness());
@@ -479,7 +492,7 @@ function createHandler({ runtime, draftServices, weeklyServices, weeklyFleetRunn
         if (tail[0] === 'players' && request.method === 'GET') {
           return json(response, 200, availablePlayers(runtime, service, url.searchParams.get('sessionId')));
         }
-        if (tail[0] === 'draft' && await handleDraftRoutes(request, response, service, tail.slice(1), { visionClient, league: entry.config, leagueEntry: entry, yahooOperations })) return;
+        if (tail[0] === 'draft' && await handleDraftRoutes(request, response, service, tail.slice(1), { visionClient, league: entry.config, leagueEntry: entry, yahooOperations, draftReadiness })) return;
         if (tail[0] === 'weekly' && tail[1] === 'yahoo') {
           if (tail[2] === 'status' && request.method === 'GET') {
             return json(response, 200, yahooOperations.weeklyStatus(entry.id));
@@ -511,7 +524,7 @@ function createHandler({ runtime, draftServices, weeklyServices, weeklyFleetRunn
       }
       if (segments[0] === 'api' && segments[1] === 'draft') {
         const defaultContext = serviceFor(runtime, draftServices, runtime.defaultLeagueId);
-        if (await handleDraftRoutes(request, response, defaultContext.service, segments.slice(2), { visionClient, league: defaultContext.entry.config, leagueEntry: defaultContext.entry, yahooOperations })) return;
+        if (await handleDraftRoutes(request, response, defaultContext.service, segments.slice(2), { visionClient, league: defaultContext.entry.config, leagueEntry: defaultContext.entry, yahooOperations, draftReadiness })) return;
       }
       if (segments[0] === 'api' && segments[1] === 'weekly') {
         const defaultContext = serviceFor(runtime, draftServices, runtime.defaultLeagueId);
@@ -604,7 +617,7 @@ function createHandler({ runtime, draftServices, weeklyServices, weeklyFleetRunn
     } catch (error) {
       const status = ['SESSION_NOT_FOUND', 'LEAGUE_NOT_FOUND', 'WEEK_NOT_FOUND'].includes(error.code) ? 404
         : error.code === 'LEAGUE_STATE_UNAVAILABLE' ? 503
-        : error.code === 'LEAGUE_ALREADY_EXISTS' ? 409
+        : ['LEAGUE_ALREADY_EXISTS', 'DRAFT_PREFLIGHT_REQUIRED'].includes(error.code) ? 409
           : error.code === 'LEAGUE_ONBOARDING_DISABLED' ? 403
             : error.code === 'LEAGUE_DELETE_NOT_ALLOWED' ? 403
         : ['FANTASYPROS_REQUEST_FAILED', 'YAHOO_REQUEST_FAILED'].includes(error.code) ? 502
@@ -731,6 +744,7 @@ function buildApp(inputRuntime = loadRuntimeConfig(), options = {}) {
     },
     quotaStatus: () => fantasyProsClient.quotaStatus()
   });
+  const draftReadiness = options.draftReadiness || new DraftReadinessService({ runtime, yahooOperations, fantasyProsRefresh, now: options.now });
   const server = http.createServer(createHandler({
     runtime,
     draftServices,
@@ -744,7 +758,8 @@ function buildApp(inputRuntime = loadRuntimeConfig(), options = {}) {
     leagueOnboarding,
     yahooOAuth,
     yahooAccount,
-    yahooOperations
+    yahooOperations,
+    draftReadiness
   }));
   const commandRelay = attachReadOnlyCommandRelay(server, { runtime, draftServices, weeklyServices });
   return {
@@ -763,7 +778,8 @@ function buildApp(inputRuntime = loadRuntimeConfig(), options = {}) {
     leagueOnboarding,
     yahooOAuth,
     yahooAccount,
-    yahooOperations
+    yahooOperations,
+    draftReadiness
   };
 }
 

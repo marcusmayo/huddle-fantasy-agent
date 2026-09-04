@@ -49,7 +49,7 @@ Do not set `HUDDLE_YAHOO_OAUTH_ENABLED=true` until all of these are complete:
 | `HUDDLE_YAHOO_EVIDENCE_RETENTION_DAYS` | `30` | Metadata retention ceiling |
 | `HUDDLE_COMPLIANCE_MAINTENANCE_ENABLED` | local only | Enables purge and disconnect endpoints |
 
-Readiness is visible at `GET /api/yahoo/oauth/status`, `GET /api/operations/readiness`, `GET /api/operations/weekly/status`, and `GET /api/provider-status`. `npm run preflight` exits nonzero when the live-draft gate fails. A disabled or incomplete OAuth setup is reported as such; Huddle does not silently fall back to claiming Yahoo verification.
+The full readiness check is available in **Draft room → Check draft readiness**, with job status at `GET /api/operations/preflight`. Local diagnostics remain visible at `GET /api/yahoo/oauth/status`, `GET /api/operations/readiness`, `GET /api/operations/weekly/status`, and `GET /api/provider-status`. The optional `npm run preflight` uses that same running-server check and exits nonzero when it fails. A disabled or incomplete OAuth setup is reported as such; Huddle does not silently fall back to claiming Yahoo verification.
 
 ## Deletion and unresolved-data workflows
 

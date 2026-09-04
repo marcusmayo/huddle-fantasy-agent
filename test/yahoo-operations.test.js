@@ -593,7 +593,12 @@ test('operational HTTP routes expose readiness, draft sync control, and saved we
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'huddle-ops-http-'));
   const calls = [];
   const yahooOperations = {
-    readiness: () => ({ readyForLiveDraft: true, readyForWeeklyManagement: true }),
+    readiness: () => ({ readyForLiveDraft: true, readyForWeeklyManagement: true,
+      account: { connected: true }, blockers: [], warnings: [],
+      leagues: [{ leagueId: league.id, name: league.name, ready: true }],
+      playerEvidence: { source: 'fantasypros-test', ageHours: 0,
+        crosswalk: { coverage: 1, requiredCoverage: 0.8, playerShortfall: 0, positionShortfalls: [] } }
+    }),
     startDraftSync: ({ leagueId, sessionId }) => {
       calls.push(['start', leagueId, sessionId]);
       return { leagueId, sessionId, state: 'running', observedPicks: 0 };
@@ -630,6 +635,7 @@ test('operational HTTP routes expose readiness, draft sync control, and saved we
   try {
     const readiness = await (await fetch(`${base}/api/operations/readiness`)).json();
     assert.equal(readiness.readyForLiveDraft, true);
+    await app.draftReadiness.start();
     const created = await (await fetch(`${base}/api/leagues/${league.id}/draft/sessions`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ draftSlot: 1, sourceMode: 'yahoo' })

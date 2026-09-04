@@ -162,7 +162,7 @@ class YahooOperationsService {
     if (!crosswalk.players) blockers.push('Player evidence pool is empty');
     const evidenceSource = String(this.runtime.playerPool.source || '').toLowerCase();
     if (/synthetic|demo|fixture/.test(evidenceSource)) {
-      blockers.push('Synthetic demo player evidence is loaded; configure FANTASYPROS_API_KEY and run npm run preflight to build the Yahoo player crosswalk');
+      blockers.push('Synthetic demo player evidence is loaded; configure FANTASYPROS_API_KEY and use Check draft readiness in the app to build the Yahoo player crosswalk');
     }
     if (crosswalk.coverage < crosswalk.requiredCoverage) {
       blockers.push(`Yahoo player-key coverage is ${(crosswalk.coverage * 100).toFixed(1)}%; ${(crosswalk.requiredCoverage * 100).toFixed(0)}% is required`);
