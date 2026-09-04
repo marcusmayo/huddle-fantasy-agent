@@ -2,6 +2,7 @@
 
 const SOURCE_WEIGHTS = Object.freeze({ fantasyPros: 0.675, tank01: 0.325 });
 const SUPPORTED_POSITIONS = new Set(['QB', 'RB', 'WR', 'TE', 'K', 'DEF']);
+const NFL_DEFENSE_LIMIT = 32;
 const POSITION_PROJECTION_BASELINES = Object.freeze({
   QB: 320,
   RB: 235,
@@ -164,6 +165,67 @@ function ensureDraftProjections(players = []) {
   };
 }
 
+function buildSleeperDefenseDepthPlayers(existingPlayers, sleeperIdentityPlayers, sleeperPlayers = [], sleeper = {}) {
+  const identityIndex = evidenceIndex(sleeperIdentityPlayers);
+  const trendIndex = evidenceIndex(sleeperPlayers);
+  const defenses = existingPlayers.filter((player) => normalizePosition(player.position) === 'DEF');
+  const seenYahooIds = new Set(existingPlayers.map(yahooId).filter(Boolean));
+  const seenIdentities = new Set(existingPlayers.map(identityKey).filter((key) => !key.startsWith('|')));
+  const seenTeams = new Set(defenses.map((player) => String(player.team || '').toUpperCase()).filter((team) => team && team !== 'FA'));
+  const output = [];
+  const candidates = [...sleeperIdentityPlayers]
+    .filter((player) => normalizePosition(player.position) === 'DEF')
+    .sort((left, right) => String(left.team || '').localeCompare(String(right.team || '')) || String(left.name || '').localeCompare(String(right.name || '')));
+  for (const candidate of candidates) {
+    if (defenses.length + output.length >= NFL_DEFENSE_LIMIT) break;
+    const id = yahooId(candidate);
+    const identity = identityKey(candidate);
+    const team = String(candidate.team || '').toUpperCase();
+    if (!id || !/^\d+$/.test(id) || !/^[A-Z]{2,3}$/.test(team) || team === 'FA') continue;
+    if (identityIndex.ambiguousYahooIds.has(id) || identityIndex.ambiguousIdentities.has(identity)) continue;
+    if (seenYahooIds.has(id) || seenIdentities.has(identity) || seenTeams.has(team)) continue;
+    const trend = matchEvidence(candidate, trendIndex);
+    output.push({
+      id: `sleeper:${candidate.sleeperId || id}`,
+      name: String(candidate.name),
+      position: 'DEF',
+      team,
+      yahooPlayerKey: id,
+      expertRank: null,
+      adp: null,
+      tier: 99,
+      byeWeek: null,
+      injuryStatus: null,
+      risk: 0.35,
+      projectedPoints: null,
+      projectionSource: 'missing',
+      evidenceRole: 'sleeper-identity-depth-fallback',
+      sourceConsensus: 0.1,
+      sourceRanks: {
+        fantasyPros: null,
+        fantasyProsNormalized: null,
+        tank01: null,
+        tank01Normalized: null
+      },
+      tank01Projection: null,
+      sourceDisagreementSlots: null,
+      sourceDisagreement: false,
+      sleeperTrend: trend ? {
+        direction: trend.direction,
+        adds: trend.adds,
+        drops: trend.drops,
+        net: trend.net,
+        lookbackHours: sleeper.lookbackHours || 24,
+        attribution: sleeper.attribution || 'Sleeper'
+      } : null
+    });
+    seenYahooIds.add(id);
+    seenIdentities.add(identity);
+    seenTeams.add(team);
+  }
+  return output;
+}
+
 function reconcilePlayerEvidence(primaryPool, { tank01 = null, sleeper = null, errors = [] } = {}) {
   const primaryPlayers = primaryPool.players || [];
   const tankPlayers = tank01?.players || [];
@@ -278,12 +340,23 @@ function reconcilePlayerEvidence(primaryPool, { tank01 = null, sleeper = null, e
     });
     seenYahooIds.add(fallbackYahooId);
   }
-  const completed = ensureDraftProjections([...primaryReconciled, ...fallbackPlayers]);
+  // FantasyPros can return only ten D/ST rows, which is insufficient for
+  // leagues that start two defenses. The daily-cached Sleeper identity map can
+  // safely supply the remaining current NFL team defenses and their numeric
+  // Yahoo IDs. They remain explicitly unranked fallback evidence and receive
+  // deterministic projections after every ranked/provider-backed defense.
+  const sleeperDefenseDepthPlayers = buildSleeperDefenseDepthPlayers(
+    [...primaryReconciled, ...fallbackPlayers],
+    sleeperIdentityPlayers,
+    sleeperPlayers,
+    sleeper || {}
+  );
+  const completed = ensureDraftProjections([...primaryReconciled, ...fallbackPlayers, ...sleeperDefenseDepthPlayers]);
   const players = completed.players;
 
   const activeSources = ['fantasypros'];
   if (tankPlayers.length) activeSources.push('tank01');
-  if (sleeperPlayers.length) activeSources.push('sleeper');
+  if (sleeperPlayers.length || sleeperCrosswalkMatched || sleeperDefenseDepthPlayers.length) activeSources.push('sleeper');
   const warnings = [
     ['tank01', tankIndex],
     ['sleeper', sleeperIndex],
@@ -315,6 +388,7 @@ function reconcilePlayerEvidence(primaryPool, { tank01 = null, sleeper = null, e
         totalPlayers: players.length,
         tank01Matched: tankMatched,
         secondaryFallbackPlayers: fallbackPlayers.length,
+        sleeperDefenseDepthPlayers: sleeperDefenseDepthPlayers.length,
         sleeperMatched,
         sleeperCrosswalkMatched,
         ambiguousTank01: tankIndex.ambiguousYahooIds.size + tankIndex.ambiguousIdentities.size,
@@ -338,6 +412,7 @@ function reconcilePlayerEvidence(primaryPool, { tank01 = null, sleeper = null, e
 
 module.exports = {
   SOURCE_WEIGHTS,
+  buildSleeperDefenseDepthPlayers,
   evidenceIndex,
   identityKey,
   matchEvidence,
