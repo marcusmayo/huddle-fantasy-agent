@@ -13,9 +13,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - run: git archive --format=zip -o readiness-source.zip HEAD src public config scripts test package.json package-lock.json README.md .env.example docs/technical-reference.md docs/september-8-operations.md docs/live-draft-runbook.md docs/yahoo-integration-safety.md
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: zip -qr readiness-dependencies.zip node_modules
       - uses: actions/upload-artifact@v4
         with:
-          name: readiness-source
-          path: readiness-source.zip
+          name: readiness-dependencies
+          path: readiness-dependencies.zip
           retention-days: 1
