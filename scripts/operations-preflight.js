@@ -100,6 +100,7 @@ async function liveServerPreflight(runtime) {
     (leagueId) => requestJson(`${base}/api/leagues/${encodeURIComponent(leagueId)}/yahoo/rehearsal`, { method: 'POST' }),
     runtime.preflightYahooRehearsalEnabled
   );
+  report = await requestJson(`${base}/api/operations/readiness`);
   return finalize(report, refresh, rehearsals);
 }
 
@@ -124,12 +125,13 @@ async function offlinePreflight(runtime) {
       error: { code: 'FANTASYPROS_KEY_MISSING', message: 'FANTASYPROS_API_KEY is required to replace synthetic demo evidence and build Yahoo player identities' }
     };
   }
-  const report = app.yahooOperations.readiness();
+  let report = app.yahooOperations.readiness();
   const rehearsals = await rehearseLeagues(
     report,
     (leagueId) => app.yahooOperations.rehearse({ leagueId }),
     app.runtime.preflightYahooRehearsalEnabled
   );
+  report = app.yahooOperations.readiness();
   app.yahooOperations.stop();
   return finalize(report, refresh, rehearsals);
 }

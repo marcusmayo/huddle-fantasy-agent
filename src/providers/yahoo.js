@@ -133,8 +133,11 @@ class YahooReadOnlyClient {
     return this.get(`/team/${encodeURIComponent(teamKey)}/roster;week=${Number(week)}`);
   }
 
-  async availablePlayers(leagueKey, { start = 0, count = 100, status = 'A' } = {}) {
-    return this.get(`/league/${encodeURIComponent(leagueKey)}/players;status=${encodeURIComponent(status)};start=${Number(start)};count=${Number(count)}`);
+  async availablePlayers(leagueKey, { start = 0, count = 100, status = 'A', position = null } = {}) {
+    const filters = [`status=${encodeURIComponent(status)}`];
+    if (position) filters.push(`position=${encodeURIComponent(position)}`);
+    filters.push(`start=${Number(start)}`, `count=${Number(count)}`);
+    return this.get(`/league/${encodeURIComponent(leagueKey)}/players;${filters.join(';')}`);
   }
 
   async get(endpoint) {

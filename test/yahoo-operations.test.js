@@ -426,6 +426,94 @@ test('operational readiness blocks a position-starved pool even when total draft
   assert.match(readiness.blockers.join(' '), /QB evidence depth is 10/);
 });
 
+test('Yahoo rehearsal fills a two-defense league shortfall from current-season available players', async () => {
+  const defenseLeague = structuredClone(league);
+  defenseLeague.id = 'two-defense-yahoo';
+  defenseLeague.name = 'Two Defense Yahoo';
+  defenseLeague.teamCount = 6;
+  defenseLeague.roster = { QB: 2, WR: 4, RB: 3, TE: 1, 'W/T': 1, 'W/R': 1, K: 1, DEF: 2, BN: 6, IR: 2 };
+  const counts = { QB: 29, RB: 32, WR: 45, TE: 34, K: 22, DEF: 10 };
+  let playerId = 1;
+  const players = Object.entries(counts).flatMap(([position, count]) => Array.from({ length: count }, (_, index) => ({
+    id: `provider:${position}:${index + 1}`,
+    yahooPlayerKey: `470.p.${playerId++}`,
+    name: `${position} Player ${index + 1}`,
+    position,
+    team: position === 'DEF' ? `D${index}` : 'TST',
+    expertRank: index + 1,
+    projectedPoints: 250 - index
+  })));
+  const defenseRows = Array.from({ length: 12 }, (_, index) => player(
+    `470.p.${700 + index}`,
+    `Yahoo Defense ${index + 1}`,
+    'DEF',
+    'BN',
+    0,
+    100 - index
+  )).map((row, index) => {
+    row.player[2].editorial_team_abbr = `Y${index}`;
+    return row;
+  });
+  const calls = [];
+  const runtime = {
+    season: 2026,
+    playerPool: { source: 'fantasypros+tank01+sleeper', complete: false, fetchedAt: '2026-09-08T12:00:00.000Z', players },
+    leagues: [{
+      id: defenseLeague.id,
+      config: defenseLeague,
+      stateFile: '/tmp/two-defense-yahoo.json',
+      yahooLeagueKey: '470.l.153454',
+      yahooTeamKey: '470.l.153454.t.1',
+      verificationStatus: 'verified-with-warnings'
+    }],
+    yahooDraftAutoSyncEnabled: true,
+    yahooDraftPollIntervalMs: 15_000,
+    yahooDraftMinimumCrosswalkCoverage: 0.8,
+    yahooDraftPositionDepthBuffer: 0.2,
+    yahooWeeklyAutoRefreshEnabled: false,
+    yahooWeeklyRefreshIntervalMs: 86_400_000,
+    yahooWeeklyPreviewTtlMs: 3_600_000,
+    operationsMaximumEvidenceAgeHours: 36,
+    leagueErrors: []
+  };
+  const operations = new YahooOperationsService({
+    runtime,
+    yahooAccount: {
+      status: () => ({ enabled: true, clientConfigured: true, encryptedTokenStorageConfigured: true, connected: true }),
+      readClient: () => ({
+        leagueSettings: async () => ({}),
+        draftResults: async () => ({ payload: {}, picks: [] }),
+        player: async () => ({ name: 'Current Season Player' }),
+        availablePlayers: async (_leagueKey, options) => {
+          calls.push(options);
+          return { fantasy_content: { league: [{ players: Object.assign(
+            Object.fromEntries(defenseRows.map((row, index) => [index, row])),
+            { count: defenseRows.length }
+          ) }] } };
+        }
+      })
+    },
+    draftServices: new Map([[defenseLeague.id, { listSessions: () => [] }]]),
+    weeklyServices: new Map(),
+    now: () => new Date('2026-09-08T12:30:00.000Z')
+  });
+
+  const before = operations.readiness();
+  assert.deepEqual(before.playerEvidence.crosswalk.positionShortfalls, [{ position: 'DEF', loaded: 10, required: 15, shortfall: 5 }]);
+  const result = await operations.rehearse({ leagueId: defenseLeague.id });
+  const after = operations.readiness();
+  assert.equal(result.ready, true);
+  assert.equal(result.localEvidenceUpdated, true);
+  assert.equal(result.localEvidenceAdded, 5);
+  assert.deepEqual(result.checks.map((check) => check.name), ['league-settings', 'draft-results', 'player-lookup', 'draft-depth']);
+  assert.deepEqual(calls, [{ start: 0, count: 100, status: 'A', position: 'DEF' }]);
+  assert.equal(after.readyForLiveDraft, true);
+  assert.equal(after.playerEvidence.crosswalk.positions.find((item) => item.position === 'DEF').loaded, 15);
+  assert.equal(runtime.playerPool.players.filter((item) => item.evidenceRole === 'yahoo-available-depth').length, 5);
+  assert.equal(runtime.playerPool.source, 'fantasypros+tank01+sleeper+yahoo');
+  assert.doesNotMatch(JSON.stringify(result), /RAW_WEEKLY_YAHOO_MUST_NOT_PERSIST/);
+});
+
 test('Yahoo rehearsal validates read-only settings, draft, and player endpoints without persisting payloads', async () => {
   const calls = [];
   const operations = new YahooOperationsService({
