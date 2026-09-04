@@ -1,25 +1,69 @@
-name: Readiness development review
+name: Verify in-app draft readiness
 on:
   push:
     branches: [feat/in-app-draft-readiness]
     paths: [.github/workflows/readiness-review.yml]
-permissions:
-  contents: read
+permissions: {}
+concurrency:
+  group: huddle-in-app-readiness-development
+  cancel-in-progress: false
 jobs:
-  snapshot:
+  verify:
+    if: github.repository == 'marcusmayo/huddle-fantasy-agent'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Apply exact locally tested edits
+        shell: python
+        run: |
+          import hashlib, json, pathlib, re
+          allowed = {'README.md', 'docs/live-draft-runbook.md', 'docs/september-8-operations.md', 'docs/technical-reference.md', 'docs/yahoo-integration-safety.md', 'public/app.js', 'public/index.html', 'public/styles.css', 'scripts/operations-preflight.js', 'src/server.js', 'src/services/yahoo-operations-service.js', 'test/yahoo-operations.test.js'}
+          original_readme = pathlib.Path('README.md').read_text()
+          plan = []
+          for name in ('docs', 'ui', 'backend'):
+              plan.extend(json.loads(pathlib.Path(f'.github/readiness-edits/{name}.json').read_text()))
+          assert len(plan) == len(allowed) and {item['path'] for item in plan} == allowed
+          for item in plan:
+              target = pathlib.Path(item['path'])
+              data = target.read_bytes()
+              assert hashlib.sha256(data).hexdigest() == item['before'], f"Original changed: {target}"
+              lines = data.decode('utf-8').splitlines(keepends=True)
+              for start, end, replacement in reversed(item['edits']):
+                  assert 0 <= start <= end <= len(lines)
+                  lines[start:end] = replacement.splitlines(keepends=True)
+              data = ''.join(lines).encode('utf-8')
+              assert hashlib.sha256(data).hexdigest() == item['after'], f"Edited checksum mismatch: {target}"
+              target.write_bytes(data)
+              print(f'Verified {target}')
+          for name, digest in {
+              'src/services/draft-readiness-service.js': '77470fe7f33df59cdd610db4e6849fa6dc5d30bbad12d3b53d84347aefb9c3bd',
+              'test/draft-readiness.test.js': '2ea0a58f2c5c28b0435fee1b748f1a1005b1d6d0080e3a0be90723fcf3db5a18'
+          }.items():
+              assert hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() == digest, f'New file checksum mismatch: {name}'
+          pattern = r'\]\(([^)]*docs/assets/[^)]*)\)'
+          assert re.findall(pattern, original_readme) == re.findall(pattern, pathlib.Path('README.md').read_text()), 'README media links changed'
       - run: npm ci --ignore-scripts
-      - run: zip -qr readiness-dependencies.zip node_modules
-      - uses: actions/upload-artifact@v4
-        with:
-          name: readiness-dependencies
-          path: readiness-dependencies.zip
-          retention-days: 1
+      - name: Syntax and regression checks
+        run: |
+          node --check public/app.js
+          node --check src/server.js
+          node --check src/services/draft-readiness-service.js
+          node --check scripts/operations-preflight.js
+          npm run check
+          git diff --check
+      - name: Commit verified feature and remove temporary transfer files
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md docs/live-draft-runbook.md docs/september-8-operations.md docs/technical-reference.md docs/yahoo-integration-safety.md public/app.js public/index.html public/styles.css scripts/operations-preflight.js src/server.js src/services/draft-readiness-service.js src/services/yahoo-operations-service.js test/draft-readiness.test.js test/yahoo-operations.test.js
+          git rm .github/readiness-edits/docs.json .github/readiness-edits/ui.json .github/readiness-edits/backend.json .github/workflows/readiness-review.yml
+          git diff --cached --check
+          git commit -m 'feat: run complete draft readiness checks in the dashboard'
+          git push origin HEAD:feat/in-app-draft-readiness
+          git rev-parse HEAD >> "$GITHUB_STEP_SUMMARY"
