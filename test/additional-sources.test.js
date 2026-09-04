@@ -96,7 +96,8 @@ test('Sleeper player map supplies active Yahoo identity crosswalks independently
   const rows = normalizeSleeperPlayerCrosswalk({
     s1: { full_name: 'Mapped Player', position: 'RB', yahoo_id: 101 },
     s2: { full_name: 'No Yahoo Player', position: 'WR' },
-    s3: { full_name: 'Unsupported Player', position: 'P', yahoo_id: 303 }
+    s3: { full_name: 'Unsupported Player', position: 'P', yahoo_id: 303 },
+    s4: { full_name: 'Inactive Player', position: 'RB', yahoo_id: 404, active: false }
   });
   assert.deepEqual(rows, [{ sleeperId: 's1', yahooId: '101', fantasyDataId: null, name: 'Mapped Player', position: 'RB', team: 'FA' }]);
 });
@@ -177,6 +178,44 @@ test('Tank01 and Sleeper extend a limited primary pool with Yahoo-mapped late-ro
   assert.equal(pool.players[1].evidenceRole, 'secondary-fallback');
   assert.equal(pool.players[1].projectionImputed, true);
   assert.equal(pool.sourceEvidence.coverage.secondaryFallbackPlayers, 1);
+});
+
+test('Sleeper identity depth completes a two-defense league pool without adding unranked skill players', () => {
+  const teams = ['ARI', 'ATL', 'BAL', 'BUF', 'CAR', 'CHI', 'CIN', 'CLE', 'DAL', 'DEN', 'DET', 'GB', 'HOU', 'IND', 'JAX', 'KC', 'LAC', 'LAR', 'LV', 'MIA', 'MIN', 'NE', 'NO', 'NYG', 'NYJ', 'PHI', 'PIT', 'SEA', 'SF', 'TB', 'TEN', 'WAS'];
+  const primaryDefenses = teams.slice(0, 10).map((team, index) => ({
+    id: `fantasypros:def-${team.toLowerCase()}`,
+    yahooPlayerKey: String(50_000 + index),
+    name: `${team} Defense`,
+    position: 'DEF',
+    team,
+    expertRank: index + 1,
+    projectedPoints: null
+  }));
+  const identityPlayers = teams.map((team, index) => ({
+    sleeperId: team.toLowerCase(),
+    yahooId: String(50_000 + index),
+    name: `${team} Defense`,
+    position: 'DEF',
+    team
+  }));
+  identityPlayers.push({ sleeperId: 'unranked-rb', yahooId: '60000', name: 'Unranked Runner', position: 'RB', team: 'BUF' });
+
+  const pool = reconcilePlayerEvidence({
+    source: 'fantasypros-api',
+    complete: false,
+    players: primaryDefenses
+  }, {
+    sleeper: { players: [], identityPlayers }
+  });
+
+  const defenses = pool.players.filter((player) => player.position === 'DEF');
+  assert.equal(defenses.length, 32);
+  assert.equal(pool.players.some((player) => player.name === 'Unranked Runner'), false);
+  assert.equal(defenses.every((player) => /^\d+$/.test(player.yahooPlayerKey)), true);
+  assert.equal(defenses.every((player) => player.projectedPoints > 0), true);
+  assert.equal(defenses.filter((player) => player.evidenceRole === 'sleeper-identity-depth-fallback').length, 22);
+  assert.equal(pool.sourceEvidence.coverage.sleeperDefenseDepthPlayers, 22);
+  assert.equal(pool.source, 'fantasypros+sleeper');
 });
 
 test('ambiguous secondary identities are excluded instead of resolving by input order', () => {

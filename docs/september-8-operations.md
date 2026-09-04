@@ -134,6 +134,8 @@ If preflight reports `FANTASYPROS_KEY_MISSING`, configure `FANTASYPROS_API_KEY` 
 
 One full FantasyPros refresh can use up to 13 requests: six rankings, six projections, and one canonical player-metadata/external-ID request. The seven identity-and-ranking requests are live-draft essentials. If the remaining local daily budget can cover those seven but not all projections, Huddle now completes the essential refresh, fetches as many projections as the budget permits, and marks the evidence partial. Missing projections use clearly disclosed deterministic rank estimates. If fewer than seven requests remain and no fresh cache can cover the difference, preflight stays blocked until the local budget resets. Do not repeatedly force refresh. The normal startup/24-hour schedule uses cached data and the configured local budget, and Yahoo-mapped Tank01/Sleeper candidates can extend late-round coverage.
 
+FantasyPros may return only ten D/ST ranking rows. For leagues that start two defenses, Huddle fills position depth from Sleeper's daily-cached NFL identity map, limited to one active team defense per NFL club with a numeric Yahoo ID. These rows are explicitly marked as unranked identity-depth fallback evidence, receive deterministic rank-based projections, and remain below provider-ranked defenses. Sleeper-only skill-position players are not admitted through this fallback.
+
 ### 5. Rehearse the exact league
 
 Before the real draft:

@@ -37,7 +37,7 @@ function normalizeSleeperTrends({ playerMap = {}, adds = [], drops = [] } = {}) 
 }
 
 function normalizeSleeperPlayerCrosswalk(playerMap = {}) {
-  return Object.entries(playerMap).map(([id, player]) => ({
+  return Object.entries(playerMap).filter(([, player]) => player?.active !== false).map(([id, player]) => ({
     sleeperId: String(id),
     yahooId: player?.yahoo_id == null ? null : String(player.yahoo_id),
     fantasyDataId: player?.fantasy_data_id == null ? null : String(player.fantasy_data_id),
