@@ -7,6 +7,7 @@ const POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DST'];
 // Rankings and projections are position-specific. The metadata request supplies
 // canonical external IDs (including Yahoo) for every ranked player.
 const REQUESTS_PER_FULL_SYNC = POSITIONS.length * 2 + 1;
+const REQUESTS_PER_ESSENTIAL_SYNC = POSITIONS.length + 1;
 const IMAGE_FIELD_RE = /(avatar|headshot|image|photo|picture|portrait)/i;
 
 function stripPlayerImageFields(value) {
@@ -186,29 +187,68 @@ class FantasyProsClient {
 
   async loadDraftPool({ season, scoring = 'PPR', force = false } = {}) {
     if (!season) throw new Error('season is required');
-    const plan = [
-      this.requestDescriptor('/nfl/players', {}),
-      ...POSITIONS.flatMap((position) => [
-      this.requestDescriptor(`/nfl/${season}/consensus-rankings`, { position, scoring, week: 0 }),
-      this.requestDescriptor(`/nfl/${season}/projections`, { position, week: 0 })
-      ])
-    ];
-    const requiredRequests = force ? plan.length : plan.filter((item) => !this.freshCache(item.cachePath)).length;
+    const metadataRequest = {
+      ...this.requestDescriptor('/nfl/players', {}),
+      endpoint: '/nfl/players',
+      params: {}
+    };
+    const rankingRequests = POSITIONS.map((position) => ({
+      position,
+      ...this.requestDescriptor(`/nfl/${season}/consensus-rankings`, { position, scoring, week: 0 }),
+      endpoint: `/nfl/${season}/consensus-rankings`,
+      params: { position, scoring, week: 0 }
+    }));
+    const projectionRequests = POSITIONS.map((position) => ({
+      position,
+      ...this.requestDescriptor(`/nfl/${season}/projections`, { position, week: 0 }),
+      endpoint: `/nfl/${season}/projections`,
+      params: { position, week: 0 }
+    }));
+    const needsNetwork = (item) => force || !this.freshCache(item.cachePath);
+    const essentialRequests = [metadataRequest, ...rankingRequests];
+    const essentialNetworkRequests = essentialRequests.filter(needsNetwork).length;
     const quota = this.quotaStatus();
-    if (requiredRequests > quota.estimatedRemaining) {
-      const error = new Error(`FantasyPros refresh needs ${requiredRequests} requests but only ${quota.estimatedRemaining} remain in Huddle's daily budget`);
+    if (essentialNetworkRequests > quota.estimatedRemaining) {
+      const error = new Error(`FantasyPros essential refresh needs ${essentialNetworkRequests} requests but only ${quota.estimatedRemaining} remain in Huddle's daily budget`);
       error.code = 'FANTASYPROS_BUDGET_EXHAUSTED';
-      error.details = { ...quota, requiredRequests };
+      error.details = {
+        ...quota,
+        requiredEssentialRequests: essentialNetworkRequests,
+        requiredFullRequests: essentialNetworkRequests + projectionRequests.filter(needsNetwork).length
+      };
       throw error;
     }
+    let optionalNetworkBudget = quota.estimatedRemaining - essentialNetworkRequests;
+    const selectedProjectionRequests = new Set();
+    for (const request of projectionRequests) {
+      if (!needsNetwork(request)) {
+        selectedProjectionRequests.add(request.position);
+      } else if (optionalNetworkBudget > 0) {
+        selectedProjectionRequests.add(request.position);
+        optionalNetworkBudget -= 1;
+      }
+    }
+    const skippedProjectionPositions = projectionRequests
+      .filter((request) => !selectedProjectionRequests.has(request.position))
+      .map((request) => request.position);
+    const skippedProjection = {
+      payload: { players: [] },
+      truncated: false,
+      cacheHit: false,
+      skippedForBudget: true
+    };
     const [metadata, batches] = await Promise.all([
-      this.request('/nfl/players', {}, { force }),
+      this.request(metadataRequest.endpoint, metadataRequest.params, { force }),
       Promise.all(POSITIONS.map(async (position) => {
-      const [rankings, projections] = await Promise.all([
-        this.request(`/nfl/${season}/consensus-rankings`, { position, scoring, week: 0 }, { force }),
-        this.request(`/nfl/${season}/projections`, { position, week: 0 }, { force })
-      ]);
-      return { position, rankings, projections };
+        const rankingRequest = rankingRequests.find((request) => request.position === position);
+        const projectionRequest = projectionRequests.find((request) => request.position === position);
+        const [rankings, projections] = await Promise.all([
+          this.request(rankingRequest.endpoint, rankingRequest.params, { force }),
+          selectedProjectionRequests.has(position)
+            ? this.request(projectionRequest.endpoint, projectionRequest.params, { force })
+            : Promise.resolve(skippedProjection)
+        ]);
+        return { position, rankings, projections };
       }))
     ]);
 
@@ -218,7 +258,7 @@ class FantasyProsClient {
       .map(([id, raw]) => [String(id), raw]));
 
     const players = [];
-    let complete = !metadata.truncated;
+    let complete = !metadata.truncated && skippedProjectionPositions.length === 0;
     let projectedPlayers = 0;
     for (const batch of batches) {
       complete &&= !batch.rankings.truncated && !batch.projections.truncated;
@@ -258,6 +298,12 @@ class FantasyProsClient {
         projected: projectedPlayers,
         ranked: uniquePlayers.length,
         coverage: uniquePlayers.length ? Math.round((projectedPlayers / uniquePlayers.length) * 10_000) / 10_000 : 0
+      },
+      requestCoverage: {
+        mode: skippedProjectionPositions.length ? 'essential-plus-partial-projections' : 'full',
+        essentialRequests: REQUESTS_PER_ESSENTIAL_SYNC,
+        fullRequests: REQUESTS_PER_FULL_SYNC,
+        skippedProjectionPositions
       },
       players: uniquePlayers
     };
@@ -304,6 +350,7 @@ class FantasyProsClient {
 module.exports = {
   FantasyProsClient,
   POSITIONS,
+  REQUESTS_PER_ESSENTIAL_SYNC,
   REQUESTS_PER_FULL_SYNC,
   isTruncated,
   normalizeRankedPlayer,
