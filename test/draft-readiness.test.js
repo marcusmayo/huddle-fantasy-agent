@@ -193,3 +193,27 @@ test('dashboard exposes an accessible in-app check, auto-start, progress and sep
   assert.match(client, /state\.readinessError/);
   assert.doesNotMatch(html, /Run Yahoo read rehearsal/);
 });
+
+test('selected manual session cannot inherit fleet READY and an empty recommendation blocks readiness', () => {
+  const vm = require('node:vm');
+  const client = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
+  const render = client.slice(client.indexOf('function renderDraftReadiness()'), client.indexOf('async function checkDraftReadiness'));
+  const nodes = new Map();
+  const node = (id) => {
+    if (!nodes.has(id)) nodes.set(id, { classList: { toggle() {} }, dataset: {}, setAttribute() {}, value: 'manual' });
+    return nodes.get(id);
+  };
+  const f = fixture();
+  const state = { mode: 'draft', draftReadiness: { state: 'ready', report: f.report }, session: { id: 'mock', status: 'active' },
+    recommendation: { sessionId: 'mock', preferred: { player: { name: 'Available player' } } } };
+  const context = vm.createContext({ state, $: node, yahooSyncEligible: () => false, escapeHtml: String });
+  vm.runInContext(render + '\nrenderDraftReadiness();', context);
+  assert.equal(node('#draft-readiness-state').textContent, 'DEMO / MANUAL');
+  state.recommendation.preferred = null;
+  vm.runInContext('renderDraftReadiness();', context);
+  assert.equal(node('#draft-readiness-state').textContent, 'NOT READY');
+  assert.match(node('#draft-readiness-message').textContent, /no eligible recommendation/);
+  state.session.status = 'completed';
+  vm.runInContext('renderDraftReadiness();', context);
+  assert.equal(node('#draft-readiness-state').textContent, 'DEMO / MANUAL');
+});

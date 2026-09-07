@@ -89,6 +89,7 @@ function assessRosterConstraint(player, mine, league, { availableByPosition = {}
   const maximums = defaultPositionMaximums(league);
   const counts = { ...mine, [player.position]: (mine[player.position] || 0) + 1 };
   const reasons = [];
+  const warnings = [];
   if (remainingPicks < 0) reasons.push('Target roster is already full.');
   if ((counts[player.position] || 0) > (maximums[player.position] ?? rosterSize)) {
     reasons.push(`${player.position} roster maximum of ${maximums[player.position]} would be exceeded.`);
@@ -97,19 +98,23 @@ function assessRosterConstraint(player, mine, league, { availableByPosition = {}
   if (missingStarterSlots > Math.max(0, remainingPicks)) {
     reasons.push(`This pick would leave ${missingStarterSlots} required starter slots for only ${Math.max(0, remainingPicks)} remaining picks.`);
   }
+  // Opponent selections are a forecast, not a roster legality rule. Several
+  // positions can be at risk together; blocking each alternative deadlocks
+  // an empty roster at long snake turns. Keep actual capacity checks above.
   if (remainingPicks > 0 && opponentPicksBeforeNext > 0) {
     for (const position of ['QB', 'RB', 'WR', 'TE', 'K', 'DEF']) {
       const dedicatedNeed = Math.max(0, Number(league.roster[position] || 0) - Number(counts[position] || 0));
       if (!dedicatedNeed || player.position === position) continue;
       const remainingAtPosition = Math.max(0, Number(availableByPosition[position] || 0) - (player.position === position ? 1 : 0));
       if (remainingAtPosition < opponentPicksBeforeNext + dedicatedNeed) {
-        reasons.push(`${position} supply may not survive ${opponentPicksBeforeNext} opponent picks before the next turn; reserve the required slot now.`);
+        warnings.push(`${position} supply may not survive ${opponentPicksBeforeNext} opponent picks before the next turn; review positional depth.`);
       }
     }
   }
   return {
     feasible: reasons.length === 0,
     reasons,
+    warnings,
     remainingPicks: Math.max(0, remainingPicks),
     missingStarterSlots,
     positionMaximum: maximums[player.position] ?? null
@@ -241,6 +246,9 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
     normalized[key] = normalize(raw.map((row) => row[key]));
   }
   const weights = STYLES[style];
+  const early = currentOverall / (draftedRosterSize(league.roster) * league.teamCount) < 0.55;
+  const supplyRisk = (item) => item.rosterConstraint.warnings.some((warning) =>
+    !early || !/^(K|DEF) supply/.test(warning));
   return raw.map((row, index) => {
     const components = Object.fromEntries(
       ['vorp', 'scarcity', 'need', 'urgency', 'upside', 'floor'].map((key) => [key, normalized[key][index]])
@@ -273,6 +281,9 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
         : row.rosterConstraint.reasons.slice(0, 3)
     };
   }).sort((a, b) => Number(b.rosterFeasible) - Number(a.rosterFeasible)
+    // Prefer a supply-safe choice when one exists. If every position is at
+    // risk, retain the balanced ordering instead of rejecting the whole board.
+    || Number(supplyRisk(a)) - Number(supplyRisk(b))
     || b.score - a.score || a.player.expertRank - b.player.expertRank);
 }
 

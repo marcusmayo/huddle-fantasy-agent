@@ -649,6 +649,7 @@ async function selectLeague(leagueId) {
   clearInterval(state.timer);
   state.leagueId = leagueId;
   state.session = null;
+  state.recommendation = null;
   state.draftSessions = [];
   state.weeklyWeeks = [];
   state.weeklyReview = null;
@@ -736,16 +737,20 @@ function renderDraftReadiness() {
   const snapshot = state.draftReadiness;
   const report = snapshot?.report;
   const running = state.readinessRunning || snapshot?.state === 'running';
-  const ready = !state.readinessError && !running && report?.readyForLiveDraft;
-  const demo = report && !report.leagues.length && state.league?.platform === 'demo';
-  const label = running ? 'CHECKING' : state.readinessError ? 'CHECK FAILED' : demo ? 'DEMO / MANUAL'
+  const recommendationBlocked = state.session?.status === 'active'
+    && state.recommendation?.sessionId === state.session.id && !state.recommendation.preferred;
+  const demo = !yahooSyncEligible();
+  const ready = !demo && !recommendationBlocked && !state.readinessError && !running && report?.readyForLiveDraft;
+  const label = recommendationBlocked ? 'NOT READY' : running ? 'CHECKING' : state.readinessError ? 'CHECK FAILED' : demo ? 'DEMO / MANUAL'
     : ready ? 'READY' : !snapshot || snapshot.state === 'unchecked' ? 'NOT CHECKED' : 'NOT READY';
   $('#draft-readiness-state').textContent = label;
   panel.dataset.state = ready ? 'ready' : running ? 'running' : 'blocked';
   panel.setAttribute('aria-busy', String(Boolean(running)));
   $('#check-draft-readiness').disabled = Boolean(running);
   $('#check-draft-readiness').textContent = running ? 'Checking…' : 'Check draft readiness';
-  $('#draft-readiness-message').textContent = state.readinessError || (running ? snapshot?.stage || 'Starting checks…'
+  $('#draft-readiness-message').textContent = recommendationBlocked
+    ? 'This session has no eligible recommendation. Resolve the player pool or roster constraints before joining a timed draft.'
+    : state.readinessError || (running ? snapshot?.stage || 'Starting checks…'
     : demo ? 'Demo and manual drafts need no Yahoo check. Connect Yahoo and import a league for live use.'
     : ready ? 'Ready for live Yahoo drafting. Review warnings below; you still make every pick in Yahoo.'
     : 'Check here before a live Yahoo draft. Resolve blockers, then check again. No terminal required.');
@@ -1440,6 +1445,7 @@ function renderRecommendation(card) {
   makePlayerSelectable(document.querySelector('.choice.upside'), card.alternatives.upside?.player);
   $('#updated-at').textContent = `Updated ${new Date(card.generatedAt).toLocaleTimeString()}`;
   renderBoardRows();
+  renderDraftReadiness();
 }
 
 function renderUnresolvedPlayers(payload) {

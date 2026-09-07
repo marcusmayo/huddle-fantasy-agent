@@ -110,7 +110,7 @@ test('final recommendations reserve enough picks to complete every required star
   assert.equal(defense.feasible, true);
 });
 
-test('recommendations reserve a required position before opponents can exhaust its supply', () => {
+test('uncertain opponent supply produces a warning, not a roster ban', () => {
   const smallLeague = {
     ...structuredClone(league),
     teamCount: 4,
@@ -120,7 +120,27 @@ test('recommendations reserve a required position before opponents can exhaust i
   const availableByPosition = { QB: 2, RB: 20, WR: 20, TE: 10, K: 10, DEF: 10 };
   const runner = assessRosterConstraint({ position: 'RB' }, mine, smallLeague, { availableByPosition, opponentPicksBeforeNext: 3 });
   const quarterback = assessRosterConstraint({ position: 'QB' }, mine, smallLeague, { availableByPosition, opponentPicksBeforeNext: 3 });
-  assert.equal(runner.feasible, false);
-  assert.match(runner.reasons.join(' '), /QB supply may not survive/);
+  assert.equal(runner.feasible, true);
+  assert.match(runner.warnings.join(' '), /QB supply may not survive/);
   assert.equal(quarterback.feasible, true);
+});
+
+// Reproduces the observed zero-pick mock failure without provider credentials.
+test('empty Yahoo mock rosters stay draftable at every seat with limited K and DEF depth', () => {
+  const roster = { QB: 1, RB: 2, WR: 2, TE: 1, 'W/R': 1, K: 1, DEF: 1, BN: 6 };
+  const players = Object.entries({ QB: 25, RB: 45, WR: 50, TE: 25, K: 22, DEF: 18 })
+    .flatMap(([position, count]) => Array.from({ length: count }, (_, i) => ({
+      id: `${position}-${i}`, name: `${position} ${i}`, position, team: 'FA',
+      projectedPoints: 300 - i, floor: 200 - i, ceiling: 350 - i,
+      expertRank: i + 1, adp: i + 1, risk: 0
+    })));
+  for (const teamCount of [8, 10, 12, 14]) {
+    for (let draftSlot = 1; draftSlot <= teamCount; draftSlot++) {
+      const picks = Array.from({ length: draftSlot - 1 }, (_, i) => ({ playerId: `other-${i}`, isMine: false }));
+      const card = buildRecommendationCard({ players, picks, league: { ...league, roster, teamCount }, draftSlot });
+      assert.equal(card.onClock, true);
+      assert.ok(card.preferred?.rosterFeasible, `${teamCount} teams, seat ${draftSlot}`);
+      assert.ok(!['K', 'DEF'].includes(card.preferred.player.position));
+    }
+  }
 });
