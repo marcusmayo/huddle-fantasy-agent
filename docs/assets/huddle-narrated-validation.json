@@ -1,0 +1,158 @@
+{
+  "date": "2026-09-06",
+  "kind": "Narrated editorial feature overview; original orchestral music; not live-account footage",
+  "voice": {
+    "method": "Kokoro-82M stock synthetic voice blend; no custom voice clone",
+    "blend": {
+      "am_michael": 0.7,
+      "am_onyx": 0.3
+    },
+    "pitch_factor": 0.955,
+    "model_license": "Apache-2.0",
+    "model_url": "https://huggingface.co/hexgrad/Kokoro-82M"
+  },
+  "music": {
+    "title": "Your League, Your Call",
+    "composition": "Original 24-bar orchestral cue, D minor resolving to D major, 100 BPM",
+    "instruments": [
+      "French horns",
+      "Low brass",
+      "Violins",
+      "Violas and cellos",
+      "Contrabass",
+      "Timpani",
+      "Trumpet accents",
+      "Field percussion"
+    ],
+    "sample_bank": "GeneralUser GS",
+    "sample_bank_sha256": "9575028c7a1f589f5770fccc8cff2734566af40cd26ed836944e9a5152688cfe",
+    "sample_license": "https://github.com/mrbumpy409/GeneralUser-GS/blob/main/documentation/LICENSE.txt",
+    "source_recordings": "No NFL, broadcast, film-theme, or announcer recordings used."
+  },
+  "narration_timing": [
+    {
+      "start": 0.65,
+      "end": 4.2739,
+      "text": "Every season begins with a choice. Make yours count.",
+      "original_seconds": 3.627,
+      "time_compression": 1.0
+    },
+    {
+      "start": 6.3,
+      "end": 11.0194,
+      "text": "This is Huddle. Connect Yahoo. Your leagues. Your rules. One command center.",
+      "original_seconds": 4.722,
+      "time_compression": 1.0
+    },
+    {
+      "start": 13.25,
+      "end": 18.7751,
+      "text": "As the draft unfolds, compare your best pick, the safer choice, and the upside play.",
+      "original_seconds": 5.5284,
+      "time_compression": 1.0
+    },
+    {
+      "start": 21.25,
+      "end": 27.1562,
+      "text": "Multiple data sources. Clear reasoning. Rankings built by rules, not guesswork.",
+      "original_seconds": 5.9109,
+      "time_compression": 1.0
+    },
+    {
+      "start": 28.25,
+      "end": 33.2304,
+      "text": "After draft day, review scores, standings, and the points left on your bench.",
+      "original_seconds": 4.9831,
+      "time_compression": 1.0
+    },
+    {
+      "start": 36.3,
+      "end": 40.4354,
+      "text": "Find the next addition. Weigh the trade-offs. Or hold your ground.",
+      "original_seconds": 4.139,
+      "time_compression": 1.0
+    },
+    {
+      "start": 43.3,
+      "end": 47.429,
+      "text": "Before the clock starts, check draft readiness, right inside the app.",
+      "original_seconds": 4.1318,
+      "time_compression": 1.0
+    },
+    {
+      "start": 50.25,
+      "end": 53.8572,
+      "text": "Huddle reads the field. You make every move in Yahoo.",
+      "original_seconds": 3.6127,
+      "time_compression": 1.0
+    },
+    {
+      "start": 56.25,
+      "end": 58.0608,
+      "text": "Huddle. Your league. Your call.",
+      "original_seconds": 1.8149,
+      "time_compression": 1.0
+    }
+  ],
+  "caption_timing": "Sentence estimates within fitted scene windows, not forced alignment",
+  "master_loudness_target_lufs": -16,
+  "true_peak_target_dbtp": -1.5,
+  "premaster_measurement": {
+    "input_i": "-21.86",
+    "input_tp": "-5.91",
+    "input_lra": "6.10",
+    "input_thresh": "-32.02",
+    "output_i": "-15.44",
+    "output_tp": "-1.50",
+    "output_lra": "5.10",
+    "output_thresh": "-25.53",
+    "normalization_type": "dynamic",
+    "target_offset": "-0.56"
+  },
+  "files": [
+    {
+      "path": "docs/assets/huddle-narrated-landscape-1920x1080.mp4",
+      "bytes": 30855218,
+      "sha256": "0bb3f9f36c36ccd5ec9562cb9c388628e439382809c5b302411e341311f084de",
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 60.0,
+      "video_codec": "h264",
+      "audio_codec": "AAC LC",
+      "audio_sample_rate": 48000,
+      "channels": 2,
+      "full_decode": "passed"
+    },
+    {
+      "path": "docs/assets/huddle-narrated-feed-1080x1350.mp4",
+      "bytes": 30799493,
+      "sha256": "f4512e78a9de41f1b3c8993734f3ea71d5df2a6e0357e3bf1aa6dc3ef4532ab4",
+      "width": 1080,
+      "height": 1350,
+      "fps": 30,
+      "duration": 60.0,
+      "video_codec": "h264",
+      "audio_codec": "AAC LC",
+      "audio_sample_rate": 48000,
+      "channels": 2,
+      "full_decode": "passed"
+    },
+    {
+      "path": "docs/assets/huddle-narrated-x-1280x720.mp4",
+      "bytes": 39189305,
+      "sha256": "3e608bd7f1892126395955fadba9427a689529c53b7730fe6f007f74aa342d1e",
+      "width": 1280,
+      "height": 720,
+      "fps": 30,
+      "duration": 60.0,
+      "video_codec": "h264",
+      "audio_codec": "AAC LC",
+      "audio_sample_rate": 48000,
+      "channels": 2,
+      "full_decode": "passed"
+    }
+  ],
+  "platform_upload_tested": false,
+  "paid_generation_api_used": false
+}

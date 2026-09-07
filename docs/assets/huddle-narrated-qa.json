@@ -1,0 +1,37 @@
+{
+  "original_visuals_preserved": {
+    "huddle-narrated-landscape-1920x1080.mp4": "SHA256=20a6d4fb809b5e36fe9c842919cb552c4d621c7a56bccaa64754a9ffc62071a2",
+    "huddle-narrated-feed-1080x1350.mp4": "SHA256=a6c1ebd134c17d6bdc354952f40186b9c32157128e043fe54d9d525e19ad33f1"
+  },
+  "files": [
+    {
+      "filename": "huddle-narrated-landscape-1920x1080.mp4",
+      "sha256": "0bb3f9f36c36ccd5ec9562cb9c388628e439382809c5b302411e341311f084de",
+      "bytes": 30855218,
+      "integrated_loudness_lufs": -16.02,
+      "decoded_true_peak_dbtp": -1.51,
+      "full_decode": "passed"
+    },
+    {
+      "filename": "huddle-narrated-feed-1080x1350.mp4",
+      "sha256": "f4512e78a9de41f1b3c8993734f3ea71d5df2a6e0357e3bf1aa6dc3ef4532ab4",
+      "bytes": 30799493,
+      "integrated_loudness_lufs": -16.02,
+      "decoded_true_peak_dbtp": -1.51,
+      "full_decode": "passed"
+    },
+    {
+      "filename": "huddle-narrated-x-1280x720.mp4",
+      "sha256": "3e608bd7f1892126395955fadba9427a689529c53b7730fe6f007f74aa342d1e",
+      "bytes": 39189305,
+      "integrated_loudness_lufs": -16.02,
+      "decoded_true_peak_dbtp": -1.51,
+      "full_decode": "passed"
+    }
+  ],
+  "platform_upload_tested": false,
+  "listening_review": "Automated speech-transcription and audio-measurement checks; subjective narrator suitability is not independently human-reviewed.",
+  "speech_transcription_token_similarity": 0.9795918367346939,
+  "speech_check_note": "98% approximate token similarity; addition/edition homophone and final league/leagues variation in ASR. Not a perfect-word or listening-quality guarantee.",
+  "mix": "Centered deep male synthetic narrator; stereo original synthesized orchestral cue; music automatically ducked under dialogue."
+}
