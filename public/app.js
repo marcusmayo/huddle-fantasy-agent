@@ -678,7 +678,7 @@ async function selectLeague(leagueId) {
   if (!yahooEligible && $('#source-mode').value === 'yahoo') $('#source-mode').value = 'manual';
   $('#session-help').textContent = yahooEligible
     ? 'Huddle checks Yahoo for your confirmed draft slot before opening the room. It recommends; you make every pick in Yahoo.'
-    : 'This is a demo or manual profile. Choose its draft slot and use Manual or Screenshot mode; Yahoo synchronization does not apply.';
+    : 'Choose your draft slot and input method. For a Yahoo practice room, use Yahoo mock — browser-assisted.';
   $('#draft-slot-status').textContent = state.league.draft?.draftSlot
     ? `${yahooEligible ? 'Yahoo/imported' : 'Configured'} draft position ${state.league.draft.draftSlot}.`
     : yahooEligible ? 'Yahoo has not published a draft position yet; refresh later or enter the confirmed slot.' : 'Enter the demo/manual snake-draft position.';
@@ -1442,6 +1442,7 @@ function renderRecommendation(card) {
   $('#preferred-name').textContent = preferred?.player.name || 'No eligible player';
   $('#preferred-meta').textContent = preferred ? `${preferred.player.position} · ${preferred.player.team} · ADP ${preferred.player.adp ?? '—'}` : '';
   $('#preferred-observed-name').textContent = preferred?.player.observedName ? `Yahoo name: ${preferred.player.observedName}` : '';
+  $('#preferred-observed-name').dataset.yahooPlayerId = preferred?.player.yahooPlayerId || '';
   $('#preferred-score').textContent = preferred?.score ?? '—';
   $('#preferred-why').innerHTML = (preferred?.why || []).map((line) => `<li>${escapeHtml(line)}</li>`).join('');
   $('#explanation').textContent = card.explanation;

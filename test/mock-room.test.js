@@ -199,6 +199,66 @@ test('missing Yahoo players are eligible only in the practice snapshot, without 
   assert.throws(() => real.createSession({ draftSlot: 3, sourceMode: 'mock' }), { code: 'MOCK_SESSION_REQUIRED' });
 });
 
+test('live B. Robinson collision is separated by Yahoo ID despite identical name, position and team', () => {
+  const x = setup([{ id: 'bijan', name: 'Bijan Robinson', position: 'RB', team: 'ATL' }]);
+  const picked = { overallPick: 1, name: 'B. Robinson', position: 'RB', team: 'ATL', yahooPlayerId: '40055', isMine: false };
+  const available = { ...candidate('B. Robinson', 'RB', 'ATL'), yahooPlayerId: '34054' };
+  const room = snapshot(1, { picks: [picked], availablePlayers: [available] });
+  const result = x.service.importMockSnapshot(x.session.id, room);
+  assert.equal(result.session.picks[0].playerId, 'mock-yahoo:40055');
+  assert.equal(result.session.picks[0].yahooPlayerId, '40055');
+  assert.equal(result.card.preferred.player.id, 'mock-yahoo:34054');
+  assert.equal(result.card.preferred.player.yahooPlayerId, '34054');
+  assert.equal(result.card.preferred.player.name, 'B. Robinson', 'do not falsely call the second player Bijan');
+  assert.equal(result.card.preferred.player.resolutionStatus, 'observed-yahoo-name');
+  assert.equal(x.service.importMockSnapshot(x.session.id, room).imported, 0);
+  const before = x.service.getSession(x.session.id);
+  assert.throws(() => x.service.importMockSnapshot(x.session.id, {
+    ...room, picks: [{ ...picked, yahooPlayerId: '34054' }], availablePlayers: []
+  }), { code: 'MOCK_PICK_CONFLICT' });
+  assert.deepEqual(x.service.getSession(x.session.id), before);
+});
+
+test('Yahoo IDs resolve provider evidence only through an exact ID crosswalk', () => {
+  const pool = [
+    { id: 'bijan', name: 'Bijan Robinson', position: 'RB', team: 'ATL', yahooPlayerKey: '461.p.40055' },
+    { id: 'brian', name: 'Brian Robinson', position: 'RB', team: 'ATL', yahooPlayerKey: '461.p.34054' }
+  ];
+  const observed = { name: 'B. Robinson', position: 'RB', team: 'ATL', yahooPlayerId: '34054' };
+  assert.equal(resolvePlayer(observed, pool).name, 'Brian Robinson');
+  assert.equal(resolvePlayer(observed, pool.slice(0, 1)).name, 'B. Robinson');
+  assert.equal(resolvePlayer(observed, pool.slice(0, 1)).yahooPlayerKey, undefined);
+});
+
+test('same Yahoo ID under changed labels cannot appear twice or lose its saved identity', () => {
+  const x = setup();
+  const picked = { overallPick: 1, name: 'B. Robinson', position: 'RB', team: 'ATL', yahooPlayerId: '40055', isMine: false };
+  const room = snapshot(1, { picks: [picked], availablePlayers: [] });
+  x.service.importMockSnapshot(x.session.id, room);
+  assert.throws(() => x.service.importMockSnapshot(x.session.id, {
+    ...room, availablePlayers: [{ ...candidate('Different Label', 'WR', 'ATL'), yahooPlayerId: '40055' }]
+  }), { code: 'MOCK_AVAILABILITY_CONFLICT' });
+  assert.throws(() => x.service.importMockSnapshot(x.session.id, {
+    ...room, picks: [{ ...picked, yahooPlayerId: undefined }]
+  }), { code: 'MOCK_PLAYER_ID_REQUIRED' });
+  assert.throws(() => x.service.importMockSnapshot(x.session.id, {
+    ...room, availablePlayers: [{ ...candidate('Invalid ID'), yahooPlayerId: '../40055' }]
+  }), { code: 'INVALID_MOCK_PLAYER_ID' });
+});
+
+test('a verified ID can upgrade a legacy saved pick without duplicating the pick', () => {
+  const x = setup();
+  x.service.importMockSnapshot(x.session.id, snapshot(1));
+  const room = snapshot(1);
+  room.picks = room.picks.map(p => ({ ...p, yahooPlayerId: 'test' }));
+  assert.throws(() => x.service.importMockSnapshot(x.session.id, room), { code: 'INVALID_MOCK_PLAYER_ID' });
+  room.picks[0].yahooPlayerId = '40054';
+  const upgraded = x.service.importMockSnapshot(x.session.id, room);
+  assert.equal(upgraded.imported, 0);
+  assert.equal(upgraded.session.picks[0].yahooPlayerId, '40054');
+  assert.equal(upgraded.session.picks[0].playerId, 'mock-yahoo:40054');
+});
+
 test('drafted and available conflicts, duplicates, and invalid projections are rejected atomically', () => {
   const x = setup();
   assert.throws(() => x.service.importMockSnapshot(x.session.id, snapshot(1, { availablePlayers: [candidate('J. Gibbs', 'RB', 'DET')] })), { code: 'MOCK_AVAILABILITY_CONFLICT' });

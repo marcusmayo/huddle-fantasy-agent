@@ -52,4 +52,35 @@ Cloud CDP transport failures and one native confirmation hang were observed, but
 6. Avoid redundant tab clicks. Keep at most two timed turns per bounded tool call, retain progress after each, and report briefly between batches. On an uncertain click, inspect acceptance before retrying.
 7. After our final pick, import the completed board and verify all 120 results and 15 owned picks. Report manual, queued-auto, and unselected-auto counts separately. Record actual timings and failures without relabeling a fallback as success.
 
-Live Yahoo validation is pending at the time this change is prepared. Its result must be appended after the run.
+## Hosted validation and live run
+
+Commit 26b7398 was published on `fix/mock-draft-throughput` and applied to the running Codespace after verifying a clean checkout. `npm run check` passed all 148 tests there. The existing Huddle process was gracefully restarted with its existing configuration; real league data was preserved.
+
+The full browser rehearsal was then repeated against hosted Huddle: **15 manual selections, zero autopicks, 120 picks reconciled**. The slowest complete cycle was **18.655 seconds**, including acceptance verification. Synthetic rehearsal projections remained clearly identified; the hosted provider consensus explains differences from local-demo selections.
+
+Next live mock joined: **Fourth and Inches 10984014**, September 7 at 7:02 PM Eastern. Waiting room positively verified Marcus in seat 3 of eight, with the matching W/R/T starting slot. Huddle's isolated optimized profile and a fresh mock session were created before joining. The join action opened a new waiting-room tab despite a timeout on the originating lobby; the new tab was found immediately without repeating the join.
+
+This live attempt failed. Picks 3, 14, and 19 were not manually submitted in time. The first attempted selection used an image-name locator, but Yahoo's player images use a title rather than the expected accessible name. Adapting the site-specific selection helper during the live clock repeated the readiness failure. At pick 30, only 16 seconds remained when the full cycle began; its 20-second tool limit expired and reset the browser session. Huddle saved the complete first 29 picks, but the pick-30 click and acceptance were not verified. The final manual/autopick totals are unknown. The room later displayed an expired-room message, so it is not counted as a successful or fully audited completed run.
+
+Subsequent browser recovery exposed two distinct conditions: some restored tabs returned an unattached-control error and became readable after explicitly claiming them; other Yahoo navigation/initial-page reads timed out. A fresh Yahoo lobby was ultimately controllable after claiming its tab and checking a screenshot before a narrow DOM read. This is an observed recovery procedure, not proof of an underlying extension defect. Huddle remained readable and retained the saved picks.
+
+Execution corrections for the next run:
+
+- Prepare the entire Yahoo-specific loop before joining. Use the current visible player row's exact observed name and position, not an image's accessible name. Verify the Draft button within that fresh row.
+- Keep a stable run object containing tab bindings, room identity, stage, snapshots, and accepted-pick timings. Do not rebuild helpers or change closure bindings on the clock.
+- Give each bounded call enough time for one or two complete cycles; use short action timeouts without a shorter outer timeout that resets the whole session.
+- Monitor the actual waiting-room tab through its live transition. Check Autodraft before every cycle. A recommendation is not a submitted pick; require Yahoo Results to verify the exact player and ownership.
+
+Next free live validation room: **Red Zone 10985247**, September 7 at 7:37 PM Eastern. Joined with approximately six minutes remaining. Yahoo positively confirmed seat 8 of eight; a fresh matching Huddle mock session and the full capture/import/select/acceptance helper were prepared before joining. Live results remain pending.
+
+### Red Zone result and newly reproduced identity defect
+
+The completed 120-pick room was audited: **6 manually submitted Huddle picks and 9 autopicks**. Manual picks were 24 (Trey McBride), 25 (Javonte Williams), 40 (Zay Flowers), 41 (Lamar Jackson), 56 (David Montgomery), and 57 (Luther Burden III). Complete cycle times were 16.862, 14.849, 13.835, 16.386, 19.186, and 23.589 seconds. The recorded `clockAtStart` field mistakenly contained the room title because the live header has extra lines; it must not be presented as countdown evidence. Elapsed durations and submission timestamps are valid.
+
+The first Players-tab action changed the page but returned a browser-control timeout. Recovery consumed pick 8's remaining clock and Yahoo immediately autopicked 8 and 9. The header Autodraft control subsequently turned Autodraft off, with the sidebar checkmark visibly absent. Six consecutive manually accepted Huddle selections followed.
+
+At pick 72, reconciliation rejected an available `B. Robinson, RB, ATL` as already drafted. Actual Yahoo DOM evidence showed **40055** for the drafted row and **34054** for the available row. Name + position + team was insufficient. This is a reproduced Huddle identity defect, not a transport explanation. No more manually submitted picks followed; the remaining positions were filled by Yahoo.
+
+The correction carries the displayed Yahoo player ID through snapshot validation, saved picks, session candidates, recommendations, and the preferred-player DOM attribute. IDs take precedence over abbreviated names. Provider names/evidence are used only with an exact Yahoo ID crosswalk when an ID is supplied; an unmatched abbreviated row stays honestly unresolved. Existing name-only fixtures remain supported, and saved ID evidence cannot silently disappear or change. The exact collision, duplicate aliases, provider crosswalk, malformed IDs, and legacy upgrade are covered by regression tests. **All 152 tests and vendored-core integrity passed locally.**
+
+Additional browser evidence: Yahoo retains the Round by Round view when switching back to Results. Some role/text locator clicks returned without changing the selected tab; the exact visible button located through `button` plus anchored text worked. The next loop must verify the selected tab and table headers, skip redundant subtab clicks, carry stable player IDs, and recover uncertain navigation inside the same bounded cycle.

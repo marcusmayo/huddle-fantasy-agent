@@ -8,6 +8,7 @@ const MAX_AGE_MS = 30_000;
 const fail = (code, message) => { throw Object.assign(new Error(message), { code }); };
 const nameKey = (name) => String(name).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 const teamKey = (team) => ({ JAX: 'JAC', WAS: 'WAS', WSH: 'WAS' }[String(team).toUpperCase()] || String(team || 'FA').toUpperCase());
+const yahooId = (player) => String(player.yahooPlayerId || player.yahooPlayerKey || '').split('.p.').at(-1);
 
 function shortName(name) {
   const parts = String(name).trim().split(/\s+/);
@@ -15,13 +16,16 @@ function shortName(name) {
 }
 
 function samePlayer(left, right) {
+  const leftId = yahooId(left);
+  const rightId = yahooId(right);
+  if (leftId && rightId) return leftId === rightId;
   if (left.position !== right.position) return false;
   const a = nameKey(left.name || left.playerName);
   const b = nameKey(right.name || right.playerName);
   if (left.position === 'DEF') return teamKey(left.team || left.nflTeam) === teamKey(right.team || right.nflTeam)
     || a === b || (a.length > 3 && b.length > 3 && (a.endsWith(b) || b.endsWith(a)));
-  if (a === b) return true;
   const compatibleTeam = !left.team || !right.team || left.team === 'FA' || right.team === 'FA' || teamKey(left.team) === teamKey(right.team);
+  if (a === b) return compatibleTeam;
   return compatibleTeam && nameKey(shortName(left.name || left.playerName)) === nameKey(shortName(right.name || right.playerName));
 }
 
@@ -32,18 +36,26 @@ function observedPlayer(raw) {
   if (name.length < 2 || name.length > 80 || !POSITIONS.has(position) || !/^[A-Z]{2,4}$/.test(team)) {
     fail('INVALID_ROOM_PLAYER', 'Every observed player needs a name, position, and NFL team.');
   }
-  return { name, position, team };
+  const yahooPlayerId = raw.yahooPlayerId == null ? null : String(raw.yahooPlayerId);
+  if (yahooPlayerId !== null && !/^[1-9]\d{0,9}$/.test(yahooPlayerId)) {
+    fail('INVALID_MOCK_PLAYER_ID', 'Read the numeric Yahoo player ID from the displayed player row.');
+  }
+  return { name, position, team, ...(yahooPlayerId ? { yahooPlayerId } : {}) };
 }
 
 function resolvePlayer(raw, pool) {
   const observed = observedPlayer(raw);
-  const matches = pool.filter((player) => samePlayer(observed, player));
+  // An abbreviated name is not an authoritative crosswalk when Yahoo supplies an ID.
+  // Bijan and Brian Robinson can both render as B. Robinson, RB, ATL in the same room.
+  const matches = pool.filter((player) => observed.yahooPlayerId
+    ? yahooId(player) === observed.yahooPlayerId && player.position === observed.position
+    : samePlayer(observed, player));
   const match = matches.length === 1 ? matches[0] : null;
   const fingerprint = crypto.createHash('sha256').update(`${nameKey(observed.name)}|${observed.position}|${observed.team}`).digest('hex').slice(0, 20);
   return {
     ...match,
     ...observed,
-    id: match?.id || `mock-observed:${fingerprint}`,
+    id: observed.yahooPlayerId ? `mock-yahoo:${observed.yahooPlayerId}` : match?.id || `mock-observed:${fingerprint}`,
     name: match?.name || observed.name,
     observedName: observed.name,
     resolutionStatus: match ? 'resolved-pool' : 'observed-yahoo-name',
@@ -98,8 +110,11 @@ function prepareMockSnapshot({ snapshot, session, league, playerPool, now }) {
     const isMine = pickOwner(index + 1, league.teamCount) === snapshot.draftSlot;
     if (typeof raw.isMine !== 'boolean' || raw.isMine !== isMine) fail('MOCK_OWNERSHIP_MISMATCH', `Yahoo ownership disagrees with the seat at pick ${index + 1}.`);
     const previous = session.picks[index];
-    if (previous && (!samePlayer(player, previous) || previous.isMine !== isMine)) fail('MOCK_PICK_CONFLICT', `Saved pick ${index + 1} conflicts with Yahoo. No changes were saved.`);
-    return previous || {
+    if (previous?.yahooPlayerId && !player.yahooPlayerId) {
+      fail('MOCK_PLAYER_ID_REQUIRED', `Read the Yahoo player ID again for saved pick ${index + 1}.`);
+    }
+    if (previous && (!samePlayer(player, previous) || previous.position !== player.position || previous.isMine !== isMine)) fail('MOCK_PICK_CONFLICT', `Saved pick ${index + 1} conflicts with Yahoo. No changes were saved.`);
+    return previous && !player.yahooPlayerId ? previous : {
       eventId: `mock:${snapshot.roomId}:${index + 1}`,
       overallPick: index + 1,
       playerId: player.id,
@@ -108,6 +123,7 @@ function prepareMockSnapshot({ snapshot, session, league, playerPool, now }) {
       position: player.position,
       team: player.team,
       yahooPlayerKey: player.yahooPlayerKey || null,
+      ...(player.yahooPlayerId ? { yahooPlayerId: player.yahooPlayerId } : {}),
       resolutionStatus: player.resolutionStatus,
       isMine,
       observedAt: snapshot.observedAt,
