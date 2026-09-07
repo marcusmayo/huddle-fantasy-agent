@@ -5,13 +5,13 @@ A read-only fantasy football assistant for Yahoo drafts and weekly team decision
 <!-- HUDDLE-LINKEDIN-VIDEOS:START -->
 ## Huddle in 60 seconds
 
-[![Watch Huddle's 60-second feature overview: Yahoo connection, draft recommendations, weekly reviews, waivers and human control](docs/assets/huddle-linkedin-overview-preview.gif)](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-linkedin-article-1920x1080.mp4)
+[![Watch Huddle with narration and original orchestral music](docs/assets/huddle-linkedin-overview-preview.gif)](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-narrated-landscape-1920x1080.mp4)
 
-**[Watch landscape video — 1920 × 1080](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-linkedin-article-1920x1080.mp4)** · **[LinkedIn feed video — 1080 × 1350](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-linkedin-feed-1080x1350.mp4)**
+**[Watch with sound — 1920 × 1080](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-narrated-landscape-1920x1080.mp4)** · **[LinkedIn feed — 1080 × 1350](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-narrated-feed-1080x1350.mp4)** · **[X thread — 1280 × 720](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-narrated-x-1280x720.mp4)**
 
-September 2026 · Silent feature overviews, not live-account recordings. Select the preview for the full-resolution video.
+September 2026 · AI-generated narration and an original orchestral score. The animated GIF is silent; click it for the video with sound. Feature overview, not live-account footage.
 
-[Earlier walkthrough — August 9](docs/assets/huddle-product-demo.mp4) · [Thumbnail](docs/assets/huddle-linkedin-overview-thumbnail.jpg) · [Video verification](docs/assets/huddle-linkedin-video-validation.json)
+[Captions](docs/assets/huddle-narration-en.srt) · [Media notes and silent originals](docs/media/narrated-previews.md) · [Earlier walkthrough — August 9](docs/assets/huddle-product-demo.mp4) · [Thumbnail](docs/assets/huddle-linkedin-overview-thumbnail.jpg)
 <!-- HUDDLE-LINKEDIN-VIDEOS:END -->
 
 ## What it does
