@@ -14,6 +14,7 @@ function explanationRoute(tier = 'routine') {
 }
 
 function deterministicExplanation(card) {
+  if (card?.mockReadiness && !card.mockReadiness.ready) return card.mockReadiness.reasons.join(' ');
   if (!card?.preferred) return 'No eligible players remain in the loaded player pool.';
   const preferred = card.preferred;
   const clock = card.onClock ? 'You are on the clock.' : `Your next turn is projected at pick ${card.nextUserPick}.`;

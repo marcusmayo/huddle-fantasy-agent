@@ -201,6 +201,18 @@ async function handleDraftRoutes(request, response, service, parts, { visionClie
     json(response, 200, service.recordPick(sessionId, await readBody(request)));
     return true;
   }
+  if (parts[2] === 'mock-snapshot' && request.method === 'POST') {
+    const result = service.importMockSnapshot(sessionId, await readBody(request));
+    result.card.explanation = deterministicExplanation(result.card);
+    json(response, 200, result);
+    return true;
+  }
+  if (parts[2] === 'workspace' && request.method === 'GET') {
+    const result = service.workspace(sessionId);
+    result.card.explanation = deterministicExplanation(result.card);
+    json(response, 200, result);
+    return true;
+  }
   if (parts[2] === 'evidence-reviews' && request.method === 'POST') {
     json(response, 200, service.recordEvidenceReview(sessionId, await readBody(request)));
     return true;

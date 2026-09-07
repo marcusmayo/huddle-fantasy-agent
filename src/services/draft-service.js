@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const { buildRecommendationCard, STYLES } = require('../domain/draft-board');
 const { draftedRosterSize } = require('../domain/league');
+const { prepareMockSnapshot, mockReadiness } = require('../domain/mock-room');
 
 const POSITIONS = new Set(['QB', 'RB', 'WR', 'TE', 'K', 'DEF']);
 const EVIDENCE_PURPOSES = new Set(['available_players', 'team_roster', 'waiver_players']);
@@ -73,10 +74,13 @@ class DraftService {
       error.code = 'INVALID_DRAFT_SLOT';
       throw error;
     }
-    if (!['manual', 'yahoo', 'screenshot'].includes(sourceMode)) {
-      const error = new Error('sourceMode must be manual, yahoo, or screenshot');
+    if (!['manual', 'yahoo', 'screenshot', 'mock'].includes(sourceMode)) {
+      const error = new Error('sourceMode must be manual, yahoo, screenshot, or mock');
       error.code = 'INVALID_SOURCE_MODE';
       throw error;
+    }
+    if (sourceMode === 'mock' && !['manual', 'demo'].includes(this.league.platform)) {
+      throw Object.assign(new Error('Create a separate manual practice league before using mock-room imports.'), { code: 'MOCK_SESSION_REQUIRED' });
     }
     const id = crypto.randomUUID();
     const now = this.currentIso();
@@ -173,6 +177,9 @@ class DraftService {
   recordPick(id, input) {
     const session = this.state.sessions[id];
     if (!session) return this.getSession(id);
+    if (session.sourceMode === 'mock') {
+      throw Object.assign(new Error('Import the complete Yahoo room snapshot to reconcile this practice session.'), { code: 'MOCK_SNAPSHOT_REQUIRED' });
+    }
     if (!input?.playerId && !input?.manualPlayer && !input?.externalPlayer) {
       const error = new Error('playerId, manualPlayer, or externalPlayer is required');
       error.code = 'INVALID_PICK';
@@ -345,11 +352,12 @@ class DraftService {
       for (const pick of session.picks || []) {
         const isManual = String(pick.playerId).startsWith('manual:');
         const isYahooPlaceholder = pick.resolutionStatus === 'unresolved-yahoo';
-        if (!isManual && !isYahooPlaceholder) continue;
+        const isObservedName = pick.resolutionStatus === 'observed-yahoo-name';
+        if (!isManual && !isYahooPlaceholder && !isObservedName) continue;
         items.push({
           leagueId: this.league.id,
           sessionId: session.id,
-          kind: isYahooPlaceholder ? 'yahoo-pick' : 'manual-pick',
+          kind: isObservedName ? 'mock-observed-player' : isYahooPlaceholder ? 'yahoo-pick' : 'manual-pick',
           playerId: pick.playerId,
           playerName: pick.playerName,
           position: pick.position,
@@ -379,12 +387,40 @@ class DraftService {
     return items;
   }
 
+  importMockSnapshot(id, snapshot) {
+    const session = this.state.sessions[id];
+    if (!session) return this.getSession(id);
+    const next = prepareMockSnapshot({ snapshot, session, league: this.league, playerPool: this.playerPool, now: this.now() });
+    const imported = next.picks.length - session.picks.length;
+    // Validate the entire observation before replacing state; persist exactly once.
+    this.state.sessions[id] = next;
+    try { this.persist(); } catch (error) { this.state.sessions[id] = session; throw error; }
+    return { imported, ...this.workspace(id) };
+  }
+
+  sessionPlayers(id) {
+    const session = this.state.sessions[id];
+    if (!session) return this.getSession(id);
+    const players = session.sourceMode === 'mock' ? (session.mockRoom?.players || []) : this.playerPool.players;
+    const draftedIds = new Set(session.picks.map((pick) => pick.playerId));
+    return players.filter((player) => !draftedIds.has(player.id));
+  }
+
+  workspace(id) {
+    return {
+      session: this.getSession(id),
+      card: this.recommendation(id),
+      pool: { source: this.state.sessions[id].sourceMode === 'mock' ? 'yahoo-browser-observation' : this.playerPool.source, players: this.sessionPlayers(id) },
+      unresolved: { players: this.unresolvedPlayers() }
+    };
+  }
+
   recommendation(id) {
     const session = this.state.sessions[id];
     if (!session) return this.getSession(id);
     session.evidenceReviews ||= [];
     const rawCard = buildRecommendationCard({
-      players: this.playerPool.players,
+      players: session.sourceMode === 'mock' ? this.sessionPlayers(id) : this.playerPool.players,
       picks: session.picks,
       league: this.league,
       draftSlot: session.draftSlot
@@ -411,14 +447,17 @@ class DraftService {
       board: rawCard.board.map(annotate)
     };
     const latestReview = session.evidenceReviews.at(-1) || null;
+    const readiness = session.sourceMode === 'mock' ? mockReadiness(session, this.now()) : null;
     return {
       ...card,
+      ...(readiness && !readiness.ready ? { preferred: null, alternatives: { safe: null, upside: null }, onClock: false } : {}),
+      mockReadiness: readiness,
       sessionId: id,
       evidence: {
-        source: this.playerPool.source,
+        source: session.sourceMode === 'mock' ? 'yahoo-browser-observation + Huddle balanced scoring' : this.playerPool.source,
         season: this.playerPool.season,
-        complete: this.playerPool.complete !== false,
-        quality: this.playerPool.complete === false ? 'partial-estimated' : 'complete',
+        complete: session.sourceMode === 'mock' ? true : this.playerPool.complete !== false,
+        quality: session.sourceMode === 'mock' ? 'observed-yahoo-candidates' : this.playerPool.complete === false ? 'partial-estimated' : 'complete',
         projectionCoverage: structuredClone(this.playerPool.projectionCoverage || null),
         fetchedAt: this.playerPool.fetchedAt || null,
         league: {
@@ -455,7 +494,9 @@ class DraftService {
           rawImagesPersisted: false,
           providerPayloadsPersisted: false
         },
-        warning: this.playerPool.complete === false
+        warning: session.sourceMode === 'mock'
+          ? 'Practice-room input is maintained through the browser. Candidates are limited to positively observed Yahoo available rows. Yahoo displayed projections are used; provider matches contribute existing consensus evidence. Recheck availability and the live turn before submitting in Yahoo.'
+          : this.playerPool.complete === false
           ? 'Draft synchronization is operational. Some provider projections are missing, so disclosed rank-based estimates may be used; confirm estimated recommendations in Yahoo.'
           : null
       },
@@ -471,7 +512,7 @@ class DraftService {
     return {
       ...structuredClone(session),
       currentOverall: session.picks.length + 1,
-      availableCount: this.playerPool.players.length - draftedFromPool,
+      availableCount: session.sourceMode === 'mock' ? session.mockRoom?.players.length || 0 : this.playerPool.players.length - draftedFromPool,
       totalPicks: draftedRosterSize(this.league.roster) * this.league.teamCount
     };
   }

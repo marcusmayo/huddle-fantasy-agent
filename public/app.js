@@ -40,6 +40,9 @@ const state = {
 };
 const $ = (selector) => document.querySelector(selector);
 let toastTimer = null;
+let refreshPromise = null;
+let refreshGeneration = 0;
+let mockFreshnessTimer = null;
 const BOARD_HEIGHT_KEY = 'huddle-best-available-height';
 const LEAGUE_ORDER_KEY = 'huddle-league-card-order';
 const SCREENSHOT_PURPOSE_COPY = {
@@ -450,7 +453,7 @@ async function loadDraftSessions() {
 async function completeDraftSession(sessionId = state.session?.id) {
   const session = state.draftSessions.find((item) => item.id === sessionId) || state.session;
   if (!sessionId || !session) return;
-  if (!window.confirm(`Complete this ${state.league.name} draft session at ${session.picks.length} of ${session.totalPicks} picks? It can be reopened later.`)) return;
+  // Completion is reversible through Draft history; avoid a browser-blocking dialog.
   try {
     await api(scoped(`/draft/sessions/${encodeURIComponent(sessionId)}/complete`), { method: 'POST', body: '{}' });
     if (state.session?.id === sessionId) {
@@ -733,7 +736,7 @@ let readinessRequest = null;
 
 function renderDraftReadiness() {
   const panel = $('#draft-readiness');
-  panel.classList.toggle('hidden', state.mode === 'weekly');
+  panel.classList.toggle('hidden', state.mode === 'weekly' || state.session?.sourceMode === 'mock');
   const snapshot = state.draftReadiness;
   const report = snapshot?.report;
   const running = state.readinessRunning || snapshot?.state === 'running';
@@ -1310,6 +1313,9 @@ function showDraftRoom() {
   $('#setup').classList.add('hidden');
   $('#draft-session-history').classList.add('hidden');
   $('#draft-room').classList.remove('hidden');
+  const mockMode = state.session.sourceMode === 'mock';
+  $('#mock-room-import').classList.toggle('hidden', !mockMode);
+  $('#pick-form').classList.toggle('hidden', mockMode);
   $('#complete-session').disabled = state.session.status !== 'active';
   $('#complete-session').textContent = state.session.status === 'active' ? 'Complete session' : 'Draft completed';
   $('#pick-form button[type="submit"]').disabled = state.session.status !== 'active';
@@ -1321,7 +1327,7 @@ function showDraftRoom() {
   if (yahooMode) renderYahooDraftSync(state.yahooDraftSync);
   const screenshotMode = state.session.sourceMode === 'screenshot';
   $('#screenshot-assistant').classList.toggle('hidden', !screenshotMode);
-  $('#reconcile-help').textContent = screenshotMode
+  $('#reconcile-help').textContent = mockMode ? 'Import the room above to reconcile all completed selections and refresh the recommendation together.' : screenshotMode
     ? 'Choose what the Yahoo screenshot shows, analyze it through OpenRouter, then confirm every extracted row. Draft logs create picks; other pages add review-only evidence.'
     : 'Until Yahoo OAuth is connected, record each selection here. The board refreshes immediately.';
   if (screenshotMode) {
@@ -1427,7 +1433,7 @@ function renderRecommendation(card) {
   $('#current-pick').textContent = card.currentOverall;
   $('#next-turn').textContent = card.nextUserPick || 'slot required';
   $('#coverage').textContent = card.evidence.complete ? card.evidence.source : `${card.evidence.source} · partial projections`;
-  $('#clock-state').textContent = card.onClock ? 'YOU ARE ON THE CLOCK' : 'Watching the room';
+  $('#clock-state').textContent = card.mockReadiness && !card.mockReadiness.ready ? card.mockReadiness.reasons.join(' ') : card.onClock ? 'YOU ARE ON THE CLOCK' : 'Watching the room';
   $('#clock-state').classList.toggle('hot', card.onClock);
   $('#evidence-warning').classList.toggle('hidden', !card.evidence.warning);
   $('#evidence-warning').textContent = card.evidence.warning || '';
@@ -1435,6 +1441,7 @@ function renderRecommendation(card) {
   const preferred = card.preferred;
   $('#preferred-name').textContent = preferred?.player.name || 'No eligible player';
   $('#preferred-meta').textContent = preferred ? `${preferred.player.position} · ${preferred.player.team} · ADP ${preferred.player.adp ?? '—'}` : '';
+  $('#preferred-observed-name').textContent = preferred?.player.observedName ? `Yahoo name: ${preferred.player.observedName}` : '';
   $('#preferred-score').textContent = preferred?.score ?? '—';
   $('#preferred-why').innerHTML = (preferred?.why || []).map((line) => `<li>${escapeHtml(line)}</li>`).join('');
   $('#explanation').textContent = card.explanation;
@@ -1446,6 +1453,27 @@ function renderRecommendation(card) {
   $('#updated-at').textContent = `Updated ${new Date(card.generatedAt).toLocaleTimeString()}`;
   renderBoardRows();
   renderDraftReadiness();
+  renderMockReadiness(card);
+}
+
+function renderMockReadiness(card) {
+  clearTimeout(mockFreshnessTimer);
+  const readiness = card.mockReadiness;
+  if (!readiness) return;
+  const room = state.session?.mockRoom;
+  $('#mock-sync-status').textContent = readiness.ready
+    ? `Room ${readiness.roomId} · seat ${state.session.draftSlot} · ${state.session.picks.length} picks reconciled · Yahoo Autodraft OFF · ${room.players.length} available candidates`
+    : readiness.reasons.join(' ');
+  $('#mock-sync-status').dataset.ready = String(readiness.ready);
+  if (readiness.ready) {
+    const sessionId = state.session.id;
+    mockFreshnessTimer = setTimeout(() => {
+      if (state.session?.id !== sessionId || state.recommendation !== card) return;
+      renderRecommendation({ ...card, preferred: null, alternatives: { safe: null, upside: null }, onClock: false,
+        explanation: 'Room observation is stale; read Yahoo again.',
+        mockReadiness: { ...readiness, ready: false, reasons: ['Room observation is stale; read Yahoo again.'] } });
+    }, Math.max(0, Date.parse(readiness.observedAt) + 30_000 - Date.now()));
+  }
 }
 
 function renderUnresolvedPlayers(payload) {
@@ -1698,23 +1726,34 @@ function renderPlayerPicker(players) {
   }
 }
 
-async function refresh() {
+function refresh() {
+  if (refreshPromise) return refreshPromise;
+  const generation = ++refreshGeneration;
+  refreshPromise = refreshOnce(generation).finally(() => { refreshPromise = null; });
+  return refreshPromise;
+}
+
+async function refreshOnce(generation) {
   if (!state.session) return;
+  const sessionId = state.session.id;
   const shouldRefreshProviderStatus = Date.now() - state.providerStatusAt > 30_000;
-  const [session, card, pool, providerStatus, unresolved, yahooSync] = await Promise.all([
-    api(scoped(`/draft/sessions/${state.session.id}`)),
-    api(scoped(`/draft/sessions/${state.session.id}/recommendation`)),
-    api(scoped(`/players?sessionId=${state.session.id}`)),
+  const [workspace, providerStatus, yahooSync] = await Promise.all([
+    api(scoped(`/draft/sessions/${sessionId}/workspace`)),
     shouldRefreshProviderStatus ? api('/api/provider-status') : Promise.resolve(null),
-    api(scoped('/unresolved-players')),
     state.session.sourceMode === 'yahoo'
-      ? api(scoped(`/draft/sessions/${state.session.id}/yahoo-sync`)).catch((error) => ({ state: 'degraded', lastError: { code: 'YAHOO_SYNC_STATUS_FAILED', message: error.message } }))
+      ? api(scoped(`/draft/sessions/${sessionId}/yahoo-sync`)).catch((error) => ({ state: 'degraded', lastError: { code: 'YAHOO_SYNC_STATUS_FAILED', message: error.message } }))
       : Promise.resolve(null)
   ]);
+  if (generation !== refreshGeneration || state.session?.id !== sessionId) return;
   if (providerStatus) {
     state.providerStatus = providerStatus;
     state.providerStatusAt = Date.now();
   }
+  if (yahooSync) renderYahooDraftSync(yahooSync);
+  applyDraftWorkspace(workspace);
+}
+
+function applyDraftWorkspace({ session, card, pool, unresolved }) {
   state.session = session;
   if (session.status === 'completed') {
     clearInterval(state.timer);
@@ -1723,13 +1762,42 @@ async function refresh() {
     localStorage.removeItem(sessionKey());
   }
   $('#pick-form button[type="submit"]').disabled = session.status !== 'active';
-  if (yahooSync) renderYahooDraftSync(yahooSync);
   renderUnresolvedPlayers(unresolved);
   renderRecommendation(card);
   renderPlayerPicker(pool.players);
   $('#recent-picks').innerHTML = session.picks.slice(-6).reverse().map((pick) =>
     `<li><span>${pick.overallPick}. ${escapeHtml(pick.playerName)}</span><small>${pick.isMine ? escapeHtml(state.league.targetTeam) : escapeHtml(pick.position)}</small></li>`
   ).join('');
+}
+
+async function importMockRoom(event) {
+  event.preventDefault();
+  if (state.session?.sourceMode !== 'mock') return;
+  const button = $('#mock-snapshot-submit');
+  if (button.disabled) return;
+  const sessionId = state.session.id;
+  const text = $('#mock-snapshot-input').value;
+  button.disabled = true;
+  refreshGeneration += 1;
+  const started = performance.now();
+  if (state.recommendation) renderRecommendation({ ...state.recommendation, preferred: null,
+    alternatives: { safe: null, upside: null }, onClock: false,
+    explanation: 'Reconciling the observed room…', mockReadiness: { ready: false, reasons: ['Reconciling the observed room…'] } });
+  try {
+    const snapshot = JSON.parse(text);
+    const result = await api(scoped(`/draft/sessions/${sessionId}/mock-snapshot`), { method: 'POST', body: JSON.stringify(snapshot) });
+    if (state.session?.id !== sessionId) return;
+    applyDraftWorkspace(result);
+    if (result.session.status === 'completed') await refreshFleetSummary();
+    $('#mock-import-message').textContent = `${result.imported} new picks saved; ${result.session.picks.length} total. Recommendation refreshed in ${((performance.now() - started) / 1000).toFixed(2)}s.`;
+    if ($('#mock-snapshot-input').value === text) $('#mock-snapshot-input').value = '';
+  } catch (error) {
+    $('#mock-import-message').textContent = `Import stopped: ${error.message}`;
+    $('#mock-sync-status').textContent = 'Room is not reconciled. Review the import error and read Yahoo again.';
+    $('#mock-sync-status').dataset.ready = 'false';
+  } finally {
+    button.disabled = false;
+  }
 }
 
 async function recordPick(event) {
@@ -1780,6 +1848,9 @@ async function refreshFleetSummary() {
 
 function startPolling() {
   clearInterval(state.timer);
+  // Manual and practice rooms change only on input. Polling them rewrites the
+  // picker while the operator types and adds requests to the timed pick path.
+  if (state.session?.sourceMode !== 'yahoo') return;
   state.timer = setInterval(() => refresh().catch(() => {}), 1500);
 }
 
@@ -1860,6 +1931,7 @@ async function init() {
   $('#yahoo-draft-sync-start').addEventListener('click', () => controlYahooDraftSync('start'));
   $('#yahoo-draft-sync-stop').addEventListener('click', () => controlYahooDraftSync('stop'));
   $('#pick-form').addEventListener('submit', recordPick);
+  $('#mock-snapshot-form').addEventListener('submit', importMockRoom);
   $('#complete-session').addEventListener('click', () => completeDraftSession());
   $('#new-session').addEventListener('click', resetSession);
   $('#league-select').addEventListener('change', (event) => selectLeague(event.target.value));

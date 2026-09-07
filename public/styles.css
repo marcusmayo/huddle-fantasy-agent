@@ -317,3 +317,8 @@ textarea { width: 100%; border: 1px solid var(--line); border-radius: 10px; padd
 .draft-readiness h3 { font-size: .9rem; margin: 14px 0 4px; }
 #draft-readiness-blockers { color: var(--orange); }
 #draft-readiness-warnings { color: var(--muted); }
+.mock-room-import { width: 100%; }
+#mock-snapshot-form { display: grid; gap: 0.75rem; }
+#mock-snapshot-input { width: 100%; box-sizing: border-box; resize: vertical; }
+#mock-sync-status[data-ready="true"] { color: #166534; font-weight: 700; }
+#mock-sync-status[data-ready="false"] { color: #9a3412; font-weight: 700; }

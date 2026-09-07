@@ -36,7 +36,7 @@ test('fleet renderer isolates state and permits one shared evidence leader', () 
   assert.ok(artifacts.compose.services['huddle-bravo'].volumes.includes('huddle-bravo-state:/app/data'));
   assert.equal(artifacts.aegisConfig.agents.length, 1);
   assert.equal(artifacts.aegisConfig.agents[0].profile, 'huddle');
-  assert.ok(artifacts.compose.services.aegis.volumes.some((volume) => volume.endsWith('/deploy/aegis/huddle-fleet-index.html:/huddle-dashboard/index.html:ro')));
+  assert.ok(artifacts.compose.services.aegis.volumes.some((volume) => volume.replaceAll('\\', '/').endsWith('/deploy/aegis/huddle-fleet-index.html:/huddle-dashboard/index.html:ro')));
   assert.match(artifacts.compose.services.aegis.command[2], /cp \/huddle-dashboard\/index\.html \/runtime\/index\.html/);
 });
 

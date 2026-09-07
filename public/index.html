@@ -79,6 +79,7 @@
         <label>Sync source
           <select id="source-mode">
             <option value="manual">Manual now</option>
+            <option value="mock">Yahoo mock — browser-assisted</option>
             <option value="yahoo">Yahoo when OAuth is ready</option>
             <option value="screenshot">Screenshot review + confirmation</option>
           </select>
@@ -112,6 +113,19 @@
 
       <div id="evidence-warning" class="warning hidden"></div>
 
+      <section id="mock-room-import" class="panel hidden" aria-labelledby="mock-room-title">
+        <p class="eyebrow">PRACTICE ROOM</p>
+        <h2 id="mock-room-title">Reconcile Yahoo in one step</h2>
+        <p class="muted">Import the observed room, completed selections, and available players together. Your verified seat is applied with the first import. This updates only this Huddle practice session.</p>
+        <form id="mock-snapshot-form">
+          <label for="mock-snapshot-input">Yahoo mock room snapshot</label>
+          <textarea id="mock-snapshot-input" rows="3" required spellcheck="false" placeholder="Paste the browser-observed room snapshot"></textarea>
+          <button id="mock-snapshot-submit" type="submit">Reconcile room</button>
+        </form>
+        <p id="mock-sync-status" role="status" aria-live="polite">Import a fresh room observation before selecting.</p>
+        <p id="mock-import-message" class="message" aria-live="polite"></p>
+      </section>
+
       <section id="yahoo-draft-sync" class="panel yahoo-operation hidden" aria-live="polite">
         <div>
           <p class="eyebrow">YAHOO READ-ONLY DRAFT SYNC</p>
@@ -142,6 +156,7 @@
           <div>
             <h2 id="preferred-name">Waiting for a player pool…</h2>
             <p id="preferred-meta" class="muted"></p>
+            <p id="preferred-observed-name" class="muted"></p>
           </div>
           <div class="score-ring"><span id="preferred-score">—</span><small>score</small></div>
         </div>
@@ -390,7 +405,8 @@
           <label>RB <input data-roster-slot="RB" type="number" min="0" max="8" value="2"></label>
           <label>WR <input data-roster-slot="WR" type="number" min="0" max="8" value="2"></label>
           <label>TE <input data-roster-slot="TE" type="number" min="0" max="4" value="1"></label>
-          <label>Flex <input data-roster-slot="W/R" type="number" min="0" max="4" value="1"></label>
+          <label>WR/RB flex <input data-roster-slot="W/R" type="number" min="0" max="4" value="0"></label>
+          <label>WR/RB/TE flex <input data-roster-slot="R/W/T" type="number" min="0" max="4" value="1"></label>
           <label>K <input data-roster-slot="K" type="number" min="0" max="2" value="1"></label>
           <label>DEF <input data-roster-slot="DEF" type="number" min="0" max="2" value="1"></label>
           <label>Bench <input data-roster-slot="BN" type="number" min="0" max="20" value="6"></label>
