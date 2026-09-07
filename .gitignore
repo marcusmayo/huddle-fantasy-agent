@@ -11,3 +11,4 @@ deploy/fleet/*.local.json
 coverage/
 .DS_Store
 npm-debug.log*
+.media-build/
