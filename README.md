@@ -14,6 +14,15 @@ September 2026 · AI-generated narration and an original orchestral score. The a
 [Captions](docs/assets/huddle-narration-en.srt) · [Media notes and silent originals](docs/media/narrated-previews.md) · [Earlier walkthrough — August 9](docs/assets/huddle-product-demo.mp4) · [Thumbnail](docs/assets/huddle-linkedin-overview-thumbnail.jpg)
 <!-- HUDDLE-LINKEDIN-VIDEOS:END -->
 
+## Narrated draft replay
+
+Watch the second Huddle preview: a 60-second edited replay of the completed Yahoo mock, with Huddle recommendations, synthetic narration and original orchestral music.
+
+- **[Landscape — 1920 × 1080](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-draft-narrated-landscape-1920x1080.mp4)**
+- **[LinkedIn feed — 1080 × 1350](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-draft-narrated-feed-1080x1350.mp4)**
+- **[X — 1280 × 720](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-draft-narrated-x-1280x720.mp4)**
+
+
 ## What it does
 
 | Area | Available in the MVP |
