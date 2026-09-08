@@ -82,6 +82,19 @@ function defaultPositionMaximums(league) {
   }));
 }
 
+function ownedQuarterbackPlan(league) {
+  const roster = league.roster || {};
+  const benchSlot = Number(roster.BN || 0) > 0 ? 'BN' : 'BENCH';
+  const capacity = starterSlots(roster).filter(slot=>slot.includes('QB')).length;
+  const enabled = capacity > 0 && Number(roster[benchSlot] || 0) > 0
+    && !(league.draftStrategy?.streamingPositions || ['K','DEF']).includes('QB')
+    && defaultPositionMaximums(league).QB > capacity;
+  // Reserve one actual bench place, rather than an imaginary waiver player.
+  // Preserve all league FLEX eligibility when matching the planned lineup.
+  return {enabled, roster:enabled ? {...roster,QB:Number(roster.QB||0)+1,[benchSlot]:Number(roster[benchSlot])-1}:roster,
+    minimumQuarterbacks:capacity+(enabled?1:0)};
+}
+
 function assessRosterConstraint(player, mine, league, { availableByPosition = {}, opponentPicksBeforeNext = 0 } = {}) {
   const rosterSize = draftedRosterSize(league.roster);
   const selected = Object.values(mine).reduce((total, count) => total + count, 0);
@@ -97,6 +110,17 @@ function assessRosterConstraint(player, mine, league, { availableByPosition = {}
   const missingStarterSlots = starterSlots(league.roster).length - maximumStarterAssignments(counts, league.roster);
   if (missingStarterSlots > Math.max(0, remainingPicks)) {
     reasons.push(`This pick would leave ${missingStarterSlots} required starter slots for only ${Math.max(0, remainingPicks)} remaining picks.`);
+  }
+  const qbPlan = ownedQuarterbackPlan(league);
+  if (qbPlan.enabled) {
+    const beforeMissing = starterSlots(qbPlan.roster).length - maximumStarterAssignments(mine,qbPlan.roster);
+    const afterMissing = starterSlots(qbPlan.roster).length - maximumStarterAssignments(counts,qbPlan.roster);
+    const observedQbAvailable = availableByPosition.QB;
+    if (beforeMissing <= rosterSize-selected && observedQbAvailable !== 0 && afterMissing > Math.max(0,remainingPicks)) {
+      reasons.push('This pick would use the place reserved for owned QB bye coverage; complete the starters and QB reserve first.');
+    } else if (beforeMissing > rosterSize-selected || observedQbAvailable === 0) {
+      warnings.push('Owned QB bye coverage is not currently achievable from the observed roster/pool; a waiver option is not guaranteed.');
+    }
   }
   // Opponent selections are a forecast, not a roster legality rule. Several
   // positions can be at risk together; blocking each alternative deadlocks
@@ -117,6 +141,7 @@ function assessRosterConstraint(player, mine, league, { availableByPosition = {}
     warnings,
     remainingPicks: Math.max(0, remainingPicks),
     missingStarterSlots,
+    minimumQuarterbacks:qbPlan.minimumQuarterbacks,
     positionMaximum: maximums[player.position] ?? null
   };
 }
@@ -224,7 +249,7 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
     draftSlot,
     currentOwner !== draftSlot
   );
-  const availableByPosition = Object.fromEntries(Object.entries(groups).map(([position, group]) => [position, group.length]));
+  const availableByPosition = Object.fromEntries(['QB','RB','WR','TE','K','DEF'].map(position => [position, groups[position]?.length || 0]));
   const opponentPicksBeforeNext = currentOwner === draftSlot && nextPick
     ? Math.max(0, nextPick - currentOverall - 1)
     : 0;
@@ -236,6 +261,11 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
     const rosterConstraint = assessRosterConstraint(player, mine, league, { availableByPosition, opponentPicksBeforeNext });
     const rosterContribution = contribution(player, owned, league, baselines, valueBefore);
     const need = calculateNeed(player.position, mine, league.roster);
+    const offensiveRoster = Object.fromEntries(Object.entries(league.roster).filter(([slot])=>!['K','DEF','DST'].includes(slot)));
+    const offensiveNeed = calculateNeed(player.position,mine,offensiveRoster);
+    const offensiveStartersMissing = starterSlots(offensiveRoster).length-maximumStarterAssignments(mine,offensiveRoster);
+    const offensiveStarterPriority = owned.length >= Math.floor(draftedRosterSize(league.roster)/2)
+      && offensiveStartersMissing > 0 && offensiveNeed > 0;
     // Rankings/scarcity are valuable only to the extent this roster can use
     // the player. A deep reserve must not retain the same urgency/VORP bonus
     // as an actual starter or a reserve covering an uncovered bye.
@@ -246,6 +276,7 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
       waitProbability,
       rosterConstraint,
       rosterContribution,
+      offensiveStarterPriority,
       contribution: rosterContribution.marginalValue,
       usable,
       vorp: player.projectedPoints - (baselines[player.position] || 0),
@@ -297,6 +328,7 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
       rosterFeasible: row.rosterConstraint.feasible,
       rosterConstraint: row.rosterConstraint,
       rosterContribution: row.rosterContribution,
+      offensiveStarterPriority:row.offensiveStarterPriority,
       style,
       sleeper,
       waitProbability: Math.round(row.waitProbability * 1000) / 1000,
@@ -305,11 +337,13 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
       components: Object.fromEntries(Object.entries(components).map(([key, value]) => [key, Math.round(value * 1000) / 1000])),
       why: row.rosterConstraint.feasible
         ? [`${row.player.position} #${row.rosterContribution.positionCountAfter}: +${row.rosterContribution.starterGain.toFixed(1)} starting-lineup projection; ${row.rosterContribution.marginalValue.toFixed(1)} roster-value estimate after bench depth.`,
+          ...(row.offensiveStarterPriority ? ['Complete the league-required offensive lineup before adding more bench depth.'] : []),
           ...(row.rosterContribution.byeCoverageGain > .1 ? [`Owned bye-week coverage adds ${row.rosterContribution.byeCoverageGain.toFixed(1)} estimated points; future waivers are unverified.`] : []),
           ...whyLines(row.player, components, mine, targets, row.waitProbability)].slice(0, 3)
         : row.rosterConstraint.reasons.slice(0, 3)
     };
   }).sort((a, b) => Number(b.rosterFeasible) - Number(a.rosterFeasible)
+    || Number(b.offensiveStarterPriority)-Number(a.offensiveStarterPriority)
     // Prefer a supply-safe choice when one exists. If every position is at
     // risk, retain the balanced ordering instead of rejecting the whole board.
     || Number(supplyRisk(a)) - Number(supplyRisk(b))
@@ -343,6 +377,7 @@ function buildRecommendationCard(input) {
     rosterCoverage: {
       positions: mine,
       byeCoverage: byeCoverageReport(ownedPlayers, input.league),
+      quarterbackPlan:ownedQuarterbackPlan(input.league),
       positionMaximums: defaultPositionMaximums(input.league),
       drafted: picks.filter(pick => pick.isMine).length,
       total: draftedRosterSize(roster),
@@ -367,6 +402,7 @@ module.exports = {
   buildRecommendationCard,
   defaultPositionMaximums,
   maximumStarterAssignments,
+  ownedQuarterbackPlan,
   replacementBaselines,
   scoreAvailablePlayers
 };

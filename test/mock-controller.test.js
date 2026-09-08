@@ -1,10 +1,10 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-let createYahooMockLoop, verifyStandardMockSettings;
+let createYahooMockLoop, verifyStandardMockSettings, enterStandardMock;
 test.before(async()=>{
   ({createYahooMockLoop}=await import('../scripts/yahoo-mock-cua-loop.mjs'));
-  ({verifyStandardMockSettings}=await import('../scripts/yahoo-mock-entry-cua.mjs'));
+  ({verifyStandardMockSettings,enterStandardMock}=await import('../scripts/yahoo-mock-entry-cua.mjs'));
 });
 
 function setup({notice=true,acknowledge=true}={}) {
@@ -74,4 +74,13 @@ test('standard entry blocks changed scoring, clock, roster, and position caps',(
   assert.equal(verifyStandardMockSettings(text,run),true);
   for(const changed of [text.replace('0.5','1.0'),text.replace('30 seconds','15 seconds'),text.replace('WR\n2','WR\n3'),text.replace('RB: 6','RB: 4')])assert.throws(()=>verifyStandardMockSettings(changed,run),/differ|Unverified/);
   assert.throws(()=>verifyStandardMockSettings(text,{...run,teamCount:6}),/configuration/);
+});
+test('automatic navigation verifies the actual room and starts without looking for the old entry link',async()=>{
+  const settings='League Settings\nDraft Pick Time\n30 seconds\nRoster Positions (15)\nQB\nWR\n2\nRB\n2\nTE\nW/R/T\nK\nDEF\nBN\n6\nPass TD - Passing Touchdowns\n4\nRec - Receptions\n0.5\n';
+  const calls=[];let reads=0;
+  const locator=()=>({filter(){return this;},async click(){calls.push('click');}});
+  const run={roomId:'1234',draftSlot:8,teamCount:8,rounds:15,events:[],rules:{receptionPoints:.5,passingTouchdown:4,roster:{QB:1,WR:2,RB:2,TE:1,'W/R/T':1,K:1,DEF:1,BN:6}},
+    yahoo:{playwright:{locator,getByRole(role){assert.notEqual(role,'link');return locator();},evaluate:async()=>reads++===0?{live:true,path:'/draftclient/f1/1234/8'}:settings}},startVerified:async()=>{calls.push('start');return {manualVerified:2};}};
+  assert.deepEqual(await enterStandardMock(run,{waitMs:0}),{manualVerified:2});assert.equal(calls.at(-1),'start');
+  reads=0;run.roomId='wrong';await assert.rejects(enterStandardMock(run,{waitMs:0}),/does not match/);
 });

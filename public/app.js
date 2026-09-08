@@ -1465,8 +1465,9 @@ function renderRecommendation(card) {
   $('#preferred-score').textContent = preferred?.score ?? '—';
   $('#preferred-why').innerHTML = (preferred?.why || []).map((line) => `<li>${escapeHtml(line)}</li>`).join('');
   const bye = card.rosterCoverage?.byeCoverage;
+  const qbPlan = card.rosterCoverage?.quarterbackPlan;
   $('#draft-bye-coverage').textContent = bye
-    ? `Bye-week plan: ${bye.gaps.length ? bye.gaps.map(gap=>`Week ${gap.week} ${gap.slot}`).join(', ') + ' need outside help.' : 'No gaps identified among known byes.'} ${bye.unknownByes ? `${bye.unknownByes} player byes are unknown. ` : ''}Future waivers are unverified. ${bye.streamingPositions.join('/')} streaming is assumed; offensive reserves receive credit for covering actual bye gaps.`
+    ? `${qbPlan?.enabled ? `QB cover plan: ${card.rosterCoverage.positions.QB || 0}/${qbPlan.minimumQuarterbacks} drafted. ` : ''}Bye-week plan: ${bye.gaps.length ? bye.gaps.map(gap=>`Week ${gap.week} ${gap.slot}`).join(', ') + ' need outside help.' : 'No gaps identified among known byes.'} ${bye.unknownByes ? `${bye.unknownByes} player byes are unknown. ` : ''}Future waivers are unverified. ${bye.streamingPositions.join('/')} streaming is assumed; offensive reserves receive credit for covering actual bye gaps.`
     : '';
   $('#explanation').textContent = card.explanation;
   renderChoice('safe', card.alternatives.safe);

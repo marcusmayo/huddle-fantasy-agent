@@ -22,6 +22,31 @@ test('custom scoring is calculated per league from stat lines without mutating t
 });
 const depth = Object.entries({ QB: 220, RB: 100, WR: 100, TE: 65, K: 80, DEF: 80 }).flatMap(([pos, top]) => Array.from({length:40}, (_,i) => p(`${pos}-depth-${i}`, pos, top-i)));
 
+test('missing offensive starters take precedence over more depth after half the roster is drafted',()=>{
+  const team=[...Array.from({length:3},(_,i)=>p(`ownedWR${i}`,'WR',250-i*10)),...Array.from({length:3},(_,i)=>p(`ownedRB${i}`,'RB',210-i*10)),p('ownedTE','TE',160)].map(x=>({...x,isMine:true,byeWeek:10}));
+  const choices=[{...p('QB now','QB',245),byeWeek:7},p('RB reserve','RB',185),p('WR reserve','WR',190),...depth];
+  const board=scoreAvailablePlayers({players:choices,picks:team,league,draftSlot:8});
+  assert.equal(board[0].player.position,'QB');
+  assert.equal(board[0].offensiveStarterPriority,true);
+});
+
+test('QB reserve planning follows bench size, league QB/Superflex capacity, caps, and explicit streaming',()=>{
+  const {ownedQuarterbackPlan,assessRosterConstraint}=require('../src/domain/draft-board');
+  assert.equal(ownedQuarterbackPlan(league).minimumQuarterbacks,2);
+  assert.equal(ownedQuarterbackPlan({...league,roster:{...league.roster,QB:2}}).minimumQuarterbacks,3);
+  assert.equal(ownedQuarterbackPlan({...league,roster:{...league.roster,SUPERFLEX:1}}).minimumQuarterbacks,3);
+  for(const format of [{...league,roster:{...league.roster,BN:0}},{...league,rosterMaximums:{QB:1}},{...league,draftStrategy:{streamingPositions:['QB','K','DEF']}}])assert.equal(ownedQuarterbackPlan(format).enabled,false);
+  const mine={QB:1,WR:4,RB:4,TE:2,K:1,DEF:1}; // two places remain: one must remain for QB2.
+  assert.equal(assessRosterConstraint({position:'WR'},mine,league,{availableByPosition:{QB:2}}).feasible,true);
+  const last={...mine,WR:5};
+  assert.equal(assessRosterConstraint({position:'RB'},last,league,{availableByPosition:{QB:2}}).feasible,false);
+  assert.equal(assessRosterConstraint({position:'QB'},last,league,{availableByPosition:{QB:2}}).feasible,true);
+  assert.equal(assessRosterConstraint({position:'RB'},last,league,{availableByPosition:{QB:0}}).feasible,true);
+  const exhausted=scoreAvailablePlayers({players:[p('only observed RB','RB',150)],picks:Object.entries(last).flatMap(([pos,n])=>Array.from({length:n},(_,i)=>({...p(`owned-${pos}-${i}`,pos,180),isMine:true}))),league,draftSlot:8});
+  assert.equal(exhausted[0].rosterFeasible,true);
+  assert.match(exhausted[0].rosterConstraint.warnings.join(' '),/QB bye coverage/);
+});
+
 test('an owned QB reserve covers the starter bye without assuming a future waiver QB', () => {
   const { contribution, byeCoverageReport } = require('../src/domain/roster-value');
   const starter={...p('Dak','QB',293.32),byeWeek:14};

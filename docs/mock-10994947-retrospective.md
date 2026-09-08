@@ -1,0 +1,9 @@
+# Automatic First Down 10994947
+
+Result:9 manually verified selections,6 autopicks (8,9,24,25,40,41),120 reconciled. QB1/RB5/WR5/TE2/K1/DEF1. This was another failed full-run attempt, despite nine successful picks after recovery.
+
+The operator continued media preparation and analysis during the waiting period. Yahoo auto-navigated into the room while the entry watcher was not running. The tested entry helper was never invoked before the opening; the first inspection after transition was already pick31. This is an operator scheduling failure, not evidence that a newly tested turn controller selected and lost its first pick. Joining early must be followed by continuous bounded entry monitoring. No research, media setup, code changes, or long analysis after joining. The entry helper now recognizes both the Enter Draft link and automatic navigation, verifies the actual room/seat path and settings, then starts the shared pick loop.
+
+The final QB was Bryce Young at120. Roster legality alone reserved places for QB/K/DEF but left no backup QB place. Value-based bench recommendations could delay the first QB until that late forced fill. The new v4 strategy completes missing offensive starters after half the drafted roster is filled, and reserves one bench place for a QB when the league permits it and QB streaming was not explicitly chosen. It preserves actual FLEX eligibility and position caps. In already infeasible or unobserved-QB states it warns instead of blocking every legal pick. One reserve does not guarantee full coverage when multiple starting QBs share a bye; the exact bye-gap report still applies.
+
+These are transparent planning heuristics, not a mathematically proven maximum-points solution. The rules adapt to each league, and preserve value ordering among eligible candidates. A clean real mock remains the acceptance criterion.

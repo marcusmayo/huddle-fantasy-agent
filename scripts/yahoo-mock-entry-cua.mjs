@@ -30,15 +30,19 @@ async function enterStandardMock(run, {waitMs=20000}={}) {
     gate=await tab.playwright.evaluate(()=>({
       text:document.body.innerText.slice(0,1800),
       countdown:document.querySelector('#waiting_room-countdown')?.innerText,
+      path:location.pathname,
+      live:Boolean(document.querySelector('button[title="Settings"]')),
       enter:[...document.querySelectorAll('a')].some(a=>a.innerText.trim()==='Enter Draft')
     }));
-    if(gate.enter) break;
+    if(gate.enter || gate.live) break;
     if(Date.now()<until)await tab.playwright.waitForTimeout(300);
   } while(Date.now()<until);
-  if(!gate.enter)return {entryWaiting:true,countdown:gate.countdown};
-  if(!gate.text.includes(String(run.roomId)) || !gate.text.includes(`You will draft ${run.draftSlot}th`))throw Error('Waiting room or assigned seat does not match');
+  if(!gate.enter && !gate.live)return {entryWaiting:true,countdown:gate.countdown};
+  if(gate.live) {
+    if(gate.path!==`/draftclient/f1/${run.roomId}/${run.draftSlot}`)throw Error('Auto-entered room or seat does not match');
+  } else if(!gate.text.includes(String(run.roomId)) || !gate.text.includes(`You will draft ${run.draftSlot}th`))throw Error('Waiting room or assigned seat does not match');
   run.events.push({stage:'enter-room',at:Date.now()});
-  await tab.playwright.getByRole('link',{name:'Enter Draft',exact:true}).click({timeoutMs:4000});
+  if(!gate.live)await tab.playwright.getByRole('link',{name:'Enter Draft',exact:true}).click({timeoutMs:4000});
   await tab.playwright.locator('button[title="Settings"]').click({timeoutMs:4000});
   await tab.playwright.getByRole('button',{name:'League Settings',exact:true}).click({timeoutMs:2000});
   const settings=await tab.playwright.evaluate(()=>document.body.innerText.slice(document.body.innerText.lastIndexOf('League Settings')));
