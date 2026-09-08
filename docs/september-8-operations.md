@@ -1,5 +1,11 @@
 # September 8, 2026 operations plan
 
+## Verified overnight handoff
+
+Yahoo's DR FANTASY FOOTBALL page was checked on September 8: **draft at 7:30 p.m. EDT; room opens at 7:00 p.m.; begin readiness at 6:30 p.m.** Recheck for commissioner changes. Blitzkrieg's draft slot is still unpublished. Current settings: six teams, QB2/RB3/WR4/TE1/W-T1/W-R1/K1/DEF2/BN5/IR2, PPR1, passing TD6. This means 15 starters, 20 drafted players and 120 total picks; IR is excluded from draft rounds. The owned-QB coverage plan targets three QBs when feasible under this league's limits.
+
+Use the tested **fix/mock-draft-throughput** branch. The final eight-team mock completed 15 manual picks, zero autopicks and 120 reconciled results. See [the consolidated post-mortem](draft-final-postmortem-2026-09-08.md) for receipts, remaining data/weekly-feed gaps and the exact continuous-control procedure. Finish setup before entering the room and do no media/research work after joining. The standard-mock entry helper cannot be used unchanged for this real six-team league. Reverify its actual settings and seat.
+
 This is the operator checklist for using Huddle during a live Yahoo draft and for weekly management. Huddle is a read-only copilot: it observes completed Yahoo activity and calculates recommendations, but the operator makes every pick, lineup change, waiver claim, bid, add, drop, and trade in Yahoo.
 
 The 2026 NFL season opens on Wednesday, September 9. September 8 is therefore the final readiness and rehearsal day, not an NFL game day. Use the exact date and time shown in each Yahoo league for the fantasy draft and waiver deadlines.
@@ -34,8 +40,8 @@ In the Codespace terminal:
 
 ```bash
 cd /workspaces/huddle-fantasy-agent
-git switch main
-git pull --ff-only origin main
+git switch fix/mock-draft-throughput
+git pull --ff-only origin fix/mock-draft-throughput
 npm ci
 npm run check
 ```
@@ -116,7 +122,7 @@ Preflight must show:
 - every real league ready and verified;
 - player evidence no older than 36 hours;
 - Yahoo crosswalk coverage at or above 80%;
-- draft pool depth at or above the league's teams multiplied by drafted roster slots (126 for DR Fantasy);
+- draft pool depth at or above the league's teams multiplied by drafted roster slots (120 for the currently imported DR Fantasy settings);
 - QB/RB/WR/TE/K/DEF depth at or above starter demand plus the configured 20% buffer;
 - a passed read-only Yahoo rehearsal for settings, draft results, player lookup, and any required position-depth lookup;
 - Yahoo draft auto-sync enabled;
@@ -146,7 +152,7 @@ Before the real draft:
 ### 60 minutes before the draft
 
 1. Restart the Codespace.
-2. Run `git pull --ff-only origin main`, `npm ci`, and `npm run check`.
+2. Run `git switch fix/mock-draft-throughput`, `git pull --ff-only origin fix/mock-draft-throughput`, `npm ci`, and `npm run check`.
 3. Start Huddle with `npm start`.
 4. Keep the terminal and Huddle browser tab active so the Codespace does not sleep.
 5. Open Yahoo and Huddle side by side.

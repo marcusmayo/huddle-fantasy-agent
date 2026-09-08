@@ -1,0 +1,92 @@
+{
+  "date": "2026-09-08",
+  "kind": "Edited replay of actual Yahoo mock 10996021; recreated cards from saved evidence, plus actual completed-room screenshot. Not continuous screen recording.",
+  "manual_picks": 15,
+  "autopicks": 0,
+  "reconciled_picks": 120,
+  "voice": "Kokoro stock am_michael 70% / am_onyx 30%, pitch 0.955; no announcer clone",
+  "music": "Existing original Huddle 24-bar orchestral cue, newly rendered offline with GeneralUser GS / TinySoundFont",
+  "caption_timing": "Phrase estimates within fitted narration windows, not forced alignment",
+  "paid_generation_api_used": false,
+  "platform_upload_tested": false,
+  "files": [
+    {
+      "file": "huddle-draft-narrated-landscape-1920x1080.mp4",
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "frames": 1800,
+      "seconds": 60.0,
+      "bytes": 2491712,
+      "sha256": "7524c5e2f521b5c6e5f3734cab3a0d7863e1bb5aad9ec009bf4c70ada3a9284f",
+      "video": "H.264 yuv420p",
+      "audio": "AAC LC stereo 48 kHz",
+      "faststart": true,
+      "full_decode": "passed",
+      "audio_measurement": {
+        "input_i": "-16.07",
+        "input_tp": "-1.48",
+        "input_lra": "2.60",
+        "input_thresh": "-26.28",
+        "output_i": "-15.95",
+        "output_tp": "-1.50",
+        "output_lra": "2.50",
+        "output_thresh": "-26.15",
+        "normalization_type": "dynamic",
+        "target_offset": "-0.05"
+      }
+    },
+    {
+      "file": "huddle-draft-narrated-feed-1080x1350.mp4",
+      "width": 1080,
+      "height": 1350,
+      "fps": 30,
+      "frames": 1800,
+      "seconds": 60.0,
+      "bytes": 2360376,
+      "sha256": "f29a846c5d14dd637d4f01635de05428495421fb31a48baa1ded102cefb5e068",
+      "video": "H.264 yuv420p",
+      "audio": "AAC LC stereo 48 kHz",
+      "faststart": true,
+      "full_decode": "passed",
+      "audio_measurement": {
+        "input_i": "-16.07",
+        "input_tp": "-1.48",
+        "input_lra": "2.60",
+        "input_thresh": "-26.28",
+        "output_i": "-15.95",
+        "output_tp": "-1.50",
+        "output_lra": "2.50",
+        "output_thresh": "-26.15",
+        "normalization_type": "dynamic",
+        "target_offset": "-0.05"
+      }
+    },
+    {
+      "file": "huddle-draft-narrated-x-1280x720.mp4",
+      "width": 1280,
+      "height": 720,
+      "fps": 30,
+      "frames": 1800,
+      "seconds": 60.0,
+      "bytes": 2187042,
+      "sha256": "569a12263149d326cada5c076db8acc237a5e1d11e31c88f4c2917ecb688b549",
+      "video": "H.264 yuv420p",
+      "audio": "AAC LC stereo 48 kHz",
+      "faststart": true,
+      "full_decode": "passed",
+      "audio_measurement": {
+        "input_i": "-16.07",
+        "input_tp": "-1.48",
+        "input_lra": "2.60",
+        "input_thresh": "-26.28",
+        "output_i": "-15.95",
+        "output_tp": "-1.50",
+        "output_lra": "2.50",
+        "output_thresh": "-26.15",
+        "normalization_type": "dynamic",
+        "target_offset": "-0.05"
+      }
+    }
+  ]
+}

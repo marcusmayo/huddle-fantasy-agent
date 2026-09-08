@@ -1,0 +1,73 @@
+{
+  "manual": 15,
+  "autopicks": 0,
+  "reconciled": 120,
+  "averageSelectionMs": 6653.8,
+  "maxSelectionMs": 8797,
+  "maxReceiptCycleMs": 10575,
+  "startersExcludingK": 1711.4899999999998,
+  "baselineStartersExcludingK": 1635.93,
+  "delta": 75.55999999999972,
+  "bye": {
+    "gaps": [
+      {
+        "week": 7,
+        "slot": "K",
+        "slotIndex": 1
+      },
+      {
+        "week": 11,
+        "slot": "DEF",
+        "slotIndex": 1
+      }
+    ],
+    "unknownByes": 0,
+    "streamingPositions": [
+      "K",
+      "DEF"
+    ],
+    "assumption": "Future waiver availability is unverified. Offensive bye coverage is valued from owned players; K/DEF streaming uses an estimate."
+  },
+  "lineup": [
+    {
+      "slot": "QB",
+      "name": "D. Prescott",
+      "projection": 293.32
+    },
+    {
+      "slot": "WR",
+      "name": "A. St. Brown",
+      "projection": 254.9
+    },
+    {
+      "slot": "WR",
+      "name": "G. Pickens",
+      "projection": 217.24
+    },
+    {
+      "slot": "RB",
+      "name": "D. Achane",
+      "projection": 254.03
+    },
+    {
+      "slot": "RB",
+      "name": "C. Skattebo",
+      "projection": 195.61
+    },
+    {
+      "slot": "TE",
+      "name": "T. McBride",
+      "projection": 189.14
+    },
+    {
+      "slot": "DEF",
+      "name": "Patriots",
+      "projection": 112.78
+    },
+    {
+      "slot": "W/R/T",
+      "name": "R. Rice",
+      "projection": 194.47
+    }
+  ]
+}

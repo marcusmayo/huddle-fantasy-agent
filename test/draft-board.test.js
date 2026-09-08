@@ -111,6 +111,19 @@ test('final recommendations reserve enough picks to complete every required star
   assert.equal(defense.feasible, true);
 });
 
+test('the final own selection has no imaginary future turn or urgency bonus', () => {
+  const lastLeague={...league,teamCount:2,roster:{WR:1,BN:0}};
+  const picks=[{playerId:'other',position:'WR',isMine:false}];
+  const card=buildRecommendationCard({players:pool.players,picks,league:lastLeague,draftSlot:2});
+  assert.equal(card.nextUserPick,null);
+  assert.ok(card.preferred);
+  for(const row of card.board) {
+    assert.equal(row.waitProbability,null);
+    assert.equal(row.components.urgency,0);
+    assert.equal(row.why.some(line=>line.includes('unlikely to reach')),false);
+  }
+});
+
 test('Yahoo W/R/T, R/W/T and FLEX each cover exactly one RB, WR or TE slot', () => {
   const base = { QB: 1, RB: 2, WR: 2, TE: 1, K: 1, DEF: 1 };
   for (const alias of ['W/R/T', 'R/W/T', 'FLEX']) {

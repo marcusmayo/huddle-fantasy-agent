@@ -84,3 +84,15 @@ test('automatic navigation verifies the actual room and starts without looking f
   assert.deepEqual(await enterStandardMock(run,{waitMs:0}),{manualVerified:2});assert.equal(calls.at(-1),'start');
   reads=0;run.roomId='wrong';await assert.rejects(enterStandardMock(run,{waitMs:0}),/does not match/);
 });
+test('a transient blank document during automatic entry remains in the waiting loop',async()=>{
+  const originalDocument=global.document, originalLocation=global.location;
+  try {
+    global.document={body:null,querySelector:()=>null,querySelectorAll:()=>[]};
+    global.location={pathname:'/draftclient/f1/1234/8'};
+    const run={yahoo:{playwright:{evaluate:async(fn)=>fn()}}};
+    assert.deepEqual(await enterStandardMock(run,{waitMs:0}),{entryWaiting:true,countdown:undefined});
+  } finally {
+    if(originalDocument===undefined)delete global.document;else global.document=originalDocument;
+    if(originalLocation===undefined)delete global.location;else global.location=originalLocation;
+  }
+});

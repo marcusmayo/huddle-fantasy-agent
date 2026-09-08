@@ -182,6 +182,11 @@ function availabilityAtPick(adp, nextPick) {
   return clamp(1 / (1 + Math.exp(-(adp - nextPick) / 6)));
 }
 
+function remainingUserPick(currentOverall, league, draftSlot, includeCurrent) {
+  const next = nextUserPick(currentOverall, league.teamCount, draftSlot, includeCurrent);
+  return next && next <= draftedRosterSize(league.roster) * league.teamCount ? next : null;
+}
+
 function phasePenalty(position, currentOverall, league) {
   if (!['K', 'DEF'].includes(position)) return 0;
   const totalPicks = draftedRosterSize(league.roster) * league.teamCount;
@@ -210,7 +215,7 @@ function whyLines(player, components, mine, targets, waitProbability) {
   if (components.upside >= 0.75 && !player.rangeEstimated) lines.push('Provider ceiling projection adds upside evidence.');
   if (player.sourceDisagreement) lines.push('FantasyPros and Tank01 disagree materially; review both source ranks.');
   if (player.sleeperTrend?.direction === 'rising') lines.push('Sleeper add activity is rising and breaks close ranking ties.');
-  if (waitProbability < 0.35) lines.push('Model says this player is unlikely to reach your next turn.');
+  if (waitProbability !== null && waitProbability < 0.35) lines.push('Model says this player is unlikely to reach your next turn.');
   if (!lines.length) lines.push('Best blended projection, roster-fit, scarcity, and next-turn value.');
   return lines.slice(0, 3);
 }
@@ -243,9 +248,9 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
   const valueBefore = rosterValue(owned, league, baselines);
   const currentOverall = picks.length + 1;
   const currentOwner = draftSlot ? pickOwner(currentOverall, league.teamCount) : null;
-  const nextPick = nextUserPick(
+  const nextPick = remainingUserPick(
     currentOverall,
-    league.teamCount,
+    league,
     draftSlot,
     currentOwner !== draftSlot
   );
@@ -257,7 +262,7 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
     const positionGroup = groups[player.position] || [];
     const positionIndex = positionGroup.findIndex((candidate) => candidate.id === player.id);
     const nextAtPosition = positionGroup[positionIndex + 1];
-    const waitProbability = availabilityAtPick(player.adp, nextPick);
+    const waitProbability = nextPick ? availabilityAtPick(player.adp, nextPick) : null;
     const rosterConstraint = assessRosterConstraint(player, mine, league, { availableByPosition, opponentPicksBeforeNext });
     const rosterContribution = contribution(player, owned, league, baselines, valueBefore);
     const need = calculateNeed(player.position, mine, league.roster);
@@ -282,7 +287,7 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
       vorp: player.projectedPoints - (baselines[player.position] || 0),
       scarcity: Math.max(0, player.projectedPoints - (nextAtPosition?.projectedPoints || baselines[player.position] || 0)),
       need,
-      urgency: 1 - waitProbability,
+      urgency: nextPick ? 1 - waitProbability : 0,
       upside: player.rangeEstimated ? 0 : Math.max(0, (player.ceiling || player.projectedPoints) - player.projectedPoints) * Math.min(1, rosterContribution.marginalValue / Math.max(1, player.projectedPoints)),
       floor: Math.max(0, (player.floor || player.projectedPoints) - baselines[player.position]) * Math.min(1, rosterContribution.marginalValue / Math.max(1, player.projectedPoints)),
       consensus: (Number.isFinite(player.sourceConsensus) ? player.sourceConsensus : 0.5) * usable,
@@ -331,7 +336,7 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
       offensiveStarterPriority:row.offensiveStarterPriority,
       style,
       sleeper,
-      waitProbability: Math.round(row.waitProbability * 1000) / 1000,
+      waitProbability: row.waitProbability === null ? null : Math.round(row.waitProbability * 1000) / 1000,
       risk: Math.round(row.risk * 1000) / 1000,
       trendAdjustment: Math.round(trendAdjustment * 1000) / 10,
       components: Object.fromEntries(Object.entries(components).map(([key, value]) => [key, Math.round(value * 1000) / 1000])),
@@ -372,7 +377,7 @@ function buildRecommendationCard(input) {
     currentOverall,
     draftSlot: input.draftSlot || null,
     onClock: Boolean(input.draftSlot && owner === input.draftSlot),
-    nextUserPick: nextUserPick(currentOverall, input.league.teamCount, input.draftSlot, owner !== input.draftSlot),
+    nextUserPick: remainingUserPick(currentOverall, input.league, input.draftSlot, owner !== input.draftSlot),
     preferred,
     rosterCoverage: {
       positions: mine,

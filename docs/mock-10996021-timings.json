@@ -1,0 +1,822 @@
+{
+  "rules": {
+    "receptionPoints": 0.5,
+    "passingTouchdown": 4,
+    "roster": {
+      "QB": 1,
+      "WR": 2,
+      "RB": 2,
+      "TE": 1,
+      "W/R/T": 1,
+      "K": 1,
+      "DEF": 1,
+      "BN": 6,
+      "IR": 0
+    },
+    "rosterMaximums": {
+      "RB": 6,
+      "TE": 4,
+      "QB": 4,
+      "DEF": 4,
+      "K": 4,
+      "WR": 8
+    }
+  },
+  "settings": "League Settings\nScoring Type\nHead-to-Head\nDraft Pick Time\n30 seconds\nRoster Positions (15)\nQB\nWR\n2\nRB\n2\nTE\nW/R/T\nK\nDEF\nBN\n6\nPosition Limits\nRB: 6, TE: 4, QB: 4, DEF: 4, K: 4, WR: 8, OFF: 4\nStat Categories\nStat Values\nPass Yds - Passing Yards\n0.04\nPass TD - Passing Touchdowns\n4\nInt - Interceptions\n-1\nRush Yds - Rushing Yards\n0.1\nRush TD - Rushing Touchdowns\n6\nRec - Receptions\n0.5\nRec Yds - Receiving Yards\n0.1\nRec TD - Receiving Touchdowns\n6\nRet TD - Return Touchdowns\n6\n2-PT - 2-Point Conversions\n2\nFum Lost - Fumbles Lost\n-2\nFG 0-19 - Field Goals 0-19 Yards\n3\nFG 20-29 - Field Goals 20-29 Yards\n3\nFG 30-39 - Field Goals 30-39 Yards\n3\nFG 40-49 - Field Goals 40-49 Yards\n4\nFG 50+ - Field Goals 50+ Yards\n5\nPAT Made - Point After Attempt Made\n1\nSack - Sack\n1\nInt - Interception\n2\nFum Rec - Fumble Recovery\n2\nTD - Touchdown\n6\nSafe - Safety\n2\nBlk Kick - Block Kick\n2\nRet TD - Kickoff and Punt Return Touchdowns\n6\nXPR - Extra Point Returned\n2",
+  "fullyManual": true,
+  "unverifiedPicks": [],
+  "timings": [
+    {
+      "pick": 8,
+      "name": "A. St. Brown",
+      "position": "WR",
+      "team": "DET",
+      "injuryStatus": "",
+      "yahooPlayerId": "33500",
+      "projectedPoints": 254.9,
+      "byeWeek": 6,
+      "why": "WR #1: +121.0 starting-lineup projection; 121.0 roster-value estimate after bench depth.\nWR fills an uncovered legal starting slot, including eligible Flex.\nStrong value above the currently available replacement level.",
+      "elapsedMs": 8797,
+      "secondsAtStart": 23,
+      "submittedAt": "2026-09-08T04:43:58.978Z",
+      "accepted": true,
+      "rosterBeforePick": "Roster: 0/15 drafted · Starters: 0/9 covered · Flex (RB/WR/TE): 0/1 covered · Mix: ",
+      "reconciledAfterPick": 8,
+      "rosterAfterPick": "Roster: 1/15 drafted · Starters: 1/9 covered · Flex (RB/WR/TE): 0/1 covered · Mix: WR 1",
+      "cycleWithReceiptMs": 10339
+    },
+    {
+      "pick": 9,
+      "name": "D. Achane",
+      "position": "RB",
+      "team": "MIA",
+      "injuryStatus": "",
+      "yahooPlayerId": "40118",
+      "projectedPoints": 254.03,
+      "byeWeek": 6,
+      "why": "RB #1: +123.7 starting-lineup projection; 123.7 roster-value estimate after bench depth.\nRB fills an uncovered legal starting slot, including eligible Flex.\nStrong value above the currently available replacement level.",
+      "elapsedMs": 6048,
+      "secondsAtStart": 28,
+      "submittedAt": "2026-09-08T04:44:06.262Z",
+      "accepted": true,
+      "rosterBeforePick": "Roster: 1/15 drafted · Starters: 1/9 covered · Flex (RB/WR/TE): 0/1 covered · Mix: WR 1",
+      "reconciledAfterPick": 11,
+      "rosterAfterPick": "Roster: 2/15 drafted · Starters: 2/9 covered · Flex (RB/WR/TE): 0/1 covered · Mix: WR 1, RB 1",
+      "cycleWithReceiptMs": 7329
+    },
+    {
+      "pick": 24,
+      "name": "G. Pickens",
+      "position": "WR",
+      "team": "DAL",
+      "injuryStatus": "",
+      "yahooPlayerId": "34007",
+      "projectedPoints": 217.24,
+      "byeWeek": 14,
+      "why": "WR #2: +83.4 starting-lineup projection; 83.4 roster-value estimate after bench depth.\nWR fills an uncovered legal starting slot, including eligible Flex.\nStrong value above the currently available replacement level.",
+      "elapsedMs": 4936,
+      "secondsAtStart": 24,
+      "submittedAt": "2026-09-08T04:46:19.625Z",
+      "accepted": true,
+      "rosterBeforePick": "Roster: 2/15 drafted · Starters: 2/9 covered · Flex (RB/WR/TE): 0/1 covered · Mix: WR 1, RB 1",
+      "reconciledAfterPick": 24,
+      "rosterAfterPick": "Roster: 3/15 drafted · Starters: 3/9 covered · Flex (RB/WR/TE): 0/1 covered · Mix: WR 2, RB 1",
+      "cycleWithReceiptMs": 6125
+    },
+    {
+      "pick": 25,
+      "name": "T. McBride",
+      "position": "TE",
+      "team": "ARI",
+      "injuryStatus": "",
+      "yahooPlayerId": "34010",
+      "projectedPoints": 189.14,
+      "byeWeek": 14,
+      "why": "TE #1: +75.1 starting-lineup projection; 75.1 roster-value estimate after bench depth.\nTE fills an uncovered legal starting slot, including eligible Flex.\nStrong value above the currently available replacement level.",
+      "elapsedMs": 6121,
+      "secondsAtStart": 28,
+      "submittedAt": "2026-09-08T04:46:26.293Z",
+      "accepted": true,
+      "rosterBeforePick": "Roster: 3/15 drafted · Starters: 3/9 covered · Flex (RB/WR/TE): 0/1 covered · Mix: WR 2, RB 1",
+      "reconciledAfterPick": 27,
+      "rosterAfterPick": "Roster: 4/15 drafted · Starters: 4/9 covered · Flex (RB/WR/TE): 0/1 covered · Mix: WR 2, RB 1, TE 1",
+      "cycleWithReceiptMs": 7246
+    },
+    {
+      "pick": 40,
+      "name": "R. Rice",
+      "position": "WR",
+      "team": "KC",
+      "injuryStatus": "",
+      "yahooPlayerId": "40084",
+      "projectedPoints": 194.47,
+      "byeWeek": 5,
+      "why": "WR #3: +60.6 starting-lineup projection; 60.6 roster-value estimate after bench depth.\nWR fills an uncovered legal starting slot, including eligible Flex.\nStrong value above the currently available replacement level.",
+      "elapsedMs": 8333,
+      "secondsAtStart": 30,
+      "submittedAt": "2026-09-08T04:48:51.823Z",
+      "accepted": true,
+      "rosterBeforePick": "Roster: 4/15 drafted · Starters: 4/9 covered · Flex (RB/WR/TE): 0/1 covered · Mix: WR 2, RB 1, TE 1",
+      "reconciledAfterPick": 40,
+      "rosterAfterPick": "Roster: 5/15 drafted · Starters: 5/9 covered · Flex (RB/WR/TE): 1/1 covered · Mix: WR 3, RB 1, TE 1",
+      "cycleWithReceiptMs": 10419
+    },
+    {
+      "pick": 41,
+      "name": "C. Skattebo",
+      "position": "RB",
+      "team": "NYG",
+      "injuryStatus": "",
+      "yahooPlayerId": "41922",
+      "projectedPoints": 195.61,
+      "byeWeek": 8,
+      "why": "RB #2: +62.1 starting-lineup projection; 62.1 roster-value estimate after bench depth.\nRB fills an uncovered legal starting slot, including eligible Flex.\nStrong value above the currently available replacement level.",
+      "elapsedMs": 7257,
+      "secondsAtStart": 27,
+      "submittedAt": "2026-09-08T04:49:01.177Z",
+      "accepted": true,
+      "rosterBeforePick": "Roster: 5/15 drafted · Starters: 5/9 covered · Flex (RB/WR/TE): 1/1 covered · Mix: WR 3, RB 1, TE 1",
+      "reconciledAfterPick": 43,
+      "rosterAfterPick": "Roster: 6/15 drafted · Starters: 6/9 covered · Flex (RB/WR/TE): 1/1 covered · Mix: WR 3, RB 2, TE 1",
+      "cycleWithReceiptMs": 9055
+    },
+    {
+      "pick": 56,
+      "name": "B. Irving",
+      "position": "RB",
+      "team": "TB",
+      "injuryStatus": "",
+      "yahooPlayerId": "40993",
+      "projectedPoints": 181.56,
+      "byeWeek": 10,
+      "why": "RB #3: +0.0 starting-lineup projection; 56.2 roster-value estimate after bench depth.\nOwned bye-week coverage adds 42.7 estimated points; future waivers are unverified.\nStrong value above the currently available replacement level.",
+      "elapsedMs": 6095,
+      "secondsAtStart": 30,
+      "submittedAt": "2026-09-08T04:51:15.861Z",
+      "accepted": true,
+      "rosterBeforePick": "Roster: 6/15 drafted · Starters: 6/9 covered · Flex (RB/WR/TE): 1/1 covered · Mix: WR 3, RB 2, TE 1",
+      "reconciledAfterPick": 56,
+      "rosterAfterPick": "Roster: 7/15 drafted · Starters: 6/9 covered · Flex (RB/WR/TE): 1/1 covered · Mix: WR 3, RB 3, TE 1",
+      "cycleWithReceiptMs": 7369
+    },
+    {
+      "pick": 57,
+      "name": "D. Prescott",
+      "position": "QB",
+      "team": "DAL",
+      "injuryStatus": "",
+      "yahooPlayerId": "29369",
+      "projectedPoints": 293.32,
+      "byeWeek": 14,
+      "why": "QB #1: +10.6 starting-lineup projection; 10.6 roster-value estimate after bench depth.\nComplete the league-required offensive lineup before adding more bench depth.\nQB fills an uncovered legal starting slot, including eligible Flex.",
+      "elapsedMs": 6596,
+      "secondsAtStart": 28,
+      "submittedAt": "2026-09-08T04:51:23.124Z",
+      "accepted": true,
+      "rosterBeforePick": "Roster: 7/15 drafted · Starters: 6/9 covered · Flex (RB/WR/TE): 1/1 covered · Mix: WR 3, RB 3, TE 1",
+      "reconciledAfterPick": 59,
+      "rosterAfterPick": "Roster: 8/15 drafted · Starters: 7/9 covered · Flex (RB/WR/TE): 1/1 covered · Mix: WR 3, RB 3, TE 1, QB 1",
+      "cycleWithReceiptMs": 7919
+    },
+    {
+      "pick": 72,
+      "name": "H. Fannin Jr.",
+      "position": "TE",
+      "team": "CLE",
+      "injuryStatus": "",
+      "yahooPlayerId": "41877",
+      "projectedPoints": 141.02,
+      "byeWeek": 11,
+      "why": "TE #2: +0.0 starting-lineup projection; 19.4 roster-value estimate after bench depth.\nOwned bye-week coverage adds 16.6 estimated points; future waivers are unverified.\nFantasyPros and Tank01 disagree materially; review both source ranks.",
+      "elapsedMs": 5610,
+      "secondsAtStart": 18,
+      "submittedAt": "2026-09-08T04:53:45.001Z",
+      "accepted": true,
+      "rosterBeforePick": "Roster: 8/15 drafted · Starters: 7/9 covered · Flex (RB/WR/TE): 1/1 covered · Mix: WR 3, RB 3, TE 1, QB 1",
+      "reconciledAfterPick": 72,
+      "rosterAfterPick": "Roster: 9/15 drafted · Starters: 7/9 covered · Flex (RB/WR/TE): 1/1 covered · Mix: WR 3, RB 3, TE 2, QB 1",
+      "cycleWithReceiptMs": 6913
+    },
+    {
+      "pick": 73,
+      "name": "T. Lawrence",
+      "position": "QB",
+      "team": "JAC",
+      "injuryStatus": "",
+      "yahooPlayerId": "33389",
+      "projectedPoints": 286.03,
+      "byeWeek": 7,
+      "why": "QB #2: +0.0 starting-lineup projection; 20.3 roster-value estimate after bench depth.\nOwned bye-week coverage adds 16.8 estimated points; future waivers are unverified.\nFantasyPros and Tank01 disagree materially; review both source ranks.",
+      "elapsedMs": 6415,
+      "secondsAtStart": 28,
+      "submittedAt": "2026-09-08T04:53:52.358Z",
+      "accepted": true,
+      "rosterBeforePick": "Roster: 9/15 drafted · Starters: 7/9 covered · Flex (RB/WR/TE): 1/1 covered · Mix: WR 3, RB 3, TE 2, QB 1",
+      "reconciledAfterPick": 75,
+      "rosterAfterPick": "Roster: 10/15 drafted · Starters: 7/9 covered · Flex (RB/WR/TE): 1/1 covered · Mix: WR 3, RB 3, TE 2, QB 2",
+      "cycleWithReceiptMs": 7740
+    },
+    {
+      "pick": 88,
+      "name": "A. Pierce",
+      "position": "WR",
+      "team": "IND",
+      "injuryStatus": "",
+      "yahooPlayerId": "34008",
+      "projectedPoints": 162.81,
+      "byeWeek": 13,
+      "why": "WR #4: +0.0 starting-lineup projection; 9.4 roster-value estimate after bench depth.\nOwned bye-week coverage adds 1.3 estimated points; future waivers are unverified.\nBest blended projection, roster-fit, scarcity, and next-turn value.",
+      "elapsedMs": 6378,
+      "secondsAtStart": 30,
+      "submittedAt": "2026-09-08T04:55:50.165Z",
+      "accepted": true,
+      "rosterBeforePick": "Roster: 10/15 drafted · Starters: 7/9 covered · Flex (RB/WR/TE): 1/1 covered · Mix: WR 3, RB 3, TE 2, QB 2",
+      "reconciledAfterPick": 88,
+      "rosterAfterPick": "Roster: 11/15 drafted · Starters: 7/9 covered · Flex (RB/WR/TE): 1/1 covered · Mix: WR 4, RB 3, TE 2, QB 2",
+      "cycleWithReceiptMs": 7782
+    },
+    {
+      "pick": 89,
+      "name": "M. Lloyd",
+      "position": "RB",
+      "team": "GB",
+      "injuryStatus": "",
+      "yahooPlayerId": "40971",
+      "projectedPoints": 178.76,
+      "byeWeek": 11,
+      "why": "RB #4: +0.0 starting-lineup projection; 4.8 roster-value estimate after bench depth.\nOwned bye-week coverage adds 0.9 estimated points; future waivers are unverified.\nModel says this player is unlikely to reach your next turn.",
+      "elapsedMs": 6003,
+      "secondsAtStart": 28,
+      "submittedAt": "2026-09-08T04:55:57.204Z",
+      "accepted": true,
+      "rosterBeforePick": "Roster: 11/15 drafted · Starters: 7/9 covered · Flex (RB/WR/TE): 1/1 covered · Mix: WR 4, RB 3, TE 2, QB 2",
+      "reconciledAfterPick": 91,
+      "rosterAfterPick": "Roster: 12/15 drafted · Starters: 7/9 covered · Flex (RB/WR/TE): 1/1 covered · Mix: WR 4, RB 4, TE 2, QB 2",
+      "cycleWithReceiptMs": 7368
+    },
+    {
+      "pick": 104,
+      "name": "Patriots",
+      "position": "DEF",
+      "team": "NE",
+      "injuryStatus": "",
+      "yahooPlayerId": "100017",
+      "projectedPoints": 112.78,
+      "byeWeek": 11,
+      "why": "DEF #1: +5.3 starting-lineup projection; 5.3 roster-value estimate after bench depth.\nDEF fills an uncovered legal starting slot, including eligible Flex.",
+      "elapsedMs": 5457,
+      "secondsAtStart": 21,
+      "submittedAt": "2026-09-08T04:58:13.380Z",
+      "accepted": true,
+      "rosterBeforePick": "Roster: 12/15 drafted · Starters: 7/9 covered · Flex (RB/WR/TE): 1/1 covered · Mix: WR 4, RB 4, TE 2, QB 2",
+      "reconciledAfterPick": 104,
+      "rosterAfterPick": "Roster: 13/15 drafted · Starters: 8/9 covered · Flex (RB/WR/TE): 1/1 covered · Mix: WR 4, RB 4, TE 2, QB 2, DEF 1",
+      "cycleWithReceiptMs": 6876
+    },
+    {
+      "pick": 105,
+      "name": "C. Dicker",
+      "position": "K",
+      "team": "LAC",
+      "injuryStatus": "Q",
+      "yahooPlayerId": "34344",
+      "projectedPoints": 139.55,
+      "byeWeek": 7,
+      "why": "K #1: +4.3 starting-lineup projection; 4.3 roster-value estimate after bench depth.\nK fills an uncovered legal starting slot, including eligible Flex.\nFantasyPros and Tank01 disagree materially; review both source ranks.",
+      "elapsedMs": 7075,
+      "secondsAtStart": 28,
+      "submittedAt": "2026-09-08T04:58:20.374Z",
+      "accepted": true,
+      "rosterBeforePick": "Roster: 13/15 drafted · Starters: 8/9 covered · Flex (RB/WR/TE): 1/1 covered · Mix: WR 4, RB 4, TE 2, QB 2, DEF 1",
+      "reconciledAfterPick": 107,
+      "rosterAfterPick": "Roster: 14/15 drafted · Starters: 9/9 covered · Flex (RB/WR/TE): 1/1 covered · Mix: WR 4, RB 4, TE 2, QB 2, DEF 1, K 1",
+      "cycleWithReceiptMs": 8407
+    },
+    {
+      "pick": 120,
+      "name": "Q. Johnston",
+      "position": "WR",
+      "team": "LAC",
+      "injuryStatus": "",
+      "yahooPlayerId": "40051",
+      "projectedPoints": 133.44,
+      "byeWeek": 7,
+      "why": "WR #5: +0.0 starting-lineup projection; 1.7 roster-value estimate after bench depth.\nModel says this player is unlikely to reach your next turn.",
+      "elapsedMs": 8686,
+      "secondsAtStart": 29,
+      "submittedAt": "2026-09-08T05:00:13.600Z",
+      "accepted": true,
+      "rosterBeforePick": "Roster: 14/15 drafted · Starters: 9/9 covered · Flex (RB/WR/TE): 1/1 covered · Mix: WR 4, RB 4, TE 2, QB 2, DEF 1, K 1",
+      "reconciledAfterPick": 120,
+      "rosterAfterPick": "Roster: 15/15 drafted · Starters: 9/9 covered · Flex (RB/WR/TE): 1/1 covered · Mix: WR 5, RB 4, TE 2, QB 2, DEF 1, K 1",
+      "cycleWithReceiptMs": 10575
+    }
+  ],
+  "events": [
+    {
+      "stage": "enter-room",
+      "at": 1788842539723
+    },
+    {
+      "stage": "room-rules-verified",
+      "at": 1788842541566
+    },
+    {
+      "stage": "start-verified",
+      "at": 1788842542387
+    },
+    {
+      "stage": "startup-mode-verified",
+      "header": "YAHOO FANTASY FOOTBALL DRAFT\nBump and Run - H2H\n00:39\nDraft Starting Soon\nLast Pick will appear here.\nDRAFT SCOUT\nSubscribe\nQueue\nPicks\nAutodraft will pick from queue\nAutodraft\nYour queue is empty.\nClick the star next to a player to add them. Autodraft picks w",
+      "at": 1788842542553
+    },
+    {
+      "stage": "read-results",
+      "at": 1788842631628
+    },
+    {
+      "stage": "read-players",
+      "at": 1788842633725
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788842636416
+    },
+    {
+      "stage": "submit-draft",
+      "at": 1788842638341
+    },
+    {
+      "stage": "verify-acceptance",
+      "at": 1788842638979
+    },
+    {
+      "stage": "read-results",
+      "at": 1788842638979
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788842640336
+    },
+    {
+      "stage": "accepted",
+      "at": 1788842641878
+    },
+    {
+      "stage": "read-results",
+      "at": 1788842642148
+    },
+    {
+      "stage": "read-players",
+      "at": 1788842642254
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788842643556
+    },
+    {
+      "stage": "submit-draft",
+      "at": 1788842645374
+    },
+    {
+      "stage": "verify-acceptance",
+      "at": 1788842646262
+    },
+    {
+      "stage": "read-results",
+      "at": 1788842646262
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788842648111
+    },
+    {
+      "stage": "accepted",
+      "at": 1788842649392
+    },
+    {
+      "stage": "read-results",
+      "at": 1788842776075
+    },
+    {
+      "stage": "read-players",
+      "at": 1788842776171
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788842777408
+    },
+    {
+      "stage": "submit-draft",
+      "at": 1788842779003
+    },
+    {
+      "stage": "verify-acceptance",
+      "at": 1788842779625
+    },
+    {
+      "stage": "read-results",
+      "at": 1788842779625
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788842780914
+    },
+    {
+      "stage": "accepted",
+      "at": 1788842782103
+    },
+    {
+      "stage": "read-results",
+      "at": 1788842782320
+    },
+    {
+      "stage": "read-players",
+      "at": 1788842782431
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788842783658
+    },
+    {
+      "stage": "submit-draft",
+      "at": 1788842785459
+    },
+    {
+      "stage": "verify-acceptance",
+      "at": 1788842786293
+    },
+    {
+      "stage": "read-results",
+      "at": 1788842786293
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788842788312
+    },
+    {
+      "stage": "accepted",
+      "at": 1788842789437
+    },
+    {
+      "stage": "read-results",
+      "at": 1788842925255
+    },
+    {
+      "stage": "read-players",
+      "at": 1788842925343
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788842926479
+    },
+    {
+      "stage": "submit-draft",
+      "at": 1788842930922
+    },
+    {
+      "stage": "verify-acceptance",
+      "at": 1788842931823
+    },
+    {
+      "stage": "read-results",
+      "at": 1788842931823
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788842933491
+    },
+    {
+      "stage": "accepted",
+      "at": 1788842935577
+    },
+    {
+      "stage": "read-results",
+      "at": 1788842935812
+    },
+    {
+      "stage": "read-players",
+      "at": 1788842935917
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788842937054
+    },
+    {
+      "stage": "submit-draft",
+      "at": 1788842940313
+    },
+    {
+      "stage": "verify-acceptance",
+      "at": 1788842941177
+    },
+    {
+      "stage": "read-results",
+      "at": 1788842941177
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788842942965
+    },
+    {
+      "stage": "accepted",
+      "at": 1788842944762
+    },
+    {
+      "stage": "read-results",
+      "at": 1788843071360
+    },
+    {
+      "stage": "read-players",
+      "at": 1788843071474
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788843072955
+    },
+    {
+      "stage": "submit-draft",
+      "at": 1788843074989
+    },
+    {
+      "stage": "verify-acceptance",
+      "at": 1788843075861
+    },
+    {
+      "stage": "read-results",
+      "at": 1788843075861
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788843077317
+    },
+    {
+      "stage": "accepted",
+      "at": 1788843078591
+    },
+    {
+      "stage": "read-results",
+      "at": 1788843078803
+    },
+    {
+      "stage": "read-players",
+      "at": 1788843078907
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788843080236
+    },
+    {
+      "stage": "submit-draft",
+      "at": 1788843082121
+    },
+    {
+      "stage": "verify-acceptance",
+      "at": 1788843083124
+    },
+    {
+      "stage": "read-results",
+      "at": 1788843083124
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788843085309
+    },
+    {
+      "stage": "accepted",
+      "at": 1788843086632
+    },
+    {
+      "stage": "read-results",
+      "at": 1788843220955
+    },
+    {
+      "stage": "read-players",
+      "at": 1788843221111
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788843222297
+    },
+    {
+      "stage": "submit-draft",
+      "at": 1788843224185
+    },
+    {
+      "stage": "verify-acceptance",
+      "at": 1788843225001
+    },
+    {
+      "stage": "read-results",
+      "at": 1788843225001
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788843226463
+    },
+    {
+      "stage": "accepted",
+      "at": 1788843227766
+    },
+    {
+      "stage": "read-results",
+      "at": 1788843227967
+    },
+    {
+      "stage": "read-players",
+      "at": 1788843228062
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788843229501
+    },
+    {
+      "stage": "submit-draft",
+      "at": 1788843231515
+    },
+    {
+      "stage": "verify-acceptance",
+      "at": 1788843232358
+    },
+    {
+      "stage": "read-results",
+      "at": 1788843232358
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788843234305
+    },
+    {
+      "stage": "accepted",
+      "at": 1788843235630
+    },
+    {
+      "stage": "read-results",
+      "at": 1788843345547
+    },
+    {
+      "stage": "read-players",
+      "at": 1788843345698
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788843347081
+    },
+    {
+      "stage": "submit-draft",
+      "at": 1788843349268
+    },
+    {
+      "stage": "verify-acceptance",
+      "at": 1788843350165
+    },
+    {
+      "stage": "read-results",
+      "at": 1788843350165
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788843351792
+    },
+    {
+      "stage": "accepted",
+      "at": 1788843353196
+    },
+    {
+      "stage": "read-results",
+      "at": 1788843353404
+    },
+    {
+      "stage": "read-players",
+      "at": 1788843353492
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788843354749
+    },
+    {
+      "stage": "submit-draft",
+      "at": 1788843356577
+    },
+    {
+      "stage": "verify-acceptance",
+      "at": 1788843357204
+    },
+    {
+      "stage": "read-results",
+      "at": 1788843357204
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788843359289
+    },
+    {
+      "stage": "accepted",
+      "at": 1788843360653
+    },
+    {
+      "stage": "read-results",
+      "at": 1788843489401
+    },
+    {
+      "stage": "read-players",
+      "at": 1788843489480
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788843490578
+    },
+    {
+      "stage": "submit-draft",
+      "at": 1788843492357
+    },
+    {
+      "stage": "verify-acceptance",
+      "at": 1788843493380
+    },
+    {
+      "stage": "read-results",
+      "at": 1788843493380
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788843494759
+    },
+    {
+      "stage": "accepted",
+      "at": 1788843496178
+    },
+    {
+      "stage": "read-results",
+      "at": 1788843496462
+    },
+    {
+      "stage": "read-players",
+      "at": 1788843496561
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788843497726
+    },
+    {
+      "stage": "submit-draft",
+      "at": 1788843499435
+    },
+    {
+      "stage": "verify-acceptance",
+      "at": 1788843500374
+    },
+    {
+      "stage": "read-results",
+      "at": 1788843500374
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788843503394
+    },
+    {
+      "stage": "accepted",
+      "at": 1788843504726
+    },
+    {
+      "stage": "read-results",
+      "at": 1788843606980
+    },
+    {
+      "stage": "read-players",
+      "at": 1788843607111
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788843608514
+    },
+    {
+      "stage": "submit-draft",
+      "at": 1788843612965
+    },
+    {
+      "stage": "verify-acceptance",
+      "at": 1788843613600
+    },
+    {
+      "stage": "read-results",
+      "at": 1788843613600
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788843615541
+    },
+    {
+      "stage": "accepted",
+      "at": 1788843617430
+    },
+    {
+      "stage": "read-results",
+      "at": 1788843628131
+    },
+    {
+      "stage": "import-huddle",
+      "at": 1788843628232
+    }
+  ]
+}

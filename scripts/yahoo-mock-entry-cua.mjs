@@ -28,7 +28,7 @@ async function enterStandardMock(run, {waitMs=20000}={}) {
   let gate;
   do {
     gate=await tab.playwright.evaluate(()=>({
-      text:document.body.innerText.slice(0,1800),
+      text:(document.body?.innerText || '').slice(0,1800),
       countdown:document.querySelector('#waiting_room-countdown')?.innerText,
       path:location.pathname,
       live:Boolean(document.querySelector('button[title="Settings"]')),

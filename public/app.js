@@ -1418,7 +1418,7 @@ function renderBoardRows() {
       <td><strong>${escapeHtml(item.player.name)}</strong><small>${escapeHtml(item.player.team)}</small></td>
       <td><span class="position">${escapeHtml(item.player.position)}</span></td>
       <td><strong>${item.score}</strong></td>
-      <td>${Math.round(item.waitProbability * 100)}%</td>
+      <td>${item.waitProbability === null ? 'No later turn' : `${Math.round(item.waitProbability * 100)}%`}</td>
       <td>${[
         item.sleeper ? '<span class="badge">SLEEPER</span>' : '',
         item.rosterFeasible === false ? '<span class="badge roster-blocked-badge">ROSTER BLOCKED</span>' : '',

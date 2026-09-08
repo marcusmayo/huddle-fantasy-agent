@@ -1,5 +1,9 @@
 # Live draft runbook
 
+Latest acceptance: [September 8 consolidated retrospective](draft-final-postmortem-2026-09-08.md). Bump and Run 10996021 completed **15 Huddle-guided picks / 0 autopicks / 120 reconciled results**. Preserve the tested `fix/mock-draft-throughput` branch when restarting. DR Fantasy's real draft is scheduled for **September 8 at 7:30 p.m. EDT**, room open 7:00 p.m.; verify for changes. Its current six-team, 20-drafted-player configuration totals 120 selections and needs a different seat/settings check from the standard mock.
+
+For browser-assisted operation: finish code, authentication, capture preparation and an empty-session check before joining. Once joined, continuously monitor entry and turns; keep adjacent snake selections in one bounded call, verify each accepted Yahoo player ID, and save the final receipt audit before any other work. No media capture, coding, unrelated browsing or long planning during countdown or live turns. A displayed recommendation or queued player does not count as a submitted pick.
+
 For the dated Codespaces checklist, in-app readiness checks and optional CLI diagnostics, attended-draft procedure, and weekly handoff, use the [September 8, 2026 operations plan](september-8-operations.md).
 
 ## The day before
@@ -63,4 +67,4 @@ For the dated Codespaces checklist, in-app readiness checks and optional CLI dia
 
 ## After the draft
 
-Export the session state, compare all 120 expected selections with Yahoo, and retain the recommendation audit for evaluation. Weekly management should begin only after the drafted roster reconciles completely.
+Export the session state, compare every expected selection (team count × drafted roster slots; 120 for current DR settings) with Yahoo, and retain the recommendation audit for evaluation. Weekly management should begin only after the drafted roster reconciles completely.

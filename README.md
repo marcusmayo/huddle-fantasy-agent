@@ -12,6 +12,8 @@ A read-only fantasy football assistant for Yahoo drafts and weekly team decision
 September 2026 · AI-generated narration and an original orchestral score. The animated GIF is silent; click it for the video with sound. Feature overview, not live-account footage.
 
 [Captions](docs/assets/huddle-narration-en.srt) · [Media notes and silent originals](docs/media/narrated-previews.md) · [Earlier walkthrough — August 9](docs/assets/huddle-product-demo.mp4) · [Thumbnail](docs/assets/huddle-linkedin-overview-thumbnail.jpg)
+
+**Second narrated preview: [Every pick accounted for](docs/media/draft-replay-preview.md)** — an edited replay of an actual completed Yahoo mock: 15 Huddle-guided selections, zero autopicks, five WRs, four RBs, two QBs and two TEs. Includes the same three video formats and captions. [Final retrospective and draft-night handoff](docs/draft-final-postmortem-2026-09-08.md).
 <!-- HUDDLE-LINKEDIN-VIDEOS:END -->
 
 ## What it does
@@ -71,7 +73,7 @@ Snake drafts and standard/flex/superflex rosters are supported; auction drafts a
 npm run check
 ```
 
-The documented suite has **134 tests**, including full drafts and 18-week reviews for league sizes from three through ten teams, plus isolation, OAuth, identity matching and readiness checks. These are application tests, not production load or security certification.
+Run `npm run check` for the current suite, including full drafts and 18-week reviews for league sizes from three through ten teams, plus isolation, OAuth, identity matching, readiness, adaptive roster value, weekly context and browser-controller checks. These are application tests, not production load or security certification.
 
 **Operator check — September 4, 2026:** A screenshot of the running instance showed `READY`, 177/177 player identities mapped, 177 players against 120 required, and passing Yahoo read checks. Projection and polling warnings remained. This verifies the displayed readiness result, not a completed live draft or season.
 
