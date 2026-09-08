@@ -49,7 +49,7 @@ Cloud CDP transport failures and one native confirmation hang were observed, but
 3. Keep a complete Results log. Capture available rows with their displayed position, team, projected points and ranking. If the current pick and log length disagree, reread; never patch missing picks by guesswork.
 4. Submit one current snapshot to Huddle. Wait for the exact current pick and ready status. Read the balanced preferred player and observed Yahoo name.
 5. Immediately recheck our turn, exact pick, and the matching available player's Draft control. Submit once. Confirm the accepted player and ownership in Results before proceeding.
-6. Avoid redundant tab clicks. Keep at most two timed turns per bounded tool call, retain progress after each, and report briefly between batches. On an uncertain click, inspect acceptance before retrying.
+6. Avoid redundant tab clicks. Keep one timed turn per bounded tool call, retain progress after each, and report briefly between batches. On an uncertain click, inspect acceptance before retrying.
 7. After our final pick, import the completed board and verify all 120 results and 15 owned picks. Report manual, queued-auto, and unselected-auto counts separately. Record actual timings and failures without relabeling a fallback as success.
 
 ## Hosted validation and live run
@@ -71,7 +71,7 @@ Execution corrections for the next run:
 - Give each bounded call enough time for one or two complete cycles; use short action timeouts without a shorter outer timeout that resets the whole session.
 - Monitor the actual waiting-room tab through its live transition. Check Autodraft before every cycle. A recommendation is not a submitted pick; require Yahoo Results to verify the exact player and ownership.
 
-Next free live validation room: **Red Zone 10985247**, September 7 at 7:37 PM Eastern. Joined with approximately six minutes remaining. Yahoo positively confirmed seat 8 of eight; a fresh matching Huddle mock session and the full capture/import/select/acceptance helper were prepared before joining. Live results remain pending.
+Next free live validation room: **Red Zone 10985247**, September 7 at 7:37 PM Eastern. Joined with approximately six minutes remaining. Yahoo positively confirmed seat 8 of eight; a fresh matching Huddle mock session and the full capture/import/select/acceptance helper were prepared before joining. The audited outcome follows.
 
 ### Red Zone result and newly reproduced identity defect
 
@@ -90,3 +90,15 @@ Additional browser evidence: Yahoo retains the Round by Round view when switchin
 The Red Zone room and its Huddle profile both used one RB/WR/TE Flex, alongside QB1/RB2/WR2/TE1/K1/DEF1 and six bench positions. The current profile's canonical `R/W/T` setting was correct; a Flex mismatch is not established as a cause of its missed selections. The broader audit found that literal Yahoo `W/R/T` input was normalized by the native Yahoo adapter but was not recognized consistently by the manual onboarding and draft-domain paths. Those paths now share the same Flex eligibility aliases.
 
 Huddle now displays drafted-roster, starter, and Flex coverage with each reconciled mock snapshot. One Flex slot counts once, whether covered by an RB, WR, or TE; QB/K/DEF cannot fill it. After the observed pick 57 roster (QB1/RB3/WR3/TE1), the correct display is **8/15 drafted, 7/9 starters covered, 1/1 Flex covered**. K and DEF are still unfilled, and the additional receiver is bench depth. Dedicated regression tests verify that exact roster, all three eligible Flex positions, alias equivalence, no double-counting, and canonical manual onboarding without an accidental extra W/R slot.
+
+### Revised rehearsal after browser recovery
+
+Commits 30523a4 (observed Yahoo IDs) and aa37281 (Flex aliases and visible coverage) were fast-forwarded into the running Codespace. The hosted full check passed **156 tests, zero failures**, including vendored-core integrity. The running app was restarted and its new coverage UI was verified.
+
+The browser rehearsal now mirrors the observed Yahoo table more closely: 100 visible available rows, player IDs, images without accessible names, retained Results subtab, consecutive seat-eight turns, automatic Autodraft after expiration, and the same-name/same-position/same-team collision in the late available window. `scripts/yahoo-mock-cua-loop.js` preserves the complete documented CUA workflow before joining. It checks the actual table after an uncertain action even when the navigation deadline expired, records accepted selections immediately, and imports a post-pick receipt with no inferred candidate availability. A failed input response is not counted as manual unless the accepted pick was observed before the turn could expire.
+
+Before the user fully restarted Edge, both mouse and keyboard input on the local rehearsal timed out. After restart, the same revised workflow completed against hosted Huddle on September 7, 8:43–8:46 PM Eastern: **15 manual selections, zero autopicks, 120 reconciled**, **15/15 roster, 9/9 starters, 1/1 Flex**. No navigation errors were recorded. Read/reconcile/select/acceptance averaged **3.148 seconds**, maximum **4.061 seconds**; the slowest cycle including the additional post-pick Huddle receipt was **7.657 seconds**. The fixture independently displayed 15 manual, zero auto. These are synthetic rehearsal results, not a Yahoo success. The browser restart is associated with restored speed; it does not establish the underlying transport fault.
+
+Acceptance times in milliseconds, by overall pick: 8=4061, 9=2708, 24=3804, 25=2930, 40=2964, 41=2989, 56=3023, 57=2822, 72=2950, 73=2956, 88=3018, 89=3214, 104=2734, 105=3149, 120=3893. Flex changed from 0/1 to 1/1 after pick 56's third running back and remained correctly filled.
+
+The next free room, **Forward Progress 10987912**, starts September 7 at **8:52 PM Eastern**. Joined after the revised rehearsal passed; Yahoo confirmed Marcus in seat eight with approximately five minutes remaining. A fresh isolated Huddle mock session was created before joining. Actual live outcome is pending.

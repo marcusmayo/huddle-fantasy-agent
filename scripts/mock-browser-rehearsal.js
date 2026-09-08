@@ -9,6 +9,8 @@ const fixture = fs.readFileSync(path.join(__dirname, '../test/fixtures/mock-1098
   return { name, position, team };
 });
 for (let i = 0; i < 240; i += 1) fixture.push({ name: `Replay Player ${i + 1}`, position: ['QB', 'RB', 'WR', 'TE', 'K'][i % 5], team: 'BUF' });
+// Reproduce the observed same-name, same-position, same-team collision late in the visible window.
+fixture[160] = { name: 'B. Robinson', position: 'RB', team: 'ATL' };
 const defenses = { ARI: 'Cardinals', ATL: 'Falcons', BAL: 'Ravens', BUF: 'Bills', CAR: 'Panthers', CHI: 'Bears', CIN: 'Bengals', CLE: 'Browns', DAL: 'Cowboys', DEN: 'Broncos', DET: 'Lions', GB: 'Packers', HOU: 'Texans', IND: 'Colts', JAC: 'Jaguars', KC: 'Chiefs', LV: 'Raiders', LAC: 'Chargers', LAR: 'Rams', MIA: 'Dolphins', MIN: 'Vikings', NE: 'Patriots', NO: 'Saints', NYG: 'Giants', NYJ: 'Jets', PHI: 'Eagles', PIT: 'Steelers', SF: '49ers', SEA: 'Seahawks', TB: 'Buccaneers', TEN: 'Titans', WAS: 'Commanders' };
 for (const [team, name] of Object.entries(defenses)) if (!fixture.some((p) => p.position === 'DEF' && p.team === team)) fixture.push({ name, position: 'DEF', team });
 const players = fixture.map((p, index) => ({ ...p, id: index + 1, expertRank: index + 1, adp: index + 2, projectedPoints: Math.max(5, ({ QB: 340, RB: 290, WR: 280, TE: 240, K: 150, DEF: 140 }[p.position]) - index * 0.7) }));
