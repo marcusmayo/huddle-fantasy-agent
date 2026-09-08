@@ -1,0 +1,121 @@
+pick	name	position	team	yahooPlayerId	isMine
+1	J. Gibbs	RB	DET	40059	False
+2	B. Robinson	RB	ATL	40055	False
+3	J. Chase	WR	CIN	33393	False
+4	P. Nacua	WR	LAR	40168	False
+5	J. Taylor	RB	IND	32711	False
+6	A. St. Brown	WR	DET	33500	False
+7	J. Smith-Njigba	WR	SEA	40041	False
+8	C. McCaffrey	RB	SF	30121	True
+9	J. Cook III	RB	BUF	34019	True
+10	C. Brown	RB	CIN	40196	False
+11	D. Henry	RB	BAL	29279	False
+12	S. Barkley	RB	PHI	30972	False
+13	K. Walker III	RB	KC	33996	False
+14	J. Jefferson	WR	MIN	32692	False
+15	O. Hampton	RB	LAC	41807	False
+16	C. Lamb	WR	DAL	32687	False
+17	D. Achane	RB	MIA	40118	False
+18	B. Bowers	TE	LV	40878	False
+19	N. Collins	WR	HOU	33477	False
+20	D. London	WR	ATL	33963	False
+21	A. Jeanty	RB	LV	41791	False
+22	G. Pickens	WR	DAL	34007	False
+23	C. Olave	WR	NO	33966	False
+24	J. Williams	RB	DAL	33423	True
+25	T. McBride	TE	ARI	34010	True
+26	K. Williams	RB	LAR	34120	False
+27	D. Swift	RB	CHI	32705	False
+28	A. Brown	WR	NE	31883	False
+29	M. Nabers	WR	NYG	40899	False
+30	J. Love	RB	ARI	42625	False
+31	J. Allen	QB	BUF	30977	False
+32	D. Smith	WR	PHI	33398	False
+33	B. Hall	RB	NYJ	33991	False
+34	J. Waddle	WR	DEN	33394	False
+35	C. Loveland	TE	CHI	41795	False
+36	T. Etienne Jr.	RB	NO	33413	False
+37	T. Higgins	WR	CIN	32703	False
+38	T. Warren	TE	IND	41799	False
+39	Z. Flowers	WR	BAL	40039	False
+40	R. Rice	WR	KC	40084	True
+41	T. McMillan	WR	CAR	41793	True
+42	C. Skattebo	RB	NYG	41922	False
+43	T. McLaurin	WR	WAS	31908	False
+44	L. Jackson	QB	BAL	31002	False
+45	D. Maye	QB	NE	40881	False
+46	B. Irving	RB	TB	40993	False
+47	L. McConkey	WR	LAC	40908	False
+48	J. Hurts	QB	PHI	32723	False
+49	T. Kraft	TE	GB	40102	False
+50	Q. Judkins	RB	CLE	41821	False
+51	G. Wilson	WR	NYJ	33965	False
+52	S. LaPorta	TE	DET	40064	False
+53	H. Fannin Jr.	TE	CLE	41877	False
+54	J. Williams	WR	DET	33967	False
+55	D. Montgomery	RB	HOU	31905	False
+56	L. Burden III	WR	CHI	41824	True
+57	J. Daniels	QB	WAS	40896	True
+58	D. Adams	WR	LAR	27581	False
+59	R. Stevenson	RB	NE	33508	False
+60	E. Egbuka	WR	TB	41804	False
+61	D. Moore	WR	BUF	30994	False
+62	J. Price	RB	SEA	42654	False
+63	R. Odunze	WR	CHI	40901	False
+64	C. Watson	WR	GB	33989	False
+65	P. Washington	WR	JAC	40234	False
+66	B. Tuten	RB	JAC	41900	False
+67	J. Burrow	QB	CIN	32671	False
+68	M. Evans	WR	SF	27535	False
+69	T. Henderson	RB	NE	41823	False
+70	K. Pitts Sr.	TE	ATL	33392	False
+71	G. Kittle	TE	SF	30259	False
+72	D. Prescott	QB	DAL	29369	True
+73	J. Warren	RB	PIT	34447	True
+74	C. Williams	QB	CHI	40900	False
+75	B. Aubrey	K	DAL	40819	False
+76	M. Harrison Jr.	WR	ARI	40893	False
+77	M. Lloyd	RB	GB	40971	False
+78	B. Thomas Jr.	WR	JAC	40883	False
+79	C. Tate	WR	TEN	42626	False
+80	J. Herbert	QB	LAC	32676	False
+81	J. Brooks	RB	CAR	40926	False
+82	T. Lawrence	QB	JAC	33389	False
+83	T. Pollard	RB	TEN	31960	False
+84	B. Purdy	QB	SF	34218	False
+85	B. Nix	QB	DEN	40875	False
+86	J. Addison	WR	MIN	40042	False
+87	R. Dowdle	RB	PIT	33100	False
+88	Rams	DEF	LAR	100014	True
+89	C. Dicker	K	LAC	34344	True
+90	Seahawks	DEF	SEA	100026	False
+91	Texans	DEF	HOU	100034	False
+92	D. Kincaid	TE	BUF	40048	False
+93	D. Goedert	TE	PHI	31019	False
+94	J. Myers	K	SEA	28378	False
+95	T. Kelce	TE	KC	26686	False
+96	I. Likely	TE	NYG	34095	False
+97	D. Metcalf	WR	PIT	31896	False
+98	C. Godwin Jr.	WR	TB	30197	False
+99	Broncos	DEF	DEN	100007	False
+100	C. Hubbard	RB	CAR	33514	False
+101	J. Dobbins	RB	DEN	32725	False
+102	J. Mason	RB	MIN	34320	False
+103	M. Washington Jr.	RB	LV	42744	False
+104	A. Pierce	WR	IND	34008	True
+105	M. Andrews	TE	BAL	31056	True
+106	J. Dart	QB	NYG	41810	False
+107	M. Stafford	QB	LAR	9265	False
+108	K. Fairbairn	K	HOU	29792	False
+109	Eagles	DEF	PHI	100021	False
+110	J. Goff	QB	DET	29235	False
+111	Ravens	DEF	BAL	100033	False
+112	Vikings	DEF	MIN	100016	False
+113	C. Little	K	JAC	41062	False
+114	T. Loop	K	BAL	41988	False
+115	J. Johnson	TE	NO	33113	False
+116	W. Reichard	K	MIN	41093	False
+117	Jaguars	DEF	JAC	100030	False
+118	C. Sutton	WR	DEN	31010	False
+119	T. Smack	K	GB	42838	False
+120	B. Corum	RB	LAR	40962	True

@@ -8,7 +8,7 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules, teamCoun
   if (!Number.isInteger(teamCount) || teamCount < 2 || !Number.isInteger(rounds) || rounds < 1
     || !Number.isInteger(draftSlot) || draftSlot < 1 || draftSlot > teamCount) throw Error('Verified team count, roster size and assigned seat are required');
   const expectedPicks = teamCount * rounds;
-  const state = { yahoo, huddle, roomId, draftSlot, rules, teamCount, rounds, expectedPicks, stage: 'prepared', log: [], events: [], pending: null, lastSnapshot: null, completedPicks: null };
+  const state = { version: '2026-09-08-single-source-startup', yahoo, huddle, roomId, draftSlot, rules, teamCount, rounds, expectedPicks, stage: 'prepared', log: [], events: [], pending: null, lastSnapshot: null, completedPicks: null };
   const defenses = { Cardinals:'ARI', Falcons:'ATL', Ravens:'BAL', Bills:'BUF', Panthers:'CAR', Bears:'CHI', Bengals:'CIN', Browns:'CLE', Cowboys:'DAL', Broncos:'DEN', Lions:'DET', Packers:'GB', Texans:'HOU', Colts:'IND', Jaguars:'JAC', Chiefs:'KC', Raiders:'LV', Chargers:'LAC', Rams:'LAR', Dolphins:'MIA', Vikings:'MIN', Patriots:'NE', Saints:'NO', Giants:'NYG', Jets:'NYJ', Eagles:'PHI', Steelers:'PIT', '49ers':'SF', Seahawks:'SEA', Buccaneers:'TB', Titans:'TEN', Commanders:'WAS' };
   const teamKey = value => String(value).toUpperCase().replace(/^JAX$/, 'JAC');
   const ownPick = header => Number(header.match(/YOUR TURN\s*•\s*ROUND\s+\d+,\s*PICK\s+(\d+)/i)?.[1] || 0);
@@ -176,6 +176,7 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules, teamCoun
     const snapshot = captured.snapshot;
     if (snapshot.currentOverall !== pick || snapshot.autodraft) return { retry: true, header: captured.header };
     const card = await state.sync(snapshot);
+    (state.decisionSnapshots ||= []).push({ snapshot, header: captured.header, card, recommendedAt: new Date().toISOString() });
     if (!/^[1-9]\d{0,9}$/.test(card.yahooPlayerId || '')) throw Error('Huddle preferred player lacks a Yahoo ID');
     const fresh = await state.inspect();
     const rows = fresh.rows.filter(r => r.yahooPlayerId === card.yahooPlayerId && r.cells.length > 5);
@@ -198,7 +199,6 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules, teamCoun
     const observedBeforeExpiry = Date.now() - started < Math.max(0, secondsAtStart - 1) * 1000;
     if (state.pending.responseError && !observedBeforeExpiry) throw Error('Player was accepted, but the input response and clock do not prove a manual selection');
     const entry = { pick, name: card.name, ...identity, projectedPoints: snapshot.availablePlayers.find(p => p.yahooPlayerId === identity.yahooPlayerId)?.projectedPoints, byeWeek: snapshot.availablePlayers.find(p => p.yahooPlayerId === identity.yahooPlayerId)?.byeWeek, why: card.why, elapsedMs: Date.now() - started, secondsAtStart, submittedAt: state.pending.submittedAt, accepted: true, rosterBeforePick: card.roster };
-    (state.decisionSnapshots ||= []).push({ snapshot, card });
     state.log.push(entry);
     state.pending = null;
     // Persist the accepted pick immediately. No candidate availability is
@@ -252,8 +252,8 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules, teamCoun
     const results = [];
     for (let i = 0; i < maxPicks; i++) {
       const value = await state.batch({ waitMs });
-      results.push(value.result ? { pick: value.result.pick, name: value.result.name,
-        ms: value.result.elapsedMs, accepted: value.result.accepted } : value);
+      results.push(value.result?.accepted ? { pick: value.result.pick, name: value.result.name,
+        ms: value.result.elapsedMs, accepted: true } : value);
       if (!value.result?.accepted) break;
     }
     return { manualVerified: state.log.length, results };
@@ -261,17 +261,15 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules, teamCoun
   // Call immediately after closing the verified room-settings panel. Never
   // return a recommendation to the chat for a second action while on clock.
   state.startVerified = async function () {
+    stage('start-verified');
     const current = await state.recoverManual();
-    if (ownPick(current.header)) return state.window({ maxPicks: 2, waitMs: 1000 });
-    const captured = await state.capture();
-    if (captured.snapshot) {
-      // The room can advance while reading its two tabs.
-      if (ownPick(captured.header)) return state.window({ maxPicks: 2, waitMs: 1000 });
-      await state.sync(captured.snapshot, { requireRecommendation: false });
-    }
+    state.events.push({stage:'startup-mode-verified',header:current.header,at:Date.now()});
+    // Use the same case-insensitive turn parser and selection path on every
+    // turn. A separate opening import can consume the first clock without
+    // submitting anything. Do not attach media capture to sync or cycle.
     return state.window({ maxPicks: 2, waitMs: 20000 });
   };
   return state;
 }
 
-if (typeof module !== 'undefined') module.exports = { createYahooMockLoop };
+export { createYahooMockLoop };
