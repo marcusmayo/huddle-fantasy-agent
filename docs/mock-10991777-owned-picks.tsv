@@ -1,0 +1,16 @@
+pick	name	position	team	yahoo_player_id	projected_points	bye	manual_verified	acceptance_ms
+8	J. Smith-Njigba	WR	SEA	40041	261.43	11	false	NA
+9	J. Cook III	RB	BUF	34019	242.74	7	false	NA
+24	A. Brown	WR	NE	31883	202.34	11	false	NA
+25	C. Olave	WR	NO	33966	191.61	8	false	NA
+40	D. Swift	RB	CHI	32705	179.23	10	false	NA
+41	T. Warren	TE	IND	41799	166.56	13	false	NA
+56	B. Irving	RB	TB	40993	181.56	10	true	6573
+57	T. McLaurin	WR	WAS	31908	171.56	7	true	5376
+72	D. Prescott	QB	DAL	29369	293.32	14	true	5880
+73	Rams	DEF	LAR	100014	123.80	11	true	5442
+88	R. Dowdle	RB	PIT	33100	170.69	9	true	5444
+89	B. Aubrey	K	DAL	40819	142.47	14	true	5500
+104	M. Andrews	TE	BAL	31056	129.57	13	true	5573
+105	Broncos	DEF	DEN	100007	120.38	10	true	5804
+120	J. Mason	RB	MIN	34320	142.45	6	true	6351

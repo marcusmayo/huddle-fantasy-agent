@@ -472,10 +472,10 @@ class DraftService {
           scoring: structuredClone(this.league.scoring)
         },
         ranking: {
-          algorithm: 'roster-contribution-v2',
+          algorithm: 'roster-contribution-v3-owned-coverage',
           weights: structuredClone(STYLES.balanced),
           playerInputs: ['projected points', 'floor', 'ceiling', 'ECR', 'ADP', 'FantasyPros normalized positional rank', 'Tank01 ADP/projection rank', 'Sleeper add/drop trend', 'tier', 'injury status', 'risk'],
-          computedFactors: ['marginal legal-lineup contribution', 'diminishing bench depth', 'known bye coverage', 'remaining league replacement demand', 'actual uncovered starter/Flex need', 'next-turn urgency', 'provider upside only', 'injury risk', 'Yahoo position limits', 'K/DEF draft phase']
+          computedFactors: ['marginal legal-lineup contribution', 'diminishing bench depth with ownership-credit floor', 'owned offensive bye coverage', 'disclosed K/DEF streaming estimate', 'remaining league replacement demand', 'actual uncovered starter/Flex need', 'roster-useful urgency and rank bonuses', 'provider upside only', 'injury risk', 'Yahoo position limits', 'K/DEF draft phase']
         },
         sourceReconciliation: structuredClone(this.playerPool.sourceEvidence || {
           algorithm: 'primary-source-only',

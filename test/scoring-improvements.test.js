@@ -22,6 +22,32 @@ test('custom scoring is calculated per league from stat lines without mutating t
 });
 const depth = Object.entries({ QB: 220, RB: 100, WR: 100, TE: 65, K: 80, DEF: 80 }).flatMap(([pos, top]) => Array.from({length:40}, (_,i) => p(`${pos}-depth-${i}`, pos, top-i)));
 
+test('an owned QB reserve covers the starter bye without assuming a future waiver QB', () => {
+  const { contribution, byeCoverageReport } = require('../src/domain/roster-value');
+  const starter={...p('Dak','QB',293.32),byeWeek:14};
+  const reserve={...p('Goff','QB',265.8),byeWeek:6};
+  const format={roster:{QB:1,BN:2}};
+  const baseline={QB:280}; // Even a strong estimated waiver pool is not owned.
+  assert.ok(contribution(reserve,[starter],format,baseline).byeCoverageGain>15);
+  assert.equal(contribution({...reserve,byeWeek:14},[starter],format,baseline).byeCoverageGain,0);
+  assert.deepEqual(byeCoverageReport([starter],format).gaps,[{week:14,slot:'QB',slotIndex:1}]);
+  assert.equal(byeCoverageReport([starter,reserve],format).gaps.length,0);
+  const twoQb={roster:{QB:2,BN:5}};
+  const other={...p('QB2','QB',300),byeWeek:14};
+  assert.equal(byeCoverageReport([starter,other,reserve],twoQb).gaps.length,1);
+});
+
+test('same-bye TE backup adds no bye coverage; uncovered QB beats a second defense', () => {
+  const { contribution } = require('../src/domain/roster-value');
+  const team=[{...p('Dak','QB',293.32),byeWeek:14},{...p('Warren','TE',166.56),byeWeek:13},{...p('Rams','DEF',123.8),byeWeek:11},
+    ...[261.43,202.34,191.61,171.56].map((v,i)=>({...p(`WR${i}`,'WR',v),byeWeek:[11,11,8,7][i]})),
+    ...[242.74,181.56,179.23,170.69].map((v,i)=>({...p(`RB${i}`,'RB',v),byeWeek:[7,10,10,9][i]})),{...p('Aubrey','K',142.47),byeWeek:14}];
+  const candidates=[{...p('QB reserve','QB',265.8),byeWeek:6},{...p('Andrews','TE',129.57),byeWeek:13},{...p('Broncos','DEF',120.38),byeWeek:10},...depth];
+  const board=scoreAvailablePlayers({players:candidates,picks:team.map(player=>({...player,isMine:true})),league,draftSlot:8});
+  assert.equal(board[0].player.id,'QB reserve');
+  assert.equal(contribution(candidates[1],team,league,{QB:280,RB:140,WR:150,TE:120,K:130,DEF:106}).byeCoverageGain,0);
+});
+
 test('useful WR depth beats comparable sixth RB and elite QB backup; exceptional RB upgrade can still win', () => {
   const players = [p('WR add', 'WR', 163), p('RB6', 'RB', 163), p('QB2', 'QB', 280), ...depth];
   const board = scoreAvailablePlayers({ players, picks, league, draftSlot: 8 });
@@ -40,12 +66,25 @@ test('replacement demand accounts for league depth and selections already made',
   assert.ok(replacementBaselines(complete, league, [{position:'WR'}, {position:'WR'}]).WR > shallow.WR);
 });
 
+test('WR and TE bye cover beat a fifth RB despite the RB having higher raw points and rank', () => {
+  const rows=[['QB','QB',330,14],['TE','TE',160,13],['WR1','WR',260,11],['WR2','WR',200,11],['WR3','WR',180,7],
+    ['RB1','RB',200,9],['RB2','RB',190,9],['RB3','RB',180,10],['RB4','RB',170,12],['K','K',140,6],['DEF','DEF',120,5]];
+  const team=rows.map(([id,pos,pts,byeWeek])=>({...p(id,pos,pts),byeWeek,isMine:true}));
+  const options=[{...p('RB5','RB',175),byeWeek:12,expertRank:1,adp:1,sourceConsensus:1},
+    {...p('WR4','WR',170),byeWeek:8},{...p('TE2','TE',135),byeWeek:6},...depth];
+  const board=scoreAvailablePlayers({players:options,picks:team,league,draftSlot:8});
+  const index=id=>board.findIndex(row=>row.player.id===id);
+  assert.ok(index('WR4')<index('RB5'));
+  assert.ok(index('TE2')<index('RB5'));
+  assert.ok(board[index('TE2')].rosterContribution.byeCoverageGain>7);
+});
+
 test('league-specific QB, WR, two-defense and multiple Flex requirements change contribution and legality', () => {
   const { benchDemandShares } = require('../src/domain/league');
   const { assessRosterConstraint, maximumStarterAssignments } = require('../src/domain/draft-board');
   const { seasonLineup } = require('../src/domain/roster-value');
   const { optimizeLineup } = require('../src/domain/weekly-management');
-  const custom = {...league, teamCount:6, rosterMaximums:{}, roster:{QB:2,WR:4,RB:3,TE:1,'W/T':1,'W/R':1,K:1,DEF:2,BN:6,IR:2}};
+  const custom = {...league, teamCount:6, rosterMaximums:{}, roster:{QB:2,WR:4,RB:3,TE:1,'W/T':1,'W/R':1,K:1,DEF:2,BN:5,IR:2}};
   const players = [p('QB2', 'QB',310),p('WR4','WR',163),...depth];
   const mock = scoreAvailablePlayers({players,picks,league,draftSlot:3});
   const dr = scoreAvailablePlayers({players,picks,league:custom,draftSlot:3});

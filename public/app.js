@@ -1464,6 +1464,10 @@ function renderRecommendation(card) {
   $('#preferred-observed-name').dataset.yahooPlayerId = preferred?.player.yahooPlayerId || '';
   $('#preferred-score').textContent = preferred?.score ?? '—';
   $('#preferred-why').innerHTML = (preferred?.why || []).map((line) => `<li>${escapeHtml(line)}</li>`).join('');
+  const bye = card.rosterCoverage?.byeCoverage;
+  $('#draft-bye-coverage').textContent = bye
+    ? `Bye-week plan: ${bye.gaps.length ? bye.gaps.map(gap=>`Week ${gap.week} ${gap.slot}`).join(', ') + ' need outside help.' : 'No gaps identified among known byes.'} ${bye.unknownByes ? `${bye.unknownByes} player byes are unknown. ` : ''}Future waivers are unverified. ${bye.streamingPositions.join('/')} streaming is assumed; offensive reserves receive credit for covering actual bye gaps.`
+    : '';
   $('#explanation').textContent = card.explanation;
   renderChoice('safe', card.alternatives.safe);
   renderChoice('upside', card.alternatives.upside);

@@ -1,7 +1,7 @@
 'use strict';
 
 const { FLEX_POSITIONS, benchDemandShares, draftedRosterSize, nextUserPick, pickOwner, positionTargets } = require('./league');
-const { contribution, rosterValue } = require('./roster-value');
+const { contribution, rosterValue, byeCoverageReport } = require('./roster-value');
 
 const BENCH_SLOTS = new Set(['BN', 'BENCH', 'IR', 'IL', 'NA']);
 const SLOT_ELIGIBILITY = {
@@ -235,19 +235,26 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
     const waitProbability = availabilityAtPick(player.adp, nextPick);
     const rosterConstraint = assessRosterConstraint(player, mine, league, { availableByPosition, opponentPicksBeforeNext });
     const rosterContribution = contribution(player, owned, league, baselines, valueBefore);
+    const need = calculateNeed(player.position, mine, league.roster);
+    // Rankings/scarcity are valuable only to the extent this roster can use
+    // the player. A deep reserve must not retain the same urgency/VORP bonus
+    // as an actual starter or a reserve covering an uncovered bye.
+    const usable = need || rosterContribution.starterGain > 0 ? 1
+      : clamp(rosterContribution.marginalValue / Math.max(1, player.projectedPoints / 17));
     return {
       player,
       waitProbability,
       rosterConstraint,
       rosterContribution,
       contribution: rosterContribution.marginalValue,
+      usable,
       vorp: player.projectedPoints - (baselines[player.position] || 0),
       scarcity: Math.max(0, player.projectedPoints - (nextAtPosition?.projectedPoints || baselines[player.position] || 0)),
-      need: calculateNeed(player.position, mine, league.roster),
+      need,
       urgency: 1 - waitProbability,
       upside: player.rangeEstimated ? 0 : Math.max(0, (player.ceiling || player.projectedPoints) - player.projectedPoints) * Math.min(1, rosterContribution.marginalValue / Math.max(1, player.projectedPoints)),
       floor: Math.max(0, (player.floor || player.projectedPoints) - baselines[player.position]) * Math.min(1, rosterContribution.marginalValue / Math.max(1, player.projectedPoints)),
-      consensus: Number.isFinite(player.sourceConsensus) ? player.sourceConsensus : 0.5,
+      consensus: (Number.isFinite(player.sourceConsensus) ? player.sourceConsensus : 0.5) * usable,
       risk: clamp(Number(player.risk) || 0) + injuryPenalty(player),
       penalty: phasePenalty(player.position, currentOverall, league)
     };
@@ -256,7 +263,11 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
   const normalized = {};
   for (const key of ['contribution', 'vorp', 'scarcity', 'need', 'urgency', 'upside', 'floor']) {
     const feasible = raw.filter(row => row.rosterConstraint.feasible).map(row => row[key]);
-    const maximum = Math.max(0, ...feasible);
+    // Do not turn a negligible late-round contribution into a perfect score
+    // just because every remaining choice also has low marginal value.
+    const contributionScale = key === 'contribution'
+      ? Math.max(1, ...owned.map(player => player.projectedPoints / 17)) : 0;
+    const maximum = Math.max(contributionScale, 0, ...feasible);
     normalized[key] = raw.map(row => maximum > 0 ? clamp(row[key] / maximum) : 0);
   }
   const weights = STYLES[style];
@@ -265,12 +276,13 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
     !early || !/^(K|DEF) supply/.test(warning));
   return raw.map((row, index) => {
     const components = Object.fromEntries(
-      ['contribution', 'vorp', 'scarcity', 'need', 'urgency', 'upside', 'floor'].map((key) => [key, normalized[key][index]])
+      ['contribution', 'vorp', 'scarcity', 'need', 'urgency', 'upside', 'floor'].map((key) => [key,
+        normalized[key][index] * (['vorp', 'scarcity', 'urgency'].includes(key) ? row.usable : 1)])
     );
     components.consensus = row.consensus;
     const positive = Object.entries(components).reduce((sum, [key, value]) => sum + value * weights[key], 0);
-    const trendAdjustment = row.player.sleeperTrend?.direction === 'rising' ? 0.01
-      : row.player.sleeperTrend?.direction === 'falling' ? -0.01
+    const trendAdjustment = row.player.sleeperTrend?.direction === 'rising' ? 0.01 * row.usable
+      : row.player.sleeperTrend?.direction === 'falling' ? -0.01 * row.usable
         : 0;
     const score = row.rosterConstraint.feasible
       ? clamp(positive - row.risk * weights.risk - row.penalty + trendAdjustment)
@@ -292,7 +304,9 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
       trendAdjustment: Math.round(trendAdjustment * 1000) / 10,
       components: Object.fromEntries(Object.entries(components).map(([key, value]) => [key, Math.round(value * 1000) / 1000])),
       why: row.rosterConstraint.feasible
-        ? [`${row.player.position} #${row.rosterContribution.positionCountAfter}: +${row.rosterContribution.starterGain.toFixed(1)} starting-lineup projection; ${row.rosterContribution.marginalValue.toFixed(1)} roster-value estimate after bench depth.`, ...whyLines(row.player, components, mine, targets, row.waitProbability)].slice(0, 3)
+        ? [`${row.player.position} #${row.rosterContribution.positionCountAfter}: +${row.rosterContribution.starterGain.toFixed(1)} starting-lineup projection; ${row.rosterContribution.marginalValue.toFixed(1)} roster-value estimate after bench depth.`,
+          ...(row.rosterContribution.byeCoverageGain > .1 ? [`Owned bye-week coverage adds ${row.rosterContribution.byeCoverageGain.toFixed(1)} estimated points; future waivers are unverified.`] : []),
+          ...whyLines(row.player, components, mine, targets, row.waitProbability)].slice(0, 3)
         : row.rosterConstraint.reasons.slice(0, 3)
     };
   }).sort((a, b) => Number(b.rosterFeasible) - Number(a.rosterFeasible)
@@ -312,6 +326,9 @@ function buildRecommendationCard(input) {
   const preferred = board.find((item) => item.rosterFeasible) || null;
   const mine = countMineByPosition(picks, new Map(input.players.map(player => [player.id, player])));
   const roster = input.league.roster;
+  const byId = new Map(input.players.map(player=>[player.id,player]));
+  const ownedPlayers = picks.filter(pick=>pick.isMine).map(pick=>({...byId.get(pick.playerId),...pick,id:pick.playerId,
+    projectedPoints:pick.projectedPoints ?? byId.get(pick.playerId)?.projectedPoints ?? 0}));
   const dedicatedRoster = Object.fromEntries(Object.entries(roster).filter(([slot]) => !FLEX_POSITIONS[slot]));
   const startingCovered = maximumStarterAssignments(mine, roster);
   const flexTypes = Object.entries(roster).filter(([slot, count]) => FLEX_POSITIONS[slot] && count)
@@ -325,6 +342,7 @@ function buildRecommendationCard(input) {
     preferred,
     rosterCoverage: {
       positions: mine,
+      byeCoverage: byeCoverageReport(ownedPlayers, input.league),
       positionMaximums: defaultPositionMaximums(input.league),
       drafted: picks.filter(pick => pick.isMine).length,
       total: draftedRosterSize(roster),

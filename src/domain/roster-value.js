@@ -57,18 +57,42 @@ function rosterValue(players, league, baselines) {
     const rank = depth[player.position] = (depth[player.position] || 0) + 1;
     const target = targets[player.position] || 0;
     const weight = ['RB', 'WR'].includes(player.position) ? Math.min(.5, .12 * target) : player.position === 'TE' ? Math.min(.35, .09 * target) : player.position === 'QB' ? Math.min(.35, .08 * target) : 0;
-    insurance += Math.max(0, points(player) - (baselines[player.position] || 0)) * weight / rank ** 1.7;
+    // A player matching today's best undrafted option still has ownership
+    // value: that option is not guaranteed to remain free after injuries.
+    // The 15% floor is a conservative sensitivity assumption, not an injury
+    // probability; position weight and depth discount still apply afterward.
+    insurance += Math.max(0, points(player) - (baselines[player.position] || 0), points(player) * .15) * weight / rank ** 1.7;
   }
-  // Known bye overlap changes coverage value, without inventing unknown byes.
+  // Offensive bye cover must come from owned players. The old calculation
+  // supplied a full-strength hypothetical waiver QB and credited a reserve
+  // only for beating that QB, hiding the actual empty bye-week slot.
+  // K/DEF streaming remains an explicit strategy assumption; their benefit is
+  // measured above the league-specific observed replacement estimate.
   let byeCoverage = 0;
-  for (const week of new Set(starters.map(player => player.byeWeek).filter(week => Number.isInteger(week) && week > 0))) {
+  const ownedStarters = seasonLineup(players, league.roster).players;
+  const streamPositions = league.draftStrategy?.streamingPositions || ['K', 'DEF'];
+  const streamReplacements = replacements.filter(player => streamPositions.includes(player.position));
+  for (const week of new Set(ownedStarters.map(player => player.byeWeek).filter(week => Number.isInteger(week) && week > 0))) {
     const without = players.filter(player => player.byeWeek !== week);
-    const byeLineup = seasonLineup([...without, ...replacements], league.roster);
-    const missing = starters.filter(player => player.byeWeek === week);
-    const fallback = lineup.total - missing.reduce((sum, player) => sum + Math.max(0, points(player) - (baselines[player.position] || 0)), 0);
-    byeCoverage += Math.max(0, byeLineup.total - fallback) / 17;
+    const byeLineup = seasonLineup([...without, ...streamReplacements], league.roster);
+    const withoutReserves = seasonLineup([...ownedStarters.filter(player => player.byeWeek !== week), ...streamReplacements], league.roster);
+    byeCoverage += Math.max(0, byeLineup.total - withoutReserves.total) / 17;
   }
   return { total: lineup.total + insurance + byeCoverage, starters: lineup.total, insurance, byeCoverage, depth };
+}
+
+function byeCoverageReport(players, league) {
+  const starters = seasonLineup(players, league.roster);
+  const weeks = [...new Set(starters.players.map(player => player.byeWeek).filter(week => Number.isInteger(week) && week >= 1 && week <= 18))].sort((a,b)=>a-b);
+  const gaps = weeks.flatMap(week => {
+    const available = seasonLineup(players.filter(player => player.byeWeek !== week), league.roster);
+    const base = new Map(starters.assignments.filter(item=>item.player).map(item=>[`${item.slot}:${item.slotIndex}`,item]));
+    return available.assignments.filter(item=>!item.player && base.has(`${item.slot}:${item.slotIndex}`))
+      .map(item=>({week,slot:item.slot,slotIndex:item.slotIndex}));
+  });
+  return {gaps, unknownByes:players.filter(player=>!Number.isInteger(player.byeWeek)||player.byeWeek<1||player.byeWeek>18).length,
+    streamingPositions:league.draftStrategy?.streamingPositions || ['K','DEF'],
+    assumption:'Future waiver availability is unverified. Offensive bye coverage is valued from owned players; K/DEF streaming uses an estimate.'};
 }
 
 function contribution(player, owned, league, baselines, before = rosterValue(owned, league, baselines)) {
@@ -84,4 +108,4 @@ function contribution(player, owned, league, baselines, before = rosterValue(own
   };
 }
 
-module.exports = { contribution, rosterValue, seasonLineup };
+module.exports = { contribution, rosterValue, seasonLineup, byeCoverageReport };

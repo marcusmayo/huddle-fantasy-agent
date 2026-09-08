@@ -26,6 +26,7 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules }) {
       const table = tables.find(t => [...t.querySelectorAll('th')].some(h => h.innerText.trim() === 'Player'));
       return {
         header: document.body.innerText.slice(0, 260),
+        inactivityNotice: document.body.innerText.includes('You have been put into autopick mode due to inactivity.'),
         autodraft: Boolean(tab('Autodraft')?.querySelector('[data-icon="checkmark-default"]')),
         autoKnown: Boolean(tab('Autodraft')),
         playersSelected: tab('Players')?.getAttribute('aria-selected') === 'true',
@@ -35,6 +36,33 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules }) {
         rows: table ? [...table.querySelectorAll('tbody tr')].map(r => ({ cells: [...r.querySelectorAll('td')].map(c => c.innerText), yahooPlayerId: r.querySelector('.ys-player')?.getAttribute('data-id') })).filter(r => r.cells.length) : []
       };
     }, undefined, { timeoutMs: 6000 });
+  };
+
+  state.recoverManual = async function () {
+    // Yahoo's blocking inactivity notice is not exposed as role=dialog. Check
+    // its observed text across the visible document, beyond the short header.
+    let data = await state.inspect();
+    if (data.inactivityNotice) {
+      stage('dismiss-inactivity-notice');
+      await state.yahoo.playwright.locator('button')
+        .filter({ has: state.yahoo.playwright.locator('[data-icon="close-default"]') })
+        .click({ timeoutMs: 5000 });
+      data = await state.inspect();
+      if (data.inactivityNotice) throw Error('Yahoo inactivity notice remains visible; manual controls are blocked');
+    }
+    if (!data.autoKnown) throw Error('Yahoo manual mode cannot be verified');
+    if (data.autodraft) {
+      stage('restore-manual-mode');
+      await state.yahoo.playwright.locator('button[title="Autodraft"]').click({ timeoutMs: 5000 });
+      const deadline = Date.now() + 4000;
+      do {
+        data = await state.inspect();
+        if (data.autoKnown && !data.autodraft && !data.inactivityNotice) return data;
+        await state.yahoo.playwright.waitForTimeout(120);
+      } while (Date.now() < deadline);
+      throw Error('Yahoo did not acknowledge manual mode; do not submit a pick');
+    }
+    return data;
   };
 
   state.grid = async function (view) {
@@ -99,7 +127,9 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules }) {
   state.sync = async function (snapshot, { requireRecommendation = true } = {}) {
     stage('import-huddle');
     await state.huddle.playwright.locator('#mock-snapshot-input').fill(JSON.stringify(snapshot), { timeoutMs: 8000 });
-    await state.huddle.playwright.locator('#mock-snapshot-submit').click({ timeoutMs: 8000 });
+    // Keyboard activation avoids a moving-page click that appeared successful
+    // but left the filled snapshot unsubmitted in the timed browser rehearsal.
+    await state.huddle.playwright.locator('#mock-snapshot-submit').press('Enter', { timeoutMs: 8000 });
     const deadline = Date.now() + 8000;
     let card;
     do {
@@ -133,7 +163,7 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules }) {
     const initial = await state.inspect();
     const pick = ownPick(initial.header);
     if (!pick) return { waiting: true, header: initial.header };
-    if (!initial.autoKnown || initial.autodraft) return { blocked: 'Autodraft must be visibly OFF', header: initial.header };
+    if (initial.inactivityNotice || !initial.autoKnown || initial.autodraft) return { blocked: 'Autodraft must be visibly OFF with no inactivity notice', header: initial.header };
     const secondsAtStart = Number(initial.header.match(/(?:^|\n)(?:00:)?(\d{1,2})(?:\n|$)/)?.[1] || 0);
     if (!secondsAtStart) return { blocked: 'The pick countdown is not readable', header: initial.header };
     const captured = await state.capture();
@@ -145,7 +175,7 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules }) {
     const fresh = await state.inspect();
     const rows = fresh.rows.filter(r => r.yahooPlayerId === card.yahooPlayerId && r.cells.length > 5);
     const position = card.meta.split('·')[0].trim();
-    if (ownPick(fresh.header) !== pick || fresh.autodraft || !fresh.playersSelected || rows.length !== 1) return { blocked: 'Live turn or available player changed', header: fresh.header };
+    if (ownPick(fresh.header) !== pick || fresh.inactivityNotice || fresh.autodraft || !fresh.playersSelected || rows.length !== 1) return { blocked: 'Live turn or available player changed', header: fresh.header };
     const identity = player(rows[0]);
     if (identity.name !== card.observedName || identity.position !== position || identity.team !== teamKey(card.meta.split('·')[1].trim())) throw Error('Preferred player identity disagrees with the visible Yahoo row');
     state.pending = { pick, ...identity, started, submittedAt: null };
@@ -203,7 +233,38 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules }) {
     const captured = await state.capture();
     if (!captured.snapshot || captured.snapshot.picks.length !== 120) throw Error('The complete 120-pick board is not available');
     const card = await state.sync(captured.snapshot);
-    return { reconciled: 120, owned: captured.snapshot.picks.filter(p => p.isMine).length, manuallyVerified: state.log.length, roster: card.roster, picks: captured.snapshot.picks, timings: state.log };
+    const owned = captured.snapshot.picks.filter(p => p.isMine);
+    const verified = new Set(state.log.filter(p => p.accepted).map(p => `${p.pick}:${p.yahooPlayerId}`));
+    const unverified = owned.filter(p => !verified.has(`${p.overallPick}:${p.yahooPlayerId}`));
+    return { reconciled: 120, owned: owned.length, manuallyVerified: state.log.length,
+      fullyManual: owned.length === 15 && unverified.length === 0,
+      unverifiedPicks: unverified.map(p => p.overallPick),
+      roster: card.roster, picks: captured.snapshot.picks, timings: state.log };
+  };
+  // Keep consecutive snake turns within one control call. Return compact
+  // progress; retain the full audit on state until the live clock has ended.
+  state.window = async function ({ maxPicks = 2, waitMs = 1000 } = {}) {
+    const results = [];
+    for (let i = 0; i < maxPicks; i++) {
+      const value = await state.batch({ waitMs });
+      results.push(value.result ? { pick: value.result.pick, name: value.result.name,
+        ms: value.result.elapsedMs, accepted: value.result.accepted } : value);
+      if (!value.result?.accepted) break;
+    }
+    return { manualVerified: state.log.length, results };
+  };
+  // Call immediately after closing the verified room-settings panel. Never
+  // return a recommendation to the chat for a second action while on clock.
+  state.startVerified = async function () {
+    const current = await state.recoverManual();
+    if (ownPick(current.header)) return state.window({ maxPicks: 2, waitMs: 1000 });
+    const captured = await state.capture();
+    if (captured.snapshot) {
+      // The room can advance while reading its two tabs.
+      if (ownPick(captured.header)) return state.window({ maxPicks: 2, waitMs: 1000 });
+      await state.sync(captured.snapshot, { requireRecommendation: false });
+    }
+    return state.window({ maxPicks: 2, waitMs: 20000 });
   };
   return state;
 }
