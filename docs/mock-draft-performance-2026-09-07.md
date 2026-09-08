@@ -101,4 +101,18 @@ Before the user fully restarted Edge, both mouse and keyboard input on the local
 
 Acceptance times in milliseconds, by overall pick: 8=4061, 9=2708, 24=3804, 25=2930, 40=2964, 41=2989, 56=3023, 57=2822, 72=2950, 73=2956, 88=3018, 89=3214, 104=2734, 105=3149, 120=3893. Flex changed from 0/1 to 1/1 after pick 56's third running back and remained correctly filled.
 
-The next free room, **Forward Progress 10987912**, starts September 7 at **8:52 PM Eastern**. Joined after the revised rehearsal passed; Yahoo confirmed Marcus in seat eight with approximately five minutes remaining. A fresh isolated Huddle mock session was created before joining. Actual live outcome is pending.
+The next free room, **Forward Progress 10987912**, started September 7 at **8:52 PM Eastern**. Joined after the revised rehearsal passed; Yahoo confirmed Marcus in seat eight with approximately five minutes remaining. A fresh isolated Huddle mock session was created before joining. The completed result follows.
+
+### Successful live execution: Forward Progress 10987912
+
+The actual Yahoo mock completed on September 7 at approximately **9:11 PM Eastern**: **15 manual selections, zero queued autopicks, zero unselected autopicks, 120/120 reconciled**. Each selection used Huddle's current preferred recommendation, a freshly observed available Yahoo player ID, a successful Draft action, and a matching accepted Results row with our ownership. All 15 post-pick Huddle receipts succeeded. There were zero recorded navigation errors.
+
+The complete read/reconcile/select/acceptance cycle averaged **6.247 seconds**, maximum **10.538 seconds**. Including the additional post-pick Huddle receipt, the slowest cycle was **12.165 seconds**. The final selection exceeded the ten-second aspiration by 0.538 seconds, while every pick remained comfortably within the actual 30-second turn. Waiting between turns is excluded from these figures.
+
+Yahoo's final roster and Huddle both showed **15/15 drafted, 9/9 starters covered, and 1/1 Flex covered**. T. McLaurin occupied Yahoo's W/R/T slot, matching the point at which Huddle first reported Flex covered. This confirms eligibility and capacity reconciliation; it does not establish the best weekly starting lineup.
+
+The exact previous B. Robinson collision was also verified live: at current pick 64, the completed log contained drafted Yahoo ID **40055** and the available table contained ID **34054**, both rendered B. Robinson/RB/ATL. Huddle accepted the snapshot, kept the identities separate, and continued through picks 72 and 73 manually.
+
+Audit artifacts: [complete 120-pick board](mock-10987912-results.tsv) and [all 15 submission timestamps and timings](mock-10987912-timings.json). The files were checked for a complete sequential board, unique Yahoo IDs, 15 owned selections, and matching timing/ownership records.
+
+After completion, the user raised a separate and valid roster-construction concern: the team has six RBs, four WRs, and two QBs. Execution success is not evidence of optimal player selection. The scoring audit, research, and proposed improvement criteria are in [the positional-mix retrospective](mock-10987912-positional-review.md).
