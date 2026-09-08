@@ -11,7 +11,7 @@ function setup({notice=true,acknowledge=true}={}) {
     if(selector==='button') ui.inactivityNotice=false;
     else if(!ui.inactivityNotice&&acknowledge)ui.autodraft=false;
   }});
-  const run=createYahooMockLoop({yahoo:{playwright:{locator,waitForTimeout:async()=>{if(!acknowledge)throw Error('Mode not acknowledged');}}},huddle:{},roomId:'1234',draftSlot:8,rules:{}});
+  const run=createYahooMockLoop({yahoo:{playwright:{locator,waitForTimeout:async()=>{if(!acknowledge)throw Error('Mode not acknowledged');}}},huddle:{},roomId:'1234',draftSlot:8,rules:{roster:{QB:1,RB:2,WR:2,TE:1,'W/R/T':1,K:1,DEF:1,BN:6}}});
   run.inspect=async()=>({...ui});
   return {run,ui,actions};
 }
@@ -39,4 +39,10 @@ test('completed roster is not reported fully manual when opening picks were unve
   const proof=await run.complete();assert.equal(proof.fullyManual,false);assert.deepEqual(proof.unverifiedPicks,[8,9,24,25,40,41]);
   run.log=picks.filter(p=>p.isMine).map(p=>({pick:p.overallPick,yahooPlayerId:p.yahooPlayerId,accepted:true}));
   assert.equal((await run.complete()).fullyManual,true);
+});
+test('controller derives completion from league size and excludes IR; rejects the wrong seat',()=>{
+  const args={yahoo:{},huddle:{},roomId:'1234',draftSlot:3,teamCount:6,rules:{roster:{QB:2,RB:3,WR:4,TE:1,'W/T':1,'W/R':1,K:1,DEF:2,BN:5,IR:2}}};
+  const run=createYahooMockLoop(args);assert.equal(run.rounds,20);assert.equal(run.expectedPicks,120);
+  assert.equal(createYahooMockLoop({...args,teamCount:10}).expectedPicks,200);
+  assert.throws(()=>createYahooMockLoop({...args,draftSlot:8}),/assigned seat/);
 });

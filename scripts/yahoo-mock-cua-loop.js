@@ -3,8 +3,12 @@
 // Load this function definition into the persistent CUA REPL, then pass already
 // verified Yahoo and Huddle tab handles. All browser actions use documented CUA
 // APIs; page evaluation only reads rendered DOM. This file never joins a room.
-function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules }) {
-  const state = { yahoo, huddle, roomId, draftSlot, rules, stage: 'prepared', log: [], events: [], pending: null, lastSnapshot: null, completedPicks: null };
+function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules, teamCount = 8 }) {
+  const rounds = Object.entries(rules.roster || {}).filter(([slot])=>!['IR','IL','NA'].includes(slot)).reduce((sum,[,count])=>sum+Number(count),0);
+  if (!Number.isInteger(teamCount) || teamCount < 2 || !Number.isInteger(rounds) || rounds < 1
+    || !Number.isInteger(draftSlot) || draftSlot < 1 || draftSlot > teamCount) throw Error('Verified team count, roster size and assigned seat are required');
+  const expectedPicks = teamCount * rounds;
+  const state = { yahoo, huddle, roomId, draftSlot, rules, teamCount, rounds, expectedPicks, stage: 'prepared', log: [], events: [], pending: null, lastSnapshot: null, completedPicks: null };
   const defenses = { Cardinals:'ARI', Falcons:'ATL', Ravens:'BAL', Bills:'BUF', Panthers:'CAR', Bears:'CHI', Bengals:'CIN', Browns:'CLE', Cowboys:'DAL', Broncos:'DEN', Lions:'DET', Packers:'GB', Texans:'HOU', Colts:'IND', Jaguars:'JAC', Chiefs:'KC', Raiders:'LV', Chargers:'LAC', Rams:'LAR', Dolphins:'MIA', Vikings:'MIN', Patriots:'NE', Saints:'NO', Giants:'NYG', Jets:'NYJ', Eagles:'PHI', Steelers:'PIT', '49ers':'SF', Seahawks:'SEA', Buccaneers:'TB', Titans:'TEN', Commanders:'WAS' };
   const teamKey = value => String(value).toUpperCase().replace(/^JAX$/, 'JAC');
   const ownPick = header => Number(header.match(/YOUR TURN\s*•\s*ROUND\s+\d+,\s*PICK\s+(\d+)/i)?.[1] || 0);
@@ -106,19 +110,20 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules }) {
       .sort((a, b) => a.overallPick - b.overallPick);
     if (picks.some((p, i) => p.overallPick !== i + 1)) throw Error('Yahoo results contain a pick gap');
     state.resultPicks = picks;
-    if (picks.length === 120) state.completedPicks = picks;
+    if (picks.length > expectedPicks) throw Error('Observed board exceeds the verified league draft size');
+    if (picks.length === expectedPicks) state.completedPicks = picks;
     return { data, picks };
   };
 
   state.capture = async function () {
     const results = await state.results();
     const picks = results.picks;
-    const data = picks.length === 120 ? results.data : await state.grid('Players');
-    const phase = picks.length === 120 ? 'completed' : /Draft Starting Soon|Waiting room/i.test(data.header) ? 'waiting' : 'drafting';
+    const data = picks.length === expectedPicks ? results.data : await state.grid('Players');
+    const phase = picks.length === expectedPicks ? 'completed' : /Draft Starting Soon|Waiting room/i.test(data.header) ? 'waiting' : 'drafting';
     const current = Number(data.header.match(/ROUND\s+\d+,\s*PICK\s+(\d+)/i)?.[1] || 0);
     if (phase === 'drafting' && current !== picks.length + 1) return { retry: true, header: data.header, count: picks.length };
     if (phase !== 'completed' && !data.autoKnown) throw Error('Yahoo Autodraft state is not visible');
-    const snapshot = { roomId: state.roomId, draftSlot: state.draftSlot, teamCount: 8, rules: state.rules, phase, autodraft: data.autodraft, observedAt: new Date().toISOString(), currentOverall: picks.length + 1, picks,
+    const snapshot = { roomId: state.roomId, draftSlot: state.draftSlot, teamCount: state.teamCount, rules: state.rules, phase, autodraft: data.autodraft, observedAt: new Date().toISOString(), currentOverall: picks.length + 1, picks,
       availablePlayers: phase === 'completed' ? [] : data.rows.filter(r => r.cells.length > 5).map(r => ({ ...player(r), expertRank: Number(r.cells[2]), adp: Number(r.cells[3]), byeWeek: Number(r.cells[4]) || null, projectedPoints: Number(r.cells[5].replaceAll(',', '')) })) };
     state.lastSnapshot = snapshot;
     return { snapshot, header: data.header };
@@ -199,8 +204,8 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules }) {
     // Persist the accepted pick immediately. No candidate availability is
     // inferred from the Results view; the next capture supplies a fresh pool.
     const current = Number(accepted.data.header.match(/ROUND\s+\d+,\s*PICK\s+(\d+)/i)?.[1] || 0);
-    if (accepted.picks.length === 120 || current === accepted.picks.length + 1) {
-      const receipt = { ...snapshot, phase: accepted.picks.length === 120 ? 'completed' : 'drafting',
+    if (accepted.picks.length === expectedPicks || current === accepted.picks.length + 1) {
+      const receipt = { ...snapshot, phase: accepted.picks.length === expectedPicks ? 'completed' : 'drafting',
         picks: accepted.picks, currentOverall: accepted.picks.length + 1, availablePlayers: [],
         autodraft: accepted.data.autodraft, observedAt: new Date().toISOString() };
       try {
@@ -231,13 +236,13 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules }) {
 
   state.complete = async function () {
     const captured = await state.capture();
-    if (!captured.snapshot || captured.snapshot.picks.length !== 120) throw Error('The complete 120-pick board is not available');
+    if (!captured.snapshot || captured.snapshot.picks.length !== expectedPicks) throw Error(`The complete ${expectedPicks}-pick board is not available`);
     const card = await state.sync(captured.snapshot);
     const owned = captured.snapshot.picks.filter(p => p.isMine);
     const verified = new Set(state.log.filter(p => p.accepted).map(p => `${p.pick}:${p.yahooPlayerId}`));
     const unverified = owned.filter(p => !verified.has(`${p.overallPick}:${p.yahooPlayerId}`));
-    return { reconciled: 120, owned: owned.length, manuallyVerified: state.log.length,
-      fullyManual: owned.length === 15 && unverified.length === 0,
+    return { reconciled: expectedPicks, owned: owned.length, manuallyVerified: state.log.length,
+      fullyManual: owned.length === rounds && unverified.length === 0,
       unverifiedPicks: unverified.map(p => p.overallPick),
       roster: card.roster, picks: captured.snapshot.picks, timings: state.log };
   };
