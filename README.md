@@ -16,12 +16,11 @@ September 2026 · AI-generated narration and an original orchestral score. The a
 
 ## Narrated draft replay
 
-Watch the second Huddle preview: a 60-second edited replay of the completed Yahoo mock, with Huddle recommendations, synthetic narration and original orchestral music.
+[![Watch Huddle's draft rehearsal with narration and original orchestral music](docs/assets/huddle-draft-rehearsal-preview.gif)](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-draft-narrated-landscape-1920x1080.mp4)
 
-- **[Landscape — 1920 × 1080](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-draft-narrated-landscape-1920x1080.mp4)**
-- **[LinkedIn feed — 1080 × 1350](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-draft-narrated-feed-1080x1350.mp4)**
-- **[X — 1280 × 720](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-draft-narrated-x-1280x720.mp4)**
+**[Watch with sound — 1920 × 1080](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-draft-narrated-landscape-1920x1080.mp4)** · **[LinkedIn feed — 1080 × 1350](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-draft-narrated-feed-1080x1350.mp4)** · **[X thread — 1280 × 720](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-draft-narrated-x-1280x720.mp4)**
 
+Watch the second Huddle preview: a 60-second edited replay of the completed Yahoo mock, with Huddle recommendations, synthetic narration and original orchestral music. The animated GIF is silent; click it for the video with sound.
 
 ## What it does
 
