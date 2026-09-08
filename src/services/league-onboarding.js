@@ -90,13 +90,14 @@ function buildLeagueConfig(input) {
   }
   const passingTouchdown = integer(input.passingTouchdown, 'Passing touchdown points', { min: 4, max: 6 });
   const rosterInput = input.roster || {};
+  const wrtSlots = rosterInput['R/W/T'] ?? rosterInput['W/R/T'] ?? rosterInput.FLEX;
   const roster = {
     QB: integer(rosterInput.QB ?? 1, 'QB roster slots', { min: 0, max: 4 }),
     WR: integer(rosterInput.WR ?? 2, 'WR roster slots', { min: 0, max: 8 }),
     RB: integer(rosterInput.RB ?? 2, 'RB roster slots', { min: 0, max: 8 }),
     TE: integer(rosterInput.TE ?? 1, 'TE roster slots', { min: 0, max: 4 }),
-    'W/R': integer(rosterInput['W/R'] ?? (rosterInput['R/W/T'] == null ? 1 : 0), 'WR/RB flex roster slots', { min: 0, max: 4 }),
-    'R/W/T': integer(rosterInput['R/W/T'] ?? 0, 'WR/RB/TE flex roster slots', { min: 0, max: 4 }),
+    'W/R': integer(rosterInput['W/R'] ?? (wrtSlots == null ? 1 : 0), 'WR/RB flex roster slots', { min: 0, max: 4 }),
+    'R/W/T': integer(wrtSlots ?? 0, 'WR/RB/TE flex roster slots', { min: 0, max: 4 }),
     K: integer(rosterInput.K ?? 1, 'K roster slots', { min: 0, max: 2 }),
     DEF: integer(rosterInput.DEF ?? 1, 'DEF roster slots', { min: 0, max: 2 }),
     BN: integer(rosterInput.BN ?? 6, 'Bench roster slots', { min: 0, max: 20 }),

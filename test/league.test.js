@@ -20,6 +20,12 @@ test('flex shares create targets appropriate to the confirmed roster', () => {
   assert.deepEqual(positionTargets(league.roster), { QB: 2, RB: 3.5, WR: 5, TE: 1.5, K: 1, DEF: 1 });
 });
 
+test('Yahoo W/R/T and Huddle R/W/T have identical positional demand', () => {
+  const base = { QB: 1, RB: 2, WR: 2, TE: 1, K: 1, DEF: 1 };
+  assert.deepEqual(positionTargets({ ...base, 'W/R/T': 1 }), positionTargets({ ...base, 'R/W/T': 1 }));
+  assert.deepEqual(positionTargets({ ...base, FLEX: 1 }), positionTargets({ ...base, 'R/W/T': 1 }));
+});
+
 test('snake draft owner and next turn are deterministic', () => {
   assert.equal(pickOwner(1, 6), 1);
   assert.equal(pickOwner(6, 6), 6);

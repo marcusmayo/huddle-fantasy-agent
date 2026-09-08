@@ -9,6 +9,7 @@ const baseLeague = require('../config/leagues/yahoo-example.json');
 const playerPool = require('../config/fixtures/demo-players.json');
 const { buildApp } = require('../src/server');
 const { MemoryStateStore } = require('../src/storage/json-state-store');
+const { buildLeagueConfig } = require('../src/services/league-onboarding');
 
 function runtime(tempDir, enabled = true) {
   return {
@@ -57,6 +58,14 @@ const newLeague = {
   yahooLeagueKey: '461.l.12345',
   yahooTeamKey: '461.l.12345.t.7'
 };
+
+test('manual Yahoo mock onboarding maps W/R/T to one canonical Flex without an extra W/R slot', () => {
+  const input = { ...newLeague, roster: { QB: 1, RB: 2, WR: 2, TE: 1, 'W/R/T': 1, K: 1, DEF: 1, BN: 6, IR: 0 } };
+  const config = buildLeagueConfig(input);
+  assert.equal(config.roster['R/W/T'], 1);
+  assert.equal(config.roster['W/R'], 0);
+  assert.equal(Object.values(config.roster).reduce((a, b) => a + b, 0), 15);
+});
 
 test('dashboard onboarding persists and activates an isolated league without restart', async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'huddle-onboard-'));

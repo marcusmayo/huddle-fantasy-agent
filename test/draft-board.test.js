@@ -9,6 +9,7 @@ const {
   availabilityAtPick,
   buildRecommendationCard,
   defaultPositionMaximums,
+  maximumStarterAssignments,
   scoreAvailablePlayers
 } = require('../src/domain/draft-board');
 
@@ -108,6 +109,34 @@ test('final recommendations reserve enough picks to complete every required star
   assert.match(skillPlayer.reasons.join(' '), /required starter slots/);
   assert.equal(kicker.feasible, true);
   assert.equal(defense.feasible, true);
+});
+
+test('Yahoo W/R/T, R/W/T and FLEX each cover exactly one RB, WR or TE slot', () => {
+  const base = { QB: 1, RB: 2, WR: 2, TE: 1, K: 1, DEF: 1 };
+  for (const alias of ['W/R/T', 'R/W/T', 'FLEX']) {
+    const flexLeague = { ...league, roster: { ...base, [alias]: 1, BN: 0 } };
+    assert.equal(maximumStarterAssignments(base, flexLeague.roster), 8);
+    for (const position of ['RB', 'WR', 'TE']) {
+      const counts = { ...base, [position]: base[position] + 1 };
+      assert.equal(maximumStarterAssignments(counts, flexLeague.roster), 9);
+      assert.equal(assessRosterConstraint({ position }, base, flexLeague).feasible, true);
+    }
+    assert.equal(assessRosterConstraint({ position: 'QB' }, base, flexLeague).feasible, false);
+    assert.equal(maximumStarterAssignments({ ...base, RB: 4, WR: 4, TE: 3 }, flexLeague.roster), 9);
+  }
+});
+
+test('Red Zone pick-57 roster covers Flex once and still reserves K and DEF', () => {
+  const positions = ['RB', 'WR', 'TE', 'RB', 'WR', 'QB', 'RB', 'WR'];
+  const picks = positions.map((position, index) => ({ playerId: `observed-${index}`, position, isMine: true }));
+  const roster = { QB: 1, RB: 2, WR: 2, TE: 1, 'W/R/T': 1, K: 1, DEF: 1, BN: 6 };
+  const card = buildRecommendationCard({ players: pool.players, picks, league: { ...league, roster }, draftSlot: 1 });
+  assert.equal(card.rosterCoverage.drafted, 8);
+  assert.equal(card.rosterCoverage.total, 15);
+  assert.equal(card.rosterCoverage.startingCovered, 7);
+  assert.equal(card.rosterCoverage.startingTotal, 9);
+  assert.equal(card.rosterCoverage.flexCovered, 1);
+  assert.equal(card.rosterCoverage.flexTotal, 1);
 });
 
 test('uncertain opponent supply produces a warning, not a roster ban', () => {

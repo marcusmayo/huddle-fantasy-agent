@@ -1466,6 +1466,11 @@ function renderMockReadiness(card) {
     ? `Room ${readiness.roomId} · seat ${state.session.draftSlot} · ${state.session.picks.length} picks reconciled · Yahoo Autodraft OFF · ${room.players.length} available candidates`
     : readiness.reasons.join(' ');
   $('#mock-sync-status').dataset.ready = String(readiness.ready);
+  const coverage = card.rosterCoverage;
+  const flexPositions = coverage ? [...new Set(coverage.flexTypes.flatMap(type => type.positions))].join('/') : '';
+  $('#mock-roster-coverage').textContent = coverage
+    ? `Roster: ${coverage.drafted}/${coverage.total} drafted · Starters: ${coverage.startingCovered}/${coverage.startingTotal} covered${coverage.flexTotal ? ` · Flex (${flexPositions}): ${coverage.flexCovered}/${coverage.flexTotal} covered` : ''}`
+    : '';
   if (readiness.ready) {
     const sessionId = state.session.id;
     mockFreshnessTimer = setTimeout(() => {

@@ -1,12 +1,11 @@
 'use strict';
 
-const { draftedRosterSize, nextUserPick, pickOwner, positionTargets } = require('./league');
+const { FLEX_POSITIONS, draftedRosterSize, nextUserPick, pickOwner, positionTargets } = require('./league');
 
 const BENCH_SLOTS = new Set(['BN', 'BENCH', 'IR', 'IL', 'NA']);
 const SLOT_ELIGIBILITY = {
   QB: ['QB'], RB: ['RB'], WR: ['WR'], TE: ['TE'], K: ['K'], DEF: ['DEF'], DST: ['DEF'],
-  'W/R': ['WR', 'RB'], 'W/T': ['WR', 'TE'], 'R/W/T': ['RB', 'WR', 'TE'], FLEX: ['RB', 'WR', 'TE'],
-  'Q/W/R/T': ['QB', 'WR', 'RB', 'TE'], SUPERFLEX: ['QB', 'WR', 'RB', 'TE']
+  ...FLEX_POSITIONS
 };
 
 const STYLES = {
@@ -295,6 +294,12 @@ function buildRecommendationCard(input) {
   const currentOverall = picks.length + 1;
   const owner = input.draftSlot ? pickOwner(currentOverall, input.league.teamCount) : null;
   const preferred = board.find((item) => item.rosterFeasible) || null;
+  const mine = countMineByPosition(picks, new Map(input.players.map(player => [player.id, player])));
+  const roster = input.league.roster;
+  const dedicatedRoster = Object.fromEntries(Object.entries(roster).filter(([slot]) => !FLEX_POSITIONS[slot]));
+  const startingCovered = maximumStarterAssignments(mine, roster);
+  const flexTypes = Object.entries(roster).filter(([slot, count]) => FLEX_POSITIONS[slot] && count)
+    .map(([slot, count]) => ({ slot, count, positions: FLEX_POSITIONS[slot] }));
   return {
     generatedAt: new Date().toISOString(),
     currentOverall,
@@ -302,6 +307,15 @@ function buildRecommendationCard(input) {
     onClock: Boolean(input.draftSlot && owner === input.draftSlot),
     nextUserPick: nextUserPick(currentOverall, input.league.teamCount, input.draftSlot, owner !== input.draftSlot),
     preferred,
+    rosterCoverage: {
+      drafted: picks.filter(pick => pick.isMine).length,
+      total: draftedRosterSize(roster),
+      startingCovered,
+      startingTotal: starterSlots(roster).length,
+      flexCovered: startingCovered - maximumStarterAssignments(mine, dedicatedRoster),
+      flexTotal: flexTypes.reduce((total, type) => total + type.count, 0),
+      flexTypes
+    },
     alternatives: {
       safe: safe.find((item) => item.rosterFeasible && item.player.id !== preferred?.player.id) || preferred,
       upside: upside.find((item) => item.rosterFeasible && item.player.id !== preferred?.player.id) || preferred
