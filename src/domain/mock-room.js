@@ -80,6 +80,9 @@ function checkRules(snapshot, league) {
     return JSON.stringify(Object.entries(result).sort());
   };
   if (canonical(rules.roster) !== canonical(league.roster)) fail('MOCK_ROSTER_MISMATCH', 'Yahoo and Huddle starting slots or bench depth differ.');
+  if (rules.rosterMaximums && Object.entries(rules.rosterMaximums).some(([position, count]) => !POSITIONS.has(position) || !Number.isInteger(count) || count < 0 || count > 30)) {
+    fail('INVALID_MOCK_MAXIMUMS', 'Yahoo position limits must be observed non-negative integers.');
+  }
 }
 
 function prepareMockSnapshot({ snapshot, session, league, playerPool, now }) {
@@ -89,6 +92,9 @@ function prepareMockSnapshot({ snapshot, session, league, playerPool, now }) {
   if (!snapshot || !/^\d{1,20}$/.test(String(snapshot.roomId || ''))) fail('INVALID_MOCK_ROOM', 'A verified Yahoo mock room number is required.');
   if (session.mockRoom && session.mockRoom.roomId !== String(snapshot.roomId)) fail('MOCK_ROOM_MISMATCH', 'This practice session belongs to another Yahoo room.');
   checkRules(snapshot, league);
+  if (session.mockRoom?.rules.rosterMaximums && JSON.stringify(session.mockRoom.rules.rosterMaximums) !== JSON.stringify(snapshot.rules.rosterMaximums)) {
+    fail('MOCK_MAXIMUMS_CHANGED', 'Yahoo position limits changed or are missing; verify the room settings.');
+  }
   if (!Number.isInteger(snapshot.draftSlot) || snapshot.draftSlot < 1 || snapshot.draftSlot > league.teamCount) fail('INVALID_DRAFT_SLOT', 'Verify your Yahoo seat.');
   if (session.picks.length && session.draftSlot !== snapshot.draftSlot) fail('MOCK_SEAT_MISMATCH', 'The verified seat changed after picks were recorded.');
   const observedAt = Date.parse(snapshot.observedAt);
@@ -110,6 +116,7 @@ function prepareMockSnapshot({ snapshot, session, league, playerPool, now }) {
     const isMine = pickOwner(index + 1, league.teamCount) === snapshot.draftSlot;
     if (typeof raw.isMine !== 'boolean' || raw.isMine !== isMine) fail('MOCK_OWNERSHIP_MISMATCH', `Yahoo ownership disagrees with the seat at pick ${index + 1}.`);
     const previous = session.picks[index];
+    const evidence = previous?.projectedPoints != null ? previous : (session.mockRoom?.players || []).find(candidate => samePlayer(candidate, player));
     if (previous?.yahooPlayerId && !player.yahooPlayerId) {
       fail('MOCK_PLAYER_ID_REQUIRED', `Read the Yahoo player ID again for saved pick ${index + 1}.`);
     }
@@ -127,7 +134,13 @@ function prepareMockSnapshot({ snapshot, session, league, playerPool, now }) {
       resolutionStatus: player.resolutionStatus,
       isMine,
       observedAt: snapshot.observedAt,
-      source: 'yahoo-browser-observation'
+      source: 'yahoo-browser-observation',
+      ...(evidence?.projectedPoints != null ? {
+        projectedPoints: evidence.projectedPoints,
+        projectionSource: 'yahoo-browser-projected',
+        projectionObservedAt: evidence.projectionObservedAt || session.mockRoom.observedAt,
+        byeWeek: evidence.byeWeek ?? null
+      } : {})
     };
   });
   const seen = new Set();
@@ -146,6 +159,8 @@ function prepareMockSnapshot({ snapshot, session, league, playerPool, now }) {
       projectedPoints: raw.projectedPoints,
       floor: Math.max(0, raw.projectedPoints - spread),
       ceiling: raw.projectedPoints + spread,
+      rangeEstimated: true,
+      byeWeek: Number.isInteger(raw.byeWeek) && raw.byeWeek >= 1 && raw.byeWeek <= 18 ? raw.byeWeek : null,
       expertRank: Number.isFinite(raw.expertRank) && raw.expertRank > 0 ? raw.expertRank : index + 1,
       adp: Number.isFinite(raw.adp) && raw.adp > 0 ? raw.adp : null,
       injuryStatus: String(raw.injuryStatus || '').slice(0, 30),

@@ -1,5 +1,7 @@
 'use strict';
 
+const { leagueProjection } = require('../domain/league-projections');
+
 const crypto = require('node:crypto');
 const { buildRecommendationCard, STYLES } = require('../domain/draft-board');
 const { draftedRosterSize } = require('../domain/league');
@@ -420,9 +422,10 @@ class DraftService {
     if (!session) return this.getSession(id);
     session.evidenceReviews ||= [];
     const rawCard = buildRecommendationCard({
-      players: session.sourceMode === 'mock' ? this.sessionPlayers(id) : this.playerPool.players,
+      players: session.sourceMode === 'mock' ? this.sessionPlayers(id) : this.playerPool.players.map(player => leagueProjection(player, this.league)),
       picks: session.picks,
-      league: this.league,
+      league: session.sourceMode === 'mock' && session.mockRoom?.rules.rosterMaximums
+        ? { ...this.league, rosterMaximums: session.mockRoom.rules.rosterMaximums } : this.league,
       draftSlot: session.draftSlot
     });
     const draftedIds = new Set(session.picks.map((pick) => pick.playerId));
@@ -469,10 +472,10 @@ class DraftService {
           scoring: structuredClone(this.league.scoring)
         },
         ranking: {
-          algorithm: 'deterministic-v1',
+          algorithm: 'roster-contribution-v2',
           weights: structuredClone(STYLES.balanced),
           playerInputs: ['projected points', 'floor', 'ceiling', 'ECR', 'ADP', 'FantasyPros normalized positional rank', 'Tank01 ADP/projection rank', 'Sleeper add/drop trend', 'tier', 'injury status', 'risk'],
-          computedFactors: ['source consensus', 'value over replacement', 'positional scarcity', 'roster need', 'next-turn urgency', 'upside', 'floor', 'risk', 'K/DEF draft phase']
+          computedFactors: ['marginal legal-lineup contribution', 'diminishing bench depth', 'known bye coverage', 'remaining league replacement demand', 'actual uncovered starter/Flex need', 'next-turn urgency', 'provider upside only', 'injury risk', 'Yahoo position limits', 'K/DEF draft phase']
         },
         sourceReconciliation: structuredClone(this.playerPool.sourceEvidence || {
           algorithm: 'primary-source-only',

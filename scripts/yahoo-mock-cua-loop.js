@@ -91,7 +91,7 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules }) {
     if (phase === 'drafting' && current !== picks.length + 1) return { retry: true, header: data.header, count: picks.length };
     if (phase !== 'completed' && !data.autoKnown) throw Error('Yahoo Autodraft state is not visible');
     const snapshot = { roomId: state.roomId, draftSlot: state.draftSlot, teamCount: 8, rules: state.rules, phase, autodraft: data.autodraft, observedAt: new Date().toISOString(), currentOverall: picks.length + 1, picks,
-      availablePlayers: phase === 'completed' ? [] : data.rows.filter(r => r.cells.length > 5).map(r => ({ ...player(r), expertRank: Number(r.cells[2]), adp: Number(r.cells[3]), projectedPoints: Number(r.cells[5].replaceAll(',', '')) })) };
+      availablePlayers: phase === 'completed' ? [] : data.rows.filter(r => r.cells.length > 5).map(r => ({ ...player(r), expertRank: Number(r.cells[2]), adp: Number(r.cells[3]), byeWeek: Number(r.cells[4]) || null, projectedPoints: Number(r.cells[5].replaceAll(',', '')) })) };
     state.lastSnapshot = snapshot;
     return { snapshot, header: data.header };
   };
@@ -114,7 +114,8 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules }) {
         meta: document.querySelector('#preferred-meta')?.textContent,
         observedName: document.querySelector('#preferred-observed-name')?.textContent.replace(/^Yahoo name:\s*/, ''),
         yahooPlayerId: document.querySelector('#preferred-observed-name')?.getAttribute('data-yahoo-player-id'),
-        roster: document.querySelector('#mock-roster-coverage')?.textContent
+        roster: document.querySelector('#mock-roster-coverage')?.textContent,
+        why: document.querySelector('#preferred-why')?.innerText
       }), undefined, { timeoutMs: 6000 });
       if (!card.pending && /^Import stopped:/.test(card.error || '')) throw Error(card.error);
       if (!card.pending && card.inputEmpty && card.pick === snapshot.currentOverall) {
@@ -161,7 +162,8 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules }) {
     if (!actual?.isMine || actual.yahooPlayerId !== identity.yahooPlayerId) throw Error(`Draft acceptance not verified: ${JSON.stringify({ pending: state.pending, actual })}`);
     const observedBeforeExpiry = Date.now() - started < Math.max(0, secondsAtStart - 1) * 1000;
     if (state.pending.responseError && !observedBeforeExpiry) throw Error('Player was accepted, but the input response and clock do not prove a manual selection');
-    const entry = { pick, name: card.name, ...identity, elapsedMs: Date.now() - started, secondsAtStart, submittedAt: state.pending.submittedAt, accepted: true, rosterBeforePick: card.roster };
+    const entry = { pick, name: card.name, ...identity, projectedPoints: snapshot.availablePlayers.find(p => p.yahooPlayerId === identity.yahooPlayerId)?.projectedPoints, byeWeek: snapshot.availablePlayers.find(p => p.yahooPlayerId === identity.yahooPlayerId)?.byeWeek, why: card.why, elapsedMs: Date.now() - started, secondsAtStart, submittedAt: state.pending.submittedAt, accepted: true, rosterBeforePick: card.roster };
+    (state.decisionSnapshots ||= []).push({ snapshot, card });
     state.log.push(entry);
     state.pending = null;
     // Persist the accepted pick immediately. No candidate availability is

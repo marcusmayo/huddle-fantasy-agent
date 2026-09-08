@@ -662,6 +662,9 @@ async function selectLeague(leagueId) {
   state.league = await api(scoped());
   $('#league-name').textContent = `${state.league.name} · ${state.league.targetTeam}`;
   $('#weekly-league-name').textContent = `${state.league.name} · ${state.league.targetTeam}`;
+  const ruleSummary = `${state.league.teamCount} teams · ${Object.entries(state.league.roster).filter(([, count]) => count).map(([slot, count]) => `${slot} ${count}`).join(' · ')} · Reception ${state.league.scoring?.offense?.reception ?? 'unverified'} pt · Passing TD ${state.league.scoring?.offense?.passingTouchdown ?? 'unverified'} pts`;
+  $('#league-rule-summary').textContent = ruleSummary;
+  $('#weekly-rule-summary').textContent = ruleSummary;
   const verificationWarnings = state.league.provenance?.warnings || [];
   $('#league-verification-warning').classList.toggle('hidden', !verificationWarnings.length);
   $('#league-verification-warning').textContent = verificationWarnings.length
@@ -862,6 +865,10 @@ function weeklyKey(review) {
 function weeklyTemplate() {
   const week = Number($('#weekly-week').value || 1);
   const season = Number($('#weekly-season').value || new Date().getFullYear());
+  const flexEligibility = {'W/T':['WR','TE'],'W/R':['RB','WR'],'R/W/T':['RB','WR','TE'],'W/R/T':['RB','WR','TE'],FLEX:['RB','WR','TE'],SUPERFLEX:['QB','RB','WR','TE'],'Q/W/R/T':['QB','RB','WR','TE']};
+  const activePositions = [...new Set(Object.entries(state.league.roster).filter(([slot,count]) => count && !['BN','BENCH','IR','IL','NA'].includes(slot)).flatMap(([slot]) => flexEligibility[slot] || [slot === 'DST' ? 'DEF' : slot]))];
+  const benchPositions = activePositions.filter(position => !['K','DEF'].includes(position));
+  if (!benchPositions.length) benchPositions.push(...activePositions);
   const teams = Array.from({ length: state.league.teamCount }, (_, index) => {
     const isTarget = index === 0;
     const pairedIndex = index % 2 === 0 ? index + 1 : index - 1;
@@ -888,18 +895,12 @@ function weeklyTemplate() {
     source: 'manual-normalized-import',
     observedAt: new Date().toISOString(),
     teams,
-    roster: [
-      { playerId: 'qb-starter', name: 'Starting Quarterback', position: 'QB', rosterSlot: 'QB', actualPoints: 18.2, projectedPoints: 19.5, remainingProjectedPoints: 245 },
-      { playerId: 'rb-starter-1', name: 'Starting Running Back', position: 'RB', rosterSlot: 'RB', actualPoints: 14.1, projectedPoints: 13.5, remainingProjectedPoints: 178 },
-      { playerId: 'wr-starter-1', name: 'Starting Wide Receiver', position: 'WR', rosterSlot: 'WR', actualPoints: 11.8, projectedPoints: 15.2, remainingProjectedPoints: 190 },
-      { playerId: 'te-starter', name: 'Starting Tight End', position: 'TE', rosterSlot: 'TE', actualPoints: 7.4, projectedPoints: 8.1, remainingProjectedPoints: 105 },
-      { playerId: 'bench-rb', name: 'Bench Running Back', position: 'RB', rosterSlot: 'BN', actualPoints: 19.6, projectedPoints: 10.1, remainingProjectedPoints: 120 },
-      { playerId: 'bench-wr', name: 'Bench Wide Receiver', position: 'WR', rosterSlot: 'BN', actualPoints: 4.2, projectedPoints: 6.1, remainingProjectedPoints: 72 }
-    ],
-    availablePlayers: [
-      { playerId: 'free-agent-wr', name: 'Available Wide Receiver', position: 'WR', nflTeam: 'FA', available: true, projectedPoints: 9.5, remainingProjectedPoints: 115, sleeperTrend: { direction: 'rising' } },
-      { playerId: 'free-agent-rb', name: 'Available Running Back', position: 'RB', nflTeam: 'FA', available: true, projectedPoints: 8.2, remainingProjectedPoints: 102 }
-    ],
+    roster: Object.entries(state.league.roster).filter(([slot]) => !['IR', 'IL', 'NA'].includes(slot)).flatMap(([slot, count]) => Array.from({length:count}, (_, index) => ({
+      playerId: `replace-${slot}-${index + 1}`, name: `Replace ${slot} player ${index + 1}`,
+      position: ['BN','BENCH'].includes(slot) ? benchPositions[index % benchPositions.length] : flexEligibility[slot]?.[0] || (slot === 'DST' ? 'DEF' : slot),
+      rosterSlot: slot, actualPoints: null, projectedPoints: null, remainingProjectedPoints: null
+    }))),
+    availablePlayers: [],
     transactions: [],
     waiver: { budgetRemaining: 100, priority: 5 },
     holdThreshold: 2
@@ -1061,7 +1062,7 @@ function renderWeekly(review) {
   $('#waiver-move').textContent = waiver.action === 'ADD_DROP'
     ? `Drop ${waiver.drop.name} (${waiver.drop.position}) for ${waiver.add.name} (${waiver.add.position}).`
     : 'Keep the current roster and preserve waiver capital this week.';
-  $('#waiver-gain').textContent = `${waiver.expectedPointsGained} expected points gained`;
+  $('#waiver-gain').textContent = `${waiver.expectedPointsGained} ${waiver.gainBasis || 'projected points gained'}`;
   $('#waiver-faab').textContent = waiver.faab.recommended == null ? `${waiver.faab.percent}% FAAB guidance` : `$${waiver.faab.recommended} · ${waiver.faab.percent}% FAAB`;
   $('#waiver-confidence').textContent = `${waiver.confidenceLabel} confidence`;
   $('#waiver-reasons').innerHTML = waiver.reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join('');
@@ -1074,6 +1075,23 @@ function renderWeekly(review) {
       ? `<article><strong>Closest reviewed move</strong><span>${escapeHtml(considered[0].add.name)} for ${escapeHtml(considered[0].drop.name)} (+${considered[0].expectedPointsGained}; below threshold)</span></article>`
       : '';
   renderWeeklyPlayerBoard(review);
+
+  const upcoming = review.projectedLineup;
+  $('#weekly-projected-summary').textContent = upcoming
+    ? `${upcoming.total} projected lineup points. ${upcoming.completeProjections ? upcoming.basis : 'Some weekly projections are missing; this lineup is incomplete.'}`
+    : 'Recalculate this saved week to evaluate the upcoming lineup.';
+  $('#weekly-projected-lineup').innerHTML = (upcoming?.assignments || []).map(({ slot, player, locked }) => {
+    const context = player?.weeklyEvidence;
+    const detail = player ? [
+      `${player.adjustedWeeklyPoints ?? 'Missing'} projected points`,
+      locked ? 'Locked' : '',
+      context?.opponent ? `vs ${context.opponent}` : 'NFL opponent not supplied',
+      context?.defense?.rank ? `${player.position} matchup rank ${context.defense.rank} (source convention)` : '',
+      ...(context?.effects || []), ...(context?.warnings || []),
+      ...(context?.news || []).map(item => `${item.source}, ${item.publishedAt}: ${item.summary}`)
+    ].filter(Boolean).join(' · ') : 'No eligible player with a positive projection.';
+    return `<article><strong>${escapeHtml(slot)} · ${escapeHtml(player?.name || 'Unfilled')}</strong><span>${escapeHtml(detail)}</span></article>`;
+  }).join('');
 
   $('#weekly-standings').innerHTML = review.standings.map((team) => `<tr class="${team.teamId === target.teamId ? 'target-team-row' : ''}">
     <td>${team.standingRank ?? '—'}</td><td><strong>${escapeHtml(team.name)}</strong><small>${escapeHtml(team.result || 'pending')}</small></td>
@@ -1095,6 +1113,7 @@ function renderWeekly(review) {
     ['Yahoo authority', evidence.yahooAuthority],
     ['Shared player source', `${evidence.sharedPlayerSource} · ${evidence.sharedFetchedAt ? new Date(evidence.sharedFetchedAt).toLocaleString() : 'bundled/current cache'}`],
     ['Available pool', `${evidence.availablePlayersReviewed} league-visible players reviewed`],
+    ['Weekly context', evidence.weeklyContext ? `${evidence.weeklyContext.fresh}/${evidence.weeklyContext.players} fresh · ${evidence.weeklyContext.matchups} NFL opponents · ${evidence.weeklyContext.defenses} positional defenses · ${evidence.weeklyContext.news} players with dated news. ${evidence.weeklyContext.liveFeed}` : 'Coverage unavailable for this older review'],
     ['Source coverage', `${evidence.sourceCoverage.fantasyPros} FantasyPros · ${evidence.sourceCoverage.tank01} Tank01 · ${evidence.sourceCoverage.sleeper} Sleeper`]
   ].map(([label, value]) => `<article><strong>${escapeHtml(label)}</strong><span>${escapeHtml(value)}</span></article>`).join('');
 }
@@ -1469,7 +1488,7 @@ function renderMockReadiness(card) {
   const coverage = card.rosterCoverage;
   const flexPositions = coverage ? [...new Set(coverage.flexTypes.flatMap(type => type.positions))].join('/') : '';
   $('#mock-roster-coverage').textContent = coverage
-    ? `Roster: ${coverage.drafted}/${coverage.total} drafted · Starters: ${coverage.startingCovered}/${coverage.startingTotal} covered${coverage.flexTotal ? ` · Flex (${flexPositions}): ${coverage.flexCovered}/${coverage.flexTotal} covered` : ''}`
+    ? `Roster: ${coverage.drafted}/${coverage.total} drafted · Starters: ${coverage.startingCovered}/${coverage.startingTotal} covered${coverage.flexTotal ? ` · Flex (${flexPositions}): ${coverage.flexCovered}/${coverage.flexTotal} covered` : ''} · Mix: ${Object.entries(coverage.positions || {}).map(([position, count]) => `${position} ${count}`).join(', ')}`
     : '';
   if (readiness.ready) {
     const sessionId = state.session.id;

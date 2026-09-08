@@ -1,5 +1,9 @@
 'use strict';
 
+const { FLEX_POSITIONS } = require('./league');
+const { applyWeeklyContext, unavailable } = require('./weekly-context');
+const { seasonLineup } = require('./roster-value');
+
 const BENCH_SLOTS = new Set(['BN', 'BENCH', 'IR', 'IL', 'NA']);
 const HEALTHY_STATUSES = new Set(['', 'ACTIVE', 'HEALTHY', 'OK', 'PROBABLE']);
 const SLOT_ELIGIBILITY = {
@@ -15,7 +19,8 @@ const SLOT_ELIGIBILITY = {
   'R/W/T': ['RB', 'WR', 'TE'],
   FLEX: ['RB', 'WR', 'TE'],
   'Q/W/R/T': ['QB', 'WR', 'RB', 'TE'],
-  SUPERFLEX: ['QB', 'WR', 'RB', 'TE']
+  SUPERFLEX: ['QB', 'WR', 'RB', 'TE'],
+  ...FLEX_POSITIONS
 };
 
 function weeklyError(code, message, details) {
@@ -39,6 +44,11 @@ function position(value) {
 
 function playerIdentity(player) {
   return String(player?.playerId || player?.id || player?.name || '').trim().toLowerCase();
+}
+
+function canonicalSlot(value) {
+  const slot = String(value || '').trim().toUpperCase();
+  return ['W/R/T', 'FLEX'].includes(slot) ? 'R/W/T' : slot;
 }
 
 function normalizePlayer(player, league, poolByIdentity = new Map(), { preferSharedProjections = false } = {}) {
@@ -68,7 +78,7 @@ function normalizePlayer(player, league, poolByIdentity = new Map(), { preferSha
     name,
     position: position(player?.position || shared?.position),
     nflTeam: String(player?.nflTeam || player?.team || shared?.team || '').trim().toUpperCase() || null,
-    rosterSlot: String(player?.rosterSlot || player?.slot || '').trim().toUpperCase() || null,
+    rosterSlot: canonicalSlot(player?.rosterSlot || player?.slot) || null,
     actualPoints,
     projectedPoints,
     remainingProjectedPoints,
@@ -160,7 +170,7 @@ function eligible(player, slot) {
   return (SLOT_ELIGIBILITY[slot] || [slot]).includes(position(player.position));
 }
 
-function optimizeLineup(players, roster) {
+function optimizeLineup(players, roster, valueField = 'actualPoints') {
   const slots = startingSlots(roster).sort((a, b) => {
     const aCount = (SLOT_ELIGIBILITY[a.slot] || [a.slot]).length;
     const bCount = (SLOT_ELIGIBILITY[b.slot] || [b.slot]).length;
@@ -174,7 +184,7 @@ function optimizeLineup(players, roster) {
     groups.get(key).push(player);
   }
   for (const group of groups.values()) {
-    group.sort((a, b) => finite(b.actualPoints) - finite(a.actualPoints));
+    group.sort((a, b) => finite(b[valueField]) - finite(a[valueField]));
   }
   const positions = [...groups.keys()].sort();
   const positionIndex = new Map(positions.map((value, index) => [value, index]));
@@ -194,7 +204,7 @@ function optimizeLineup(players, roster) {
       const nextCounts = [...counts];
       nextCounts[index] += 1;
       const next = solve(slotIndex + 1, nextCounts);
-      const total = finite(player.actualPoints) + next.total;
+      const total = finite(player[valueField]) + next.total;
       if (total > best.total) {
         best = {
           total,
@@ -212,6 +222,20 @@ function optimizeLineup(players, roster) {
 function isStarter(player) {
   if (typeof player.starter === 'boolean') return player.starter;
   return !BENCH_SLOTS.has(String(player.rosterSlot || '').toUpperCase());
+}
+
+function projectedLineup(players, league, valueField = 'adjustedWeeklyPoints') {
+  const remaining = { ...league.roster };
+  const fixed = players.filter(player => isStarter(player) && (player.locked || player.gameStarted));
+  const assignments = fixed.map(player => {
+    remaining[player.rosterSlot] = Math.max(0, Number(remaining[player.rosterSlot] || 0) - 1);
+    return { slot: player.rosterSlot, player, locked: true };
+  });
+  const movable = players.filter(player => !player.locked && !player.gameStarted
+    && !['IR', 'IL', 'NA'].includes(player.rosterSlot)
+    && (valueField !== 'adjustedWeeklyPoints' || player.weeklyEligible !== false));
+  const optimal = seasonLineup(movable, remaining, valueField);
+  return { total: round(optimal.total + fixed.reduce((sum, player) => sum + finite(player[valueField]), 0)), assignments: [...assignments, ...optimal.assignments] };
 }
 
 function lineupReview(players, league) {
@@ -302,14 +326,27 @@ function confidenceFor(candidate, drop) {
 }
 
 function waiverRecommendation({ roster, availablePlayers, league, waiver = {}, holdThreshold = 2 }) {
-  const droppable = roster.filter((player) => !isStarter(player) && !player.noCut && !player.locked);
+  const droppable = roster.filter((player) => ['BN', 'BENCH'].includes(player.rosterSlot) && !isStarter(player) && !player.noCut && !player.locked && !player.gameStarted);
+  const useWeekly = roster.every(player => player.adjustedWeeklyPoints != null || ['IR', 'IL', 'NA'].includes(player.rosterSlot));
+  const valueField = useWeekly ? 'adjustedWeeklyPoints' : 'remainingProjectedPoints';
+  const gainBasis = useWeekly ? 'projected starting-lineup points this week' : 'remaining-season lineup projection; weekly projections incomplete';
+  const before = projectedLineup(roster, league, valueField);
   const evaluated = [];
-  for (const candidate of availablePlayers.filter((player) => player.available !== false)) {
-    const compatible = droppable.filter((player) => dropCompatible(candidate, player));
-    const candidates = compatible.length ? compatible : droppable;
-    const drop = [...candidates].sort((a, b) => finite(projection(a)) - finite(projection(b)))[0];
-    if (!drop || projection(candidate) == null || projection(drop) == null) continue;
-    const expectedPointsGained = round(finite(projection(candidate)) - finite(projection(drop)));
+  for (const candidate of availablePlayers.filter((player) => player.available === true && !player.locked && !player.gameStarted && !unavailable.has(player.injuryStatus))) {
+    if (candidate[valueField] == null || (useWeekly && candidate.weeklyEligible === false)) continue;
+    const options = droppable.flatMap(drop => {
+      if (drop[valueField] == null) return [];
+      const after = [...roster.filter(player => player !== drop), { ...candidate, rosterSlot: 'BN' }];
+      const maximum = league.rosterMaximums?.[candidate.position];
+      if (maximum != null && after.filter(player => player.position === candidate.position).length > maximum) return [];
+      const lineup = projectedLineup(after, league, valueField);
+      if (lineup.assignments.filter(item => item.player).length < before.assignments.filter(item => item.player).length) return [];
+      return [{ drop, gain: round(lineup.total - before.total) }];
+    }).sort((a, b) => b.gain - a.gain || finite(projection(a.drop)) - finite(projection(b.drop)));
+    const choice = options[0];
+    if (!choice) continue;
+    const drop = choice.drop;
+    const expectedPointsGained = choice.gain;
     const trendAdjustment = candidate.sleeperTrend?.direction === 'rising' ? 0.25
       : candidate.sleeperTrend?.direction === 'falling' ? -0.25 : 0;
     evaluated.push({
@@ -332,6 +369,7 @@ function waiverRecommendation({ roster, availablePlayers, league, waiver = {}, h
       add: item.candidate,
       drop: item.drop,
       expectedPointsGained: item.expectedPointsGained,
+      gainBasis,
       confidence: item.confidence,
       confidenceLabel: item.confidence >= 0.8 ? 'high' : item.confidence >= 0.6 ? 'medium' : 'low',
       faab: {
@@ -348,6 +386,7 @@ function waiverRecommendation({ roster, availablePlayers, league, waiver = {}, h
   if (!best || best.expectedPointsGained < threshold) {
     return {
       action: 'HOLD',
+      gainBasis,
       expectedPointsGained: best?.expectedPointsGained || 0,
       confidence: best?.confidence || 0.7,
       confidenceLabel: best?.confidence >= 0.8 ? 'high' : best?.confidence >= 0.6 ? 'medium' : 'low',
@@ -372,7 +411,7 @@ function waiverRecommendation({ roster, availablePlayers, league, waiver = {}, h
     claimPlan,
     alternatives: claimPlan.slice(1),
     reasons: [
-      `${best.candidate.name} projects ${best.expectedPointsGained} points above ${best.drop.name} in this league's scoring.`,
+      `${best.candidate.name} for ${best.drop.name} adds ${best.expectedPointsGained} ${gainBasis}.`,
       best.candidate.sleeperTrend?.direction === 'rising'
         ? 'Sleeper add activity is rising and breaks a close projection tie.'
         : 'The recommendation is driven by league-scored projection value, not market activity.'
@@ -412,9 +451,10 @@ function validateWeeklySnapshot(snapshot, league, expectedWeek) {
   const targetMatches = (snapshot?.teams || []).filter((team) => team.isTarget || team.name === league.targetTeam);
   if (targetMatches.length !== 1) details.push(`exactly one team must match target team ${league.targetTeam} or set isTarget=true`);
   const usedSlots = new Map();
-  const configuredSlots = new Map(Object.entries(league.roster || {}).map(([slot, count]) => [String(slot).toUpperCase(), Number(count) || 0]));
+  const configuredSlots = new Map();
+  for (const [slot, count] of Object.entries(league.roster || {})) configuredSlots.set(canonicalSlot(slot), (configuredSlots.get(canonicalSlot(slot)) || 0) + Number(count));
   for (const player of snapshot?.roster || []) {
-    const slot = String(player?.rosterSlot || player?.slot || '').trim().toUpperCase();
+    const slot = canonicalSlot(player?.rosterSlot || player?.slot);
     if (!slot) {
       details.push(`roster player ${player?.name || '(missing)'} requires a rosterSlot`);
       continue;
@@ -435,7 +475,10 @@ function validateWeeklySnapshot(snapshot, league, expectedWeek) {
   return week;
 }
 
-function buildWeeklyReview({ snapshot, league, playerPool = { players: [] }, expectedWeek, preferSharedProjections = false }) {
+function buildWeeklyReview({ snapshot, league, playerPool = { players: [] }, expectedWeek, preferSharedProjections = false, now = new Date() }) {
+  const rosterSettings = {};
+  for (const [slot, count] of Object.entries(league.roster)) rosterSettings[canonicalSlot(slot)] = (rosterSettings[canonicalSlot(slot)] || 0) + count;
+  league = { ...league, roster: rosterSettings };
   const week = validateWeeklySnapshot(snapshot, league, expectedWeek);
   const season = Number(snapshot.season || new Date().getFullYear());
   const poolByIdentity = new Map();
@@ -443,8 +486,9 @@ function buildWeeklyReview({ snapshot, league, playerPool = { players: [] }, exp
     if (player.id) poolByIdentity.set(String(player.id).toLowerCase(), player);
     if (player.name) poolByIdentity.set(String(player.name).toLowerCase(), player);
   }
-  const roster = snapshot.roster.map((player) => normalizePlayer(player, league, poolByIdentity, { preferSharedProjections }));
-  const availablePlayers = snapshot.availablePlayers.map((player) => normalizePlayer(player, league, poolByIdentity, { preferSharedProjections }));
+  const normalize = player => applyWeeklyContext(normalizePlayer(player, league, poolByIdentity, { preferSharedProjections }), { season, week, now, leagueReceptionPoints: league.scoring?.offense?.reception });
+  const roster = snapshot.roster.map(normalize);
+  const availablePlayers = snapshot.availablePlayers.map(normalize);
   const teams = teamResults(snapshot.teams);
   const targetTeam = teams.find((team) => team.isTarget || team.name === league.targetTeam);
   const topScore = Math.max(...teams.map((team) => finite(team.score)));
@@ -485,6 +529,11 @@ function buildWeeklyReview({ snapshot, league, playerPool = { players: [] }, exp
     targetResult: targetTeam,
     standings: [...teams].sort((a, b) => (a.standingRank ?? 999) - (b.standingRank ?? 999)),
     lineup,
+    projectedLineup: {
+      ...projectedLineup(roster, league),
+      completeProjections: roster.every(player => player.adjustedWeeklyPoints != null || ['IR', 'IL', 'NA'].includes(player.rosterSlot)),
+      basis: 'Upcoming lineup from weekly projections; locked slots retained; out and bye players excluded.'
+    },
     roster,
     availablePlayers,
     lineupRisks: risks,
@@ -501,6 +550,14 @@ function buildWeeklyReview({ snapshot, league, playerPool = { players: [] }, exp
       yahooAuthority: 'League scoring, roster, availability, and waiver rules are authoritative per league.',
       availablePlayersReviewed: availablePlayers.length,
       projectionsRefreshed: [...roster, ...availablePlayers].filter((player) => player.projectionRefreshed).length,
+      weeklyContext: {
+        players: roster.length + availablePlayers.length,
+        fresh: [...roster, ...availablePlayers].filter(player => player.weeklyEvidence.fresh).length,
+        matchups: [...roster, ...availablePlayers].filter(player => player.weeklyEvidence.opponent).length,
+        defenses: [...roster, ...availablePlayers].filter(player => player.weeklyEvidence.defense).length,
+        news: [...roster, ...availablePlayers].filter(player => player.weeklyEvidence.news.length).length,
+        liveFeed: 'Yahoo supplies projections, status and byes. NFL matchup/defense/news context requires a sourced weekly-context import; no automatic news feed is connected.'
+      },
       sourceCoverage: {
         fantasyPros: availablePlayers.filter((player) => player.sourceCoverage.fantasyPros).length,
         tank01: availablePlayers.filter((player) => player.sourceCoverage.tank01).length,
@@ -519,6 +576,7 @@ module.exports = {
   lineupReview,
   lineupRisks,
   optimizeLineup,
+  projectedLineup,
   scorePlayerStats,
   startingSlots,
   validateWeeklySnapshot,

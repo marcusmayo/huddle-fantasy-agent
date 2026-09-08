@@ -106,14 +106,15 @@ test('weekly review stores scores, standings movement, optimal lineup, activity,
   assert.equal(review.waiver.recommendation.action, 'ADD_DROP');
   assert.equal(review.waiver.recommendation.add.name, 'Waiver WR');
   assert.equal(review.waiver.recommendation.drop.name, 'Bench WR');
-  assert.equal(review.waiver.recommendation.expectedPointsGained, 50);
+  // Only 30 of the 50 raw player points improve the legal starting lineup.
+  assert.equal(review.waiver.recommendation.expectedPointsGained, 30);
   assert.equal(review.execution, 'recommendation-only');
 });
 
 test('weekly waiver engine explicitly holds when no claim clears the league threshold', () => {
   const review = buildWeeklyReview({ snapshot: snapshot({ candidateProjection: 71 }), league: league(), playerPool });
   assert.equal(review.waiver.recommendation.action, 'HOLD');
-  assert.equal(review.waiver.recommendation.expectedPointsGained, 1);
+  assert.equal(review.waiver.recommendation.expectedPointsGained, 0);
   assert.equal(review.waiver.recommendation.faab.recommended, 0);
   assert.match(review.waiver.recommendation.priorityGuidance, /Preserve/);
   assert.equal(review.waiver.recommendation.claimPlan.length, 0);
@@ -173,7 +174,7 @@ test('weekly rerun refreshes explicit current projections from the shared pool',
   assert.equal(first.review.waiver.recommendation.action, 'HOLD');
   const rerun = weeklyService.rerun(4, 2026);
   assert.equal(rerun.review.waiver.recommendation.action, 'ADD_DROP');
-  assert.equal(rerun.review.waiver.recommendation.expectedPointsGained, 60);
+  assert.equal(rerun.review.waiver.recommendation.expectedPointsGained, 40);
   assert.ok(rerun.review.evidence.projectionsRefreshed >= 1);
 });
 

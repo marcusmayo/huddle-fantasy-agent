@@ -64,6 +64,14 @@ function pickOwner(overallPick, teamCount) {
   return round % 2 === 1 ? positionInRound : teamCount - positionInRound + 1;
 }
 
+function benchDemandShares(roster) {
+  const targets = positionTargets(roster);
+  const weighted = Object.fromEntries(Object.entries(targets).map(([position, target]) => [position,
+    target * (['RB', 'WR'].includes(position) ? 1 : position === 'TE' ? 0.4 : position === 'QB' ? 0.3 : 0)]));
+  const total = Object.values(weighted).reduce((sum, value) => sum + value, 0);
+  return Object.fromEntries(Object.entries(weighted).map(([position, value]) => [position, total ? value / total : 0]));
+}
+
 function nextUserPick(currentOverall, teamCount, draftSlot, includeCurrent = true) {
   if (!draftSlot) return null;
   const first = includeCurrent ? currentOverall : currentOverall + 1;
@@ -75,6 +83,7 @@ function nextUserPick(currentOverall, teamCount, draftSlot, includeCurrent = tru
 
 module.exports = {
   FLEX_POSITIONS,
+  benchDemandShares,
   draftedRosterSize,
   nextUserPick,
   pickOwner,

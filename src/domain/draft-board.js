@@ -1,6 +1,7 @@
 'use strict';
 
-const { FLEX_POSITIONS, draftedRosterSize, nextUserPick, pickOwner, positionTargets } = require('./league');
+const { FLEX_POSITIONS, benchDemandShares, draftedRosterSize, nextUserPick, pickOwner, positionTargets } = require('./league');
+const { contribution, rosterValue } = require('./roster-value');
 
 const BENCH_SLOTS = new Set(['BN', 'BENCH', 'IR', 'IL', 'NA']);
 const SLOT_ELIGIBILITY = {
@@ -9,9 +10,9 @@ const SLOT_ELIGIBILITY = {
 };
 
 const STYLES = {
-  balanced: { vorp: 0.28, scarcity: 0.16, need: 0.17, urgency: 0.14, upside: 0.07, floor: 0.06, consensus: 0.12, risk: 0.08 },
-  upside: { vorp: 0.22, scarcity: 0.13, need: 0.12, urgency: 0.12, upside: 0.25, floor: 0.04, consensus: 0.12, risk: 0.04 },
-  safe: { vorp: 0.25, scarcity: 0.14, need: 0.20, urgency: 0.09, upside: 0.04, floor: 0.16, consensus: 0.12, risk: 0.14 }
+  balanced: { contribution: 0.60, vorp: 0.08, scarcity: 0.06, need: 0.10, urgency: 0.07, upside: 0.02, floor: 0.02, consensus: 0.05, risk: 0.08 },
+  upside: { contribution: 0.53, vorp: 0.08, scarcity: 0.06, need: 0.08, urgency: 0.07, upside: 0.11, floor: 0.02, consensus: 0.05, risk: 0.04 },
+  safe: { contribution: 0.58, vorp: 0.08, scarcity: 0.05, need: 0.12, urgency: 0.05, upside: 0.02, floor: 0.05, consensus: 0.05, risk: 0.14 }
 };
 
 function clamp(value, min = 0, max = 1) {
@@ -120,13 +121,18 @@ function assessRosterConstraint(player, mine, league, { availableByPosition = {}
   };
 }
 
-function replacementBaselines(players, league) {
+function replacementBaselines(players, league, picks = []) {
   const groups = groupByPosition(players);
   const targets = positionTargets(league.roster);
+  const shares = benchDemandShares(league.roster);
   const baselines = {};
   for (const [position, group] of Object.entries(groups)) {
     const sorted = [...group].sort((a, b) => b.projectedPoints - a.projectedPoints);
-    const demand = Math.max(1, Math.round((targets[position] || 1) * league.teamCount));
+    const drafted = picks.filter(pick => pick.position === position).length;
+    // Remove fulfilled league demand; do not re-count every starting slot at
+    // every turn. Modest bench demand distinguishes shallow from deep leagues.
+    const benchShare = shares[position] || 0;
+    const demand = Math.max(1, Math.ceil(((targets[position] || 0) + Number(league.roster.BN || league.roster.BENCH || 0) * benchShare) * league.teamCount) - drafted);
     baselines[position] = sorted[Math.min(demand - 1, sorted.length - 1)]?.projectedPoints || 0;
   }
   return baselines;
@@ -141,13 +147,9 @@ function countMineByPosition(picks, playerById) {
   return counts;
 }
 
-function calculateNeed(position, mine, targets) {
-  const target = targets[position] || 0;
-  const have = mine[position] || 0;
-  if (target === 0) return 0.1;
-  if (have < target) return clamp((target - have) / target, 0.25, 1);
-  if (have < Math.ceil(target + 1)) return 0.14;
-  return 0.04;
+function calculateNeed(position, mine, roster) {
+  return maximumStarterAssignments({ ...mine, [position]: (mine[position] || 0) + 1 }, roster)
+    > maximumStarterAssignments(mine, roster) ? 1 : 0;
 }
 
 function availabilityAtPick(adp, nextPick) {
@@ -166,20 +168,21 @@ function phasePenalty(position, currentOverall, league) {
 
 function injuryPenalty(player) {
   const status = String(player.injuryStatus || '').toLowerCase();
-  if (['ir', 'out', 'pup'].includes(status)) return 0.35;
-  if (['doubtful'].includes(status)) return 0.22;
-  if (['questionable'].includes(status)) return 0.08;
+  if (['ir', 'out', 'o', 'pup', 'nfi', 'susp', 'suspended'].includes(status)) return 0.35;
+  if (['doubtful', 'd'].includes(status)) return 0.22;
+  if (['questionable', 'q'].includes(status)) return 0.08;
   return 0;
 }
 
 function whyLines(player, components, mine, targets, waitProbability) {
   const lines = [];
+  if (player.projectionScoringWarning) lines.push(player.projectionScoringWarning);
   const have = mine[player.position] || 0;
   const target = targets[player.position] || 0;
-  if (components.need >= 0.65) lines.push(`${player.position} need: ${have} drafted against a ${target.toFixed(1)}-slot target.`);
+  if (components.need >= 0.65) lines.push(`${player.position} fills an uncovered legal starting slot, including eligible Flex.`);
   if (components.vorp >= 0.7) lines.push('Strong value above the currently available replacement level.');
   if (components.scarcity >= 0.7) lines.push(`A meaningful ${player.position} tier drop follows this player.`);
-  if (components.upside >= 0.75) lines.push('Ceiling projection creates above-average upside.');
+  if (components.upside >= 0.75 && !player.rangeEstimated) lines.push('Provider ceiling projection adds upside evidence.');
   if (player.sourceDisagreement) lines.push('FantasyPros and Tank01 disagree materially; review both source ranks.');
   if (player.sleeperTrend?.direction === 'rising') lines.push('Sleeper add activity is rising and breaks close ranking ties.');
   if (waitProbability < 0.35) lines.push('Model says this player is unlikely to reach your next turn.');
@@ -203,9 +206,16 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
   const playerById = new Map(players.map((player) => [player.id, player]));
   const groups = groupByPosition(available);
   for (const group of Object.values(groups)) group.sort((a, b) => b.projectedPoints - a.projectedPoints);
-  const baselines = replacementBaselines(available, league);
+  const resolvedPicks = picks.map(pick => ({ ...pick, position: pick.position || playerById.get(pick.playerId)?.position }));
+  const baselines = replacementBaselines(available, league, resolvedPicks);
   const targets = positionTargets(league.roster);
   const mine = countMineByPosition(picks, playerById);
+  const owned = picks.filter(pick => pick.isMine).map(pick => ({
+    ...playerById.get(pick.playerId), ...pick, id: pick.playerId,
+    position: pick.position || playerById.get(pick.playerId)?.position,
+    projectedPoints: pick.projectedPoints ?? playerById.get(pick.playerId)?.projectedPoints ?? baselines[pick.position] ?? 0
+  }));
+  const valueBefore = rosterValue(owned, league, baselines);
   const currentOverall = picks.length + 1;
   const currentOwner = draftSlot ? pickOwner(currentOverall, league.teamCount) : null;
   const nextPick = nextUserPick(
@@ -224,16 +234,19 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
     const nextAtPosition = positionGroup[positionIndex + 1];
     const waitProbability = availabilityAtPick(player.adp, nextPick);
     const rosterConstraint = assessRosterConstraint(player, mine, league, { availableByPosition, opponentPicksBeforeNext });
+    const rosterContribution = contribution(player, owned, league, baselines, valueBefore);
     return {
       player,
       waitProbability,
       rosterConstraint,
+      rosterContribution,
+      contribution: rosterContribution.marginalValue,
       vorp: player.projectedPoints - (baselines[player.position] || 0),
       scarcity: Math.max(0, player.projectedPoints - (nextAtPosition?.projectedPoints || baselines[player.position] || 0)),
-      need: calculateNeed(player.position, mine, targets),
+      need: calculateNeed(player.position, mine, league.roster),
       urgency: 1 - waitProbability,
-      upside: Math.max(0, player.ceiling - player.projectedPoints),
-      floor: player.floor,
+      upside: player.rangeEstimated ? 0 : Math.max(0, (player.ceiling || player.projectedPoints) - player.projectedPoints) * Math.min(1, rosterContribution.marginalValue / Math.max(1, player.projectedPoints)),
+      floor: Math.max(0, (player.floor || player.projectedPoints) - baselines[player.position]) * Math.min(1, rosterContribution.marginalValue / Math.max(1, player.projectedPoints)),
       consensus: Number.isFinite(player.sourceConsensus) ? player.sourceConsensus : 0.5,
       risk: clamp(Number(player.risk) || 0) + injuryPenalty(player),
       penalty: phasePenalty(player.position, currentOverall, league)
@@ -241,8 +254,10 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
   });
 
   const normalized = {};
-  for (const key of ['vorp', 'scarcity', 'need', 'urgency', 'upside', 'floor']) {
-    normalized[key] = normalize(raw.map((row) => row[key]));
+  for (const key of ['contribution', 'vorp', 'scarcity', 'need', 'urgency', 'upside', 'floor']) {
+    const feasible = raw.filter(row => row.rosterConstraint.feasible).map(row => row[key]);
+    const maximum = Math.max(0, ...feasible);
+    normalized[key] = raw.map(row => maximum > 0 ? clamp(row[key] / maximum) : 0);
   }
   const weights = STYLES[style];
   const early = currentOverall / (draftedRosterSize(league.roster) * league.teamCount) < 0.55;
@@ -250,7 +265,7 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
     !early || !/^(K|DEF) supply/.test(warning));
   return raw.map((row, index) => {
     const components = Object.fromEntries(
-      ['vorp', 'scarcity', 'need', 'urgency', 'upside', 'floor'].map((key) => [key, normalized[key][index]])
+      ['contribution', 'vorp', 'scarcity', 'need', 'urgency', 'upside', 'floor'].map((key) => [key, normalized[key][index]])
     );
     components.consensus = row.consensus;
     const positive = Object.entries(components).reduce((sum, [key, value]) => sum + value * weights[key], 0);
@@ -260,7 +275,7 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
     const score = row.rosterConstraint.feasible
       ? clamp(positive - row.risk * weights.risk - row.penalty + trendAdjustment)
       : 0;
-    const sleeper = Number.isFinite(row.player.adp)
+    const sleeper = !row.player.rangeEstimated && Number.isFinite(row.player.adp)
       && Number.isFinite(row.player.expertRank)
       && row.player.adp - row.player.expertRank >= 10
       && row.player.ceiling - row.player.projectedPoints >= 45;
@@ -269,6 +284,7 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
       score: Math.round(score * 1000) / 10,
       rosterFeasible: row.rosterConstraint.feasible,
       rosterConstraint: row.rosterConstraint,
+      rosterContribution: row.rosterContribution,
       style,
       sleeper,
       waitProbability: Math.round(row.waitProbability * 1000) / 1000,
@@ -276,7 +292,7 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
       trendAdjustment: Math.round(trendAdjustment * 1000) / 10,
       components: Object.fromEntries(Object.entries(components).map(([key, value]) => [key, Math.round(value * 1000) / 1000])),
       why: row.rosterConstraint.feasible
-        ? whyLines(row.player, components, mine, targets, row.waitProbability)
+        ? [`${row.player.position} #${row.rosterContribution.positionCountAfter}: +${row.rosterContribution.starterGain.toFixed(1)} starting-lineup projection; ${row.rosterContribution.marginalValue.toFixed(1)} roster-value estimate after bench depth.`, ...whyLines(row.player, components, mine, targets, row.waitProbability)].slice(0, 3)
         : row.rosterConstraint.reasons.slice(0, 3)
     };
   }).sort((a, b) => Number(b.rosterFeasible) - Number(a.rosterFeasible)
@@ -308,6 +324,8 @@ function buildRecommendationCard(input) {
     nextUserPick: nextUserPick(currentOverall, input.league.teamCount, input.draftSlot, owner !== input.draftSlot),
     preferred,
     rosterCoverage: {
+      positions: mine,
+      positionMaximums: defaultPositionMaximums(input.league),
       drafted: picks.filter(pick => pick.isMine).length,
       total: draftedRosterSize(roster),
       startingCovered,

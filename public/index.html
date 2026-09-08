@@ -66,6 +66,7 @@
       <div>
         <p class="eyebrow">NEW SESSION</p>
         <h2 id="league-name">Loading league…</h2>
+        <p id="league-rule-summary" class="muted"></p>
         <p id="session-help" class="muted">Choose your draft slot. Huddle recommends; you make every pick on the league platform.</p>
         <div id="league-verification-warning" class="warning hidden" role="status"></div>
       </div>
@@ -265,6 +266,7 @@
         <div>
           <p class="eyebrow">LEAGUE-SCOPED REVIEW</p>
           <h2 id="weekly-league-name">Weekly team management</h2>
+          <p id="weekly-rule-summary" class="muted"></p>
           <p class="muted">Each fantasy week is a living workspace. Update it as often as needed; Huddle revises that week, retains prior weeks as season history, and returns either add/drop guidance or an explicit HOLD.</p>
         </div>
         <form id="weekly-controls" class="weekly-controls">
@@ -351,7 +353,8 @@
           <p class="field-help">This board is read-only. Search every candidate Huddle received; submit claims in Yahoo. Evidence: FP = FantasyPros, T01 = Tank01, SLP = Sleeper.</p>
         </section>
 
-        <div class="weekly-grid">
+          <section class="panel"><p class="eyebrow">UPCOMING LINEUP</p><h2>Projected starters and matchup evidence</h2><p id="weekly-projected-summary"></p><div id="weekly-projected-lineup" class="weekly-list"></div></section>
+          <div class="weekly-grid">
           <section class="panel"><div class="section-head"><div><p class="eyebrow">STANDINGS</p><h2>League movement</h2></div></div><div class="table-wrap"><table><thead><tr><th>Rank</th><th>Team</th><th>Week</th><th>PF</th><th>PA</th><th>Move</th></tr></thead><tbody id="weekly-standings"></tbody></table></div></section>
           <section class="panel"><p class="eyebrow">TARGET ROSTER</p><h2>Player results</h2><div class="table-wrap"><table><thead><tr><th>Player</th><th>Slot</th><th>Actual</th><th>Projection</th></tr></thead><tbody id="weekly-roster"></tbody></table></div></section>
           <section class="panel"><p class="eyebrow">LINEUP</p><h2>Actual vs optimal</h2><div id="weekly-switches" class="weekly-list"></div><p class="eyebrow weekly-subhead">RISKS</p><div id="weekly-risks" class="weekly-list"></div></section>

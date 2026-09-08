@@ -134,6 +134,7 @@ function weeklySnapshot(league, week) {
       name: `${league.id} Waiver ${index + 1}`,
       position: index % 2 ? 'RB' : 'WR',
       available: true,
+      projectedPoints: (strongWaiverWeek ? 35 : 3) - index * 0.01,
       remainingProjectedPoints: (strongWaiverWeek ? 180 : 50) - index * 0.05
     })),
     waiver: { budgetRemaining: 100 - week, priority: 3 },

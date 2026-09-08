@@ -38,7 +38,7 @@ test('recommendation discloses data coverage and read-only execution', () => {
   assert.equal(card.evidence.complete, true);
   assert.equal(card.evidence.league.teamCount, 6);
   assert.equal(card.evidence.league.scoring.offense.reception, 1);
-  assert.equal(card.evidence.ranking.algorithm, 'deterministic-v1');
+  assert.equal(card.evidence.ranking.algorithm, 'roster-contribution-v2');
   assert.equal(card.evidence.ranking.playerInputs.includes('ADP'), true);
   assert.equal(card.execution, 'recommendation-only');
 });
