@@ -96,3 +96,20 @@ test('a transient blank document during automatic entry remains in the waiting l
     if(originalLocation===undefined)delete global.location;else global.location=originalLocation;
   }
 });
+
+test('waiting-room navigation read timeout yields a retry without settings or draft input',async()=>{
+  let reads=0,actions=0;
+  const run={events:[],yahoo:{playwright:{evaluate:async()=>{reads++;throw Error('Timed out after 645ms waiting for CDP command Runtime.evaluate.');},locator:()=>{actions++;throw Error('No input allowed');}}}};
+  const result=await enterStandardMock(run,{waitMs:0});
+  assert.equal(result.entryWaiting,true);assert.equal(result.entryReadRetry,true);assert.equal(reads,1);assert.equal(actions,0);
+  assert.equal(run.events[0].stage,'entry-read-retry');
+  run.yahoo.playwright.evaluate=async()=>{throw Error('node_repl exec context not found');};
+  await assert.rejects(enterStandardMock(run,{waitMs:0}),/exec context not found/);
+});
+
+test('entry helper cannot create a duplicate session or restart an existing controller',async()=>{
+  for(const existing of [{info:{sessionId:'prepared'}},{controller:{status:()=>({stage:'stopped'})}}]) {
+    let reads=0;const run={...existing,yahoo:{playwright:{evaluate:async()=>{reads++;return {};}}}};
+    await assert.rejects(enterStandardMock(run,{waitMs:0}),/existing.*controller|already.*prepared/i);assert.equal(reads,0);
+  }
+});

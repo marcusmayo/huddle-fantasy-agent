@@ -23,21 +23,31 @@ function verifyStandardMockSettings(text, run) {
 }
 
 async function enterStandardMock(run, {waitMs=20000}={}) {
+  if(run.info || run.controller)throw Error('Use the existing prepared session/controller; entry cannot restart it');
   const tab=run.yahoo;
   const until=Date.now()+Math.min(25000,Math.max(0,waitMs));
   let gate;
   do {
-    gate=await tab.playwright.evaluate(()=>({
+    try { gate=await tab.playwright.evaluate(()=>({
       text:(document.body?.innerText || '').slice(0,1800),
       countdown:document.querySelector('#waiting_room-countdown')?.innerText,
       path:location.pathname,
       live:Boolean(document.querySelector('button[title="Settings"]')),
       enter:[...document.querySelectorAll('a')].some(a=>a.innerText.trim()==='Enter Draft')
-    }));
+    })); } catch(error) {
+      // Waiting-room auto-navigation can invalidate an in-progress DOM read.
+      // Only this pre-input read may retry; settings and entry clicks are not replayed.
+      if(/node_repl exec context not found|turn ended|user stopped computer use/i.test(error.message||'')
+        || !/timed out|timeout|execution context was destroyed/i.test(error.message||''))throw error;
+      run.events?.push({stage:'entry-read-retry',at:Date.now(),message:String(error.message).slice(0,300)});
+      if(Date.now()>=until)return {entryWaiting:true,entryReadRetry:true,countdown:gate?.countdown};
+      await tab.playwright.waitForTimeout(Math.min(300,Math.max(0,until-Date.now())));
+      continue;
+    }
     if(gate.enter || gate.live) break;
     if(Date.now()<until)await tab.playwright.waitForTimeout(300);
   } while(Date.now()<until);
-  if(!gate.enter && !gate.live)return {entryWaiting:true,countdown:gate.countdown};
+  if(!gate?.enter && !gate?.live)return {entryWaiting:true,countdown:gate?.countdown};
   if(gate.live) {
     if(gate.path!==`/draftclient/f1/${run.roomId}/${run.draftSlot}`)throw Error('Auto-entered room or seat does not match');
   } else if(!gate.text.includes(String(run.roomId)) || !gate.text.includes(`You will draft ${run.draftSlot}th`))throw Error('Waiting room or assigned seat does not match');

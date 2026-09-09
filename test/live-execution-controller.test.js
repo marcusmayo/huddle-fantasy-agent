@@ -188,7 +188,11 @@ test('a read that outlives its timeout cannot overlap a new browser action', asy
   f.room.observe = () => { calls++; return new Promise(resolve => { release = resolve; }); };
   assert.equal((await f.controller.step()).fault, 'OPERATION_TIMEOUT');
   assert.equal((await f.controller.step()).unsettled, true); assert.equal(calls, 1); assert.equal(f.actions.length, 0);
+  assert.equal(f.controller.status().unsettledOperation.name,'observe');
   release(f.observation()); await new Promise(resolve => setImmediate(resolve));
+  const settled=f.controller.status().operations.at(-1);
+  assert.equal(settled.name,'observe');assert.equal(settled.deadlineExceeded,true);assert.equal(settled.outcome,'resolved');
+  assert.ok(settled.settledAt>=settled.startedAt);assert.equal(settled.inputDispatched,false);
   f.room.observe = original;
   assert.equal((await f.controller.step()).waiting, true);
 });

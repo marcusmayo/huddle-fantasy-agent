@@ -4,10 +4,17 @@ const fail = (code, message, details) => { throw Object.assign(new Error(message
 const yahooId = p => String(p?.yahooPlayerId || p?.yahooPlayerKey?.split('.p.').at(-1) || '');
 const teamCode = value => String(value || '').trim().toUpperCase().replace(/^JAX$/, 'JAC').replace(/^WSH$/, 'WAS').replace(/^LAR$/, 'LA');
 
-export function readYahooDocument() {
+export function readYahooDocument({ turnOnly = false } = {}) {
   const visible = e => e && e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden';
   const rect = e => { const r = e.getBoundingClientRect(); return { width: r.width, height: r.height }; };
-  const buttons = [...document.querySelectorAll('button')].filter(visible);
+  const candidates = [...document.querySelectorAll('button')];
+  const auto = candidates.find(b => b.textContent.trim() === 'Autodraft' && visible(b));
+  const bodyText = document.body?.innerText || '';
+  const observation = { observedAt: new Date().toISOString(), origin: location.origin, path: location.pathname,
+    header: bodyText.slice(0,1500), inactivityNotice: bodyText.includes('You have been put into autopick mode due to inactivity.'),
+    autodraft: Boolean(auto?.querySelector('[data-icon="checkmark-default"]')), autoKnown: Boolean(auto) };
+  if (turnOnly) return observation;
+  const buttons = candidates.filter(visible);
   const tab = name => buttons.find(b => b.textContent.trim() === name);
   const tables = [...document.querySelectorAll('table')].filter(visible).map(t => {
     // Yahoo also uses TH-only "Your Turn" separators inside TBODY. Native
@@ -28,9 +35,7 @@ export function readYahooDocument() {
     .map(b => ({ type: b.type, name: b.getAttribute('aria-label') || b.title || b.innerText.trim() }));
   const positionFilters = [...document.querySelectorAll('select')].filter(visible).filter(s => [...s.options].some(o => o.text.trim() === 'All Positions'))
     .map(s => ({ value: s.value, label: s.selectedOptions[0]?.text.trim(), options: [...s.options].map(o => ({ value: o.value, label: o.text.trim() })) }));
-  return { observedAt: new Date().toISOString(), origin: location.origin, path: location.pathname,
-    header: document.body?.innerText.slice(0, 1500) || '', inactivityNotice: document.body?.innerText.includes('You have been put into autopick mode due to inactivity.') || false,
-    autodraft: Boolean(tab('Autodraft')?.querySelector('[data-icon="checkmark-default"]')), autoKnown: Boolean(tab('Autodraft')),
+  return { ...observation,
     playersSelected: tab('Players')?.getAttribute('aria-selected') === 'true', resultsSelected: tab('Results')?.getAttribute('aria-selected') === 'true',
     roundsSelected: tab('Round by Round')?.getAttribute('aria-selected') === 'true', tables, searches, resets, positionFilters,
     buttons: buttons.map(b => ({ name: b.getAttribute('aria-label') || b.title || b.innerText.trim(), text: b.innerText.trim(), role: b.getAttribute('role') || 'button' })) };
@@ -85,7 +90,7 @@ export function createYahooLiveRoom({ tab, identity, simulation = false, now = D
   const events = [];
   const budget = options => ({ until: now() + (options?.timeoutMs || 4500), signal: options?.signal });
   const left = b => { if (b.signal?.aborted || b.until - now() < 80) fail('ROOM_OPERATION_DEADLINE', 'The browser operation exhausted its time budget'); return Math.max(80, Math.floor(b.until - now())); };
-  const inspect = b => tab.playwright.evaluate(readYahooDocument, undefined, { timeoutMs: left(b) });
+  const inspect = (b, turnOnly = false) => tab.playwright.evaluate(readYahooDocument, { turnOnly }, { timeoutMs: left(b) });
   const namedButton = text => tab.playwright.getByRole('button', { name: text, exact: true });
   function navigation(name, raw) {
     const matches = raw.buttons.filter(button => button.text === name);
@@ -99,19 +104,38 @@ export function createYahooLiveRoom({ tab, identity, simulation = false, now = D
     }
     return raw;
   }
+  async function selectView(name, raw, selected, b) {
+    await navigation(name,raw).press('Enter', { timeoutMs: left(b) });
+    raw = await inspect(b); parseYahooObservation(raw,identity);
+    const probeUntil = Math.min(b.until-1200,now()+600);
+    while (!selected(raw) && now()<probeUntil) {
+      await tab.playwright.waitForTimeout(Math.min(80,left(b)));
+      raw = await inspect(b); parseYahooObservation(raw,identity);
+    }
+    if (!selected(raw) && left(b)>=1200) {
+      // Selecting an already selected tab is idempotent. One retry is allowed
+      // only after input returned and a fresh read still shows the old view.
+      // This rule never applies to Draft, Queue, or a rejected input operation.
+      raw = await inspect(b); parseYahooObservation(raw,identity);
+      if (!selected(raw)) {
+        events.push({type:'navigation-retry',control:name,at:new Date(now()).toISOString()});
+        await navigation(name,raw).press('Enter', { timeoutMs: left(b) });
+        raw = await inspect(b); parseYahooObservation(raw,identity);
+      }
+    }
+    return waitForView(raw,selected,b);
+  }
   async function view(name, b) {
     let raw = await inspect(b);
     parseYahooObservation(raw, identity);
     const selected = name === 'Players' ? raw.playersSelected : raw.resultsSelected;
     if (!selected) {
-      await navigation(name,raw).press('Enter', { timeoutMs: left(b) }); raw = await inspect(b);
-      raw = await waitForView(raw, r => name === 'Players' ? r.playersSelected : r.resultsSelected,b);
+      raw = await selectView(name,raw,r => name === 'Players' ? r.playersSelected : r.resultsSelected,b);
     }
     if (name === 'Results' && !raw.roundsSelected) {
       raw = await waitForView(raw, r => r.roundsSelected || r.buttons.some(button => button.text === 'Round by Round'),b);
       if (!raw.roundsSelected) {
-        await navigation('Round by Round',raw).press('Enter', { timeoutMs: left(b) }); raw = await inspect(b);
-        raw = await waitForView(raw, r => r.roundsSelected,b);
+        raw = await selectView('Round by Round',raw,r => r.roundsSelected,b);
       }
     }
     const kind = name.toLowerCase();
@@ -217,6 +241,6 @@ export function createYahooLiveRoom({ tab, identity, simulation = false, now = D
     events.push({ type: 'queue-mismatch', intended: id, added, restored: JSON.stringify(restoredIds) === JSON.stringify(priorIds), at: new Date(now()).toISOString() });
     fail('QUEUE_VERIFICATION_FAILED', 'The actual queue did not match the requested player; no draft input was sent');
   }
-  return { observe: async options => parseYahooObservation(await inspect(budget(options)), identity), prepare, submit, results,
+  return { observe: async options => parseYahooObservation(await inspect(budget(options), true), identity), prepare, submit, results,
     enqueue, queue: options => readQueue(budget(options)), inspect: options => inspect(budget(options)), events: () => structuredClone(events) };
 }

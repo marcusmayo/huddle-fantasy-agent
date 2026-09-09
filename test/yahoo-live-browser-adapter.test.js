@@ -100,6 +100,44 @@ test('DOM reader separates column headings and direct data cells from turn divid
   assert.deepEqual(Array.from(actual.tables[0].rows[0].cells), row.cells);
 });
 
+test('turn observations avoid player-table and unrelated button layout reads while retaining manual-mode evidence', () => {
+  const vm=require('node:vm');
+  const auto={textContent:'Autodraft',getClientRects:()=>[{}],querySelector:()=>null};
+  const unrelated={textContent:'Draft',getClientRects:()=>{throw Error('Do not lay out player controls to read the clock');}};
+  const document={body:{innerText:'00:30\nYOUR TURN • ROUND 1, PICK 8\nYou have been put into autopick mode due to inactivity.'},
+    querySelectorAll:selector=>{assert.equal(selector,'button');return [unrelated,auto];}};
+  const raw=vm.runInNewContext('('+readYahooDocument.toString()+')({turnOnly:true})',{document,location:{origin:identity.origin,pathname:identity.path},getComputedStyle:()=>({visibility:'visible'})});
+  assert.equal(raw.autoKnown,true);assert.equal(raw.inactivityNotice,true);assert.equal(raw.tables,undefined);
+  const observed=parseYahooObservation(raw,identity);assert.equal(observed.overallPick,8);assert.equal(observed.secondsLeft,30);assert.equal(observed.manualModeKnown,false);
+});
+
+test('only the clock observation requests the light reader; player preparation retains exact rows',async()=>{
+  const options=[],raw=fixture().raw;
+  const room=createYahooLiveRoom({identity,tab:{playwright:{evaluate:async(fn,arg)=>{options.push(arg);return structuredClone(raw);}}}});
+  await room.observe();await room.prepare([{yahooPlayerId:'12345',position:'RB',team:'DET'}]);
+  assert.equal(options[0]?.turnOnly,true);assert.notEqual(options[1]?.turnOnly,true);
+});
+
+test('an acknowledged tab input without a view change permits only one freshly verified idempotent retry',async()=>{
+  for(const inputBehavior of ['ignore-first','ignore-all','reject','move-room']) {
+    let time=0,inputs=0;const raw=fixture().raw;raw.roundsSelected=true;
+    raw.buttons=[{text:'Results',name:'Results',role:'tab'}];
+    const room=createYahooLiveRoom({identity,now:()=>time,tab:{playwright:{
+      evaluate:async()=>{time+=10;return structuredClone(raw);},waitForTimeout:async ms=>{time+=ms;},
+      getByRole:(role,options)=>({press:async()=>{assert.equal(role,'tab');assert.equal(options.name,'Results');inputs++;
+        if(inputBehavior==='reject')throw Error('Input response lost');
+        if(inputBehavior==='move-room')raw.path='/draftclient/f1/87654321/8';
+        if(inputBehavior==='ignore-first'&&inputs===2){raw.resultsSelected=true;raw.playersSelected=false;raw.tables=[{kind:'results',headers:['Pick','Player','Team'],rows:[]}];}
+      }})
+    }}});
+    if(inputBehavior==='ignore-first')assert.deepEqual((await room.results({timeoutMs:4000})).picks,[]);
+    else await assert.rejects(room.results({timeoutMs:4000}));
+    const terminal=['reject','move-room'].includes(inputBehavior);
+    assert.equal(inputs,terminal?1:2);
+    assert.equal(room.events().filter(e=>e.type==='navigation-retry').length,terminal?0:1);
+  }
+});
+
 function queueFixture({ responseLost = false, wrongAdded = false } = {}) {
   const raw = fixture().raw, queue = [{ yahooPlayerId: '99999', text: 'Existing entry' }], paths = [];
   const locator = path => ({

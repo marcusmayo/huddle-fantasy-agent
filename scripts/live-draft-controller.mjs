@@ -20,7 +20,7 @@ export function createLiveDraftController({ room, huddle, display, identity, rol
     || !Number.isInteger(identity.totalPicks) || identity.totalPicks % identity.teamCount) throw error('IDENTITY_REQUIRED', 'Verify league, team, seat and complete draft size');
   const state = { stage: 'prepared', completed: false, pending: null, lease: null, prepared: [], receipts: [], timings: {}, events: [],
     busy: false, inflight: null, fatal: null, windowDeadline: Infinity, windowOwner: null, controllerId: uuid(),
-    plan: null, haltReason: null, stopConfirmed: false, stopEvidenceSaved: false, stopEventId: null, stopping: false };
+    plan: null, haltReason: null, stopConfirmed: false, stopEvidenceSaved: false, stopEventId: null, stopping: false, operations: [], invocations: [] };
   const emit = (type, details = {}) => {
     const event = { type, at: new Date(now()).toISOString(), ...details };
     state.events.push(event); onEvent(event); return event;
@@ -51,7 +51,7 @@ export function createLiveDraftController({ room, huddle, display, identity, rol
     const budget = cleanup ? cap : Math.min(cap, state.windowDeadline - now() - 100);
     if (budget < 100) throw error('WINDOW_BOUNDARY', 'Continue the same controller in the next bounded window');
     const started = now(), abort = new AbortController();
-    const operation = { name, started };
+    const operation = { name, started, deadlineExceeded:false, outcome:'pending', code:null };
     state.inflight = operation;
     let timer;
     const work = Promise.resolve().then(() => {
@@ -59,13 +59,18 @@ export function createLiveDraftController({ room, huddle, display, identity, rol
       // Let the adapter's own deadline return before this outer watchdog fires.
       // Browser transport/settlement time is part of the active invocation.
       return fn({ timeoutMs: Math.max(80,budget-Math.min(500,budget*.2)), signal: abort.signal });
+    }).then(value => { operation.outcome='resolved'; return value; }, failure => {
+      operation.outcome='rejected'; operation.code=failure.code||'OPERATION_FAILED'; throw failure;
     }).finally(() => {
       if (state.inflight === operation) state.inflight = null;
       (state.timings[name] ||= []).push(now() - started);
+      state.operations.push({name,startedAt:new Date(started).toISOString(),settledAt:new Date(now()).toISOString(),durationMs:now()-started,
+        deadlineExceeded:operation.deadlineExceeded,outcome:operation.outcome,code:operation.code,inputDispatched:name==='submit'&&state.pending?.inputDispatched===true});
+      if(state.operations.length>500)state.operations.shift();
     });
     try {
       return await Promise.race([work, new Promise((_, reject) => {
-        timer = setTimeout(() => { abort.abort(); reject(error('OPERATION_TIMEOUT', `${name} exceeded its deadline`)); }, budget);
+        timer = setTimeout(() => { operation.deadlineExceeded=true; abort.abort(); reject(error('OPERATION_TIMEOUT', `${name} exceeded its deadline`)); }, budget);
       })]);
     } catch (e) {
       if (['observe', 'prepare', 'display', 'submit', 'results'].includes(name)
@@ -265,7 +270,7 @@ export function createLiveDraftController({ room, huddle, display, identity, rol
   async function runWindow({ durationMs = 40000, signal } = {}) {
     if (!Number.isFinite(durationMs) || durationMs < 100 || durationMs > 45000) throw error('WINDOW_LIMIT', 'Use windows between 100 ms and 45 seconds');
     if (state.windowOwner || state.busy || state.stopping) throw error('CONTROLLER_BUSY', 'The controller already has an active invocation');
-    const windowOwner = {}; state.windowOwner = windowOwner;
+    const windowOwner = {started:now()}; state.windowOwner = windowOwner;
     const onAbort = () => requestStop('Execution invocation was aborted');
     signal?.addEventListener('abort', onAbort, { once: true });
     if (signal?.aborted) onAbort();
@@ -281,6 +286,9 @@ export function createLiveDraftController({ room, huddle, display, identity, rol
       signal?.removeEventListener('abort', onAbort);
       state.windowDeadline = Infinity; state.windowOwner = null;
       await settleStop();
+      state.invocations.push({startedAt:new Date(windowOwner.started).toISOString(),returnedAt:new Date(now()).toISOString(),durationMs:now()-windowOwner.started,
+        stage:state.stage,unsettled:Boolean(state.inflight),receipts:state.receipts.length});
+      if(state.invocations.length>120)state.invocations.shift();
     }
     return status();
   }
@@ -292,7 +300,8 @@ export function createLiveDraftController({ room, huddle, display, identity, rol
       continuationRequired: !state.completed && !state.fatal && !state.haltReason,
       activeRunId: state.lease?.runId || null, receipts: structuredClone(state.receipts),
       fullyVerified: state.completed && state.receipts.length === identity.totalPicks / identity.teamCount
-        && state.receipts.every(r => r.matched && r.inputAcknowledged), timings: structuredClone(state.timings), events: structuredClone(state.events) };
+        && state.receipts.every(r => r.matched && r.inputAcknowledged), timings: structuredClone(state.timings), events: structuredClone(state.events),
+      operations:structuredClone(state.operations),invocations:structuredClone(state.invocations) };
   }
   return { step, runWindow, status, requestStop, stop };
 }
