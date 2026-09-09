@@ -247,6 +247,23 @@ test('operation deadlines leave transport settlement time inside the active invo
   await f.controller.step();assert.ok(innerBudget<=4000&&innerBudget>=3000);
 });
 
+test('waiting iterations preserve the full observation budget at an invocation boundary',async()=>{
+  const f=fixture(),budgets=[],observe=f.room.observe;
+  f.room.observe=async options=>{budgets.push(options.timeoutMs);return observe(options);};
+  await f.controller.runWindow({durationMs:12000});
+  assert.ok(budgets.length>0);assert.ok(budgets.every(ms=>ms>=4000),JSON.stringify(budgets));
+  assert.equal(f.controller.status().unsettled,false);assert.equal(f.controller.status().fatal,null);assert.equal(f.actions.length,0);
+});
+
+test('pending-result verification yields before an undersized invocation without retrying input',async()=>{
+  const faults={noAccept:true},f=fixture({faults});await f.controller.step();f.begin();await f.controller.step();
+  assert.equal(f.actions.length,1);assert.ok(f.controller.status().pending);
+  let reads=0;const results=f.room.results;f.room.results=async(...args)=>{reads++;return results(...args);};
+  await f.controller.runWindow({durationMs:4000});assert.equal(reads,0);assert.equal(f.actions.length,1);
+  const target=f.players.find(p=>p.yahooPlayerKey.endsWith('.p.'+f.controller.status().pending.yahooPlayerId));
+  f.accept(target,true);f.opponents();assert.equal((await f.controller.step()).matched,true);assert.equal(f.actions.length,1);
+});
+
 test('abort during preparation prevents any later Yahoo input and revokes active control', async () => {
   const f = fixture(); await f.controller.step(); f.begin();
   const abort = new AbortController(), prepare = f.room.prepare;
@@ -264,8 +281,9 @@ test('a rejected overlapping window cannot replace the first window deadline', a
     if (blocked) { blocked = false; await new Promise(resolve => { release = resolve; entered(); }); }
     return read();
   };
-  const first = f.controller.runWindow({ durationMs: 3000 });
-  await waiting;
+  const first = f.controller.runWindow({ durationMs: 8000 });
+  assert.equal(await Promise.race([waiting.then(()=> 'entered'),first.then(()=> 'finished')]),'entered',
+    'The first window must admit a read before testing overlap');
   await assert.rejects(f.controller.runWindow({ durationMs: 40000 }), { code: 'CONTROLLER_BUSY' });
   release(); await first;
   assert.equal(f.actions.length, 0, 'The original short window must still yield before drafting');

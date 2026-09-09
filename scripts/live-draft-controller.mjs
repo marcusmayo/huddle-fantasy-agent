@@ -165,6 +165,9 @@ export function createLiveDraftController({ room, huddle, display, identity, rol
     return receipt;
   }
   async function iteration() {
+    const readBudget = state.pending ? estimate('results') + estimate('reconcile')
+      : estimate('observe') + estimate('workspace') + estimate('controller');
+    if (state.windowDeadline - now() < readBudget + 100) return { yielded:true };
     if (state.pending) return verifyPending();
     let o = await readRoom(), w = await workspace();
     if (w.session.picks.length !== o.completedPicks) {
