@@ -3,7 +3,7 @@
   "voice": "Kokoro am_michael 70% / am_onyx 30%; pitch 0.955",
   "music": "Same original Huddle orchestral recording",
   "modelConfiguration": "User-confirmed Astra, Extra High effort; computer use while recording",
-  "interpretation": "Postproduction explanation, not live recorded reasoning. No reconstructed application UI. Every shot is a crop of the actual recording.",
+  "interpretation": "Postproduction explanation, not live recorded reasoning. No reconstructed application UI. Every shot is a crop of the actual recording; league and opponent identity bands are masked.",
   "scenes": [
     {
       "outputStart": 0,
@@ -12,7 +12,7 @@
       "focus": "both",
       "label": "FIRST REAL DRAFT",
       "title": "The clock makes it real.",
-      "explanation": "DR Fantasy Football \u00b7 September 8, 2026"
+      "explanation": "Yahoo \u00b7 Blitzkrieg \u00b7 September 8, 2026"
     },
     {
       "outputStart": 10,
@@ -68,8 +68,8 @@
       "fps": 30,
       "frames": 1800,
       "seconds": 60.0,
-      "bytes": 3384893,
-      "sha256": "7c9eb65510da7796c6855c13ec07a254dd79a99d82497c6207c0f10096513243",
+      "bytes": 3145021,
+      "sha256": "e436d2e7d2d6ed85bc7bb858c250b58845806be292b1ca4398488e555fea468e",
       "video": "H.264 yuv420p",
       "audio": "AAC-LC stereo 48 kHz",
       "captions": "English mov_text; sidecar round-trip passed",
@@ -95,8 +95,8 @@
       "fps": 30,
       "frames": 1800,
       "seconds": 60.0,
-      "bytes": 2813728,
-      "sha256": "a2f5c42b3dc1963f7bc6b1592def02eb0f36640688f574e06d2d83f27d850449",
+      "bytes": 2817435,
+      "sha256": "86f2c11f22b32f5408213697b8f00d2e7acfdd2d1444a69458752c378355ce93",
       "video": "H.264 yuv420p",
       "audio": "AAC-LC stereo 48 kHz",
       "captions": "English mov_text; sidecar round-trip passed",
@@ -122,8 +122,8 @@
       "fps": 30,
       "frames": 1800,
       "seconds": 60.0,
-      "bytes": 2542707,
-      "sha256": "38924d677bb0df64945278dcb076f89fee1eaf13b7ebe756bf9b55bf3fb582b6",
+      "bytes": 2447493,
+      "sha256": "631f6947761c805a8ff6b23e792aeb085db7333f16da4339e8f08094b216e599",
       "video": "H.264 yuv420p",
       "audio": "AAC-LC stereo 48 kHz",
       "captions": "English mov_text; sidecar round-trip passed",
@@ -143,21 +143,10 @@
       }
     }
   ],
-  "visualReview": "Representative landscape, portrait and 720p frames inspected: opening/user Gibbs, recommended Josh Allen, audible Irving, missed deadline and grade comparison. Labels are legible and unclipped; original app defects remain visible. Not a frame-by-frame semantic review.",
+  "visualReview": "Representative revised landscape/poster, portrait and X frames reviewed; identity bands and detail regions are continuously masked. Titles, grade explanation and captions checked.",
   "captionTiming": "Estimated phrase timing, not forced word alignment",
   "portraitTreatment": "Actual Huddle viewport enlarged; dual-screen scenes cut from Yahoo to Huddle after five seconds. Same narration and chronology.",
   "platformUploadTested": false,
   "publication": "Repository assets; no LinkedIn or X post",
-  "animatedPreview": {
-    "file": "huddle-real-draft-preview.gif",
-    "dimensions": [
-      720,
-      405
-    ],
-    "frames": 96,
-    "seconds": 12.01,
-    "fullDecode": "passed",
-    "silent": true,
-    "sha256": "227aa36d21c375633c3f5894f3c5d520c6f99ef49816fe6ace0ac31e6ca10f9b"
-  }
+  "identityTreatment": "Yahoo and Blitzkrieg only. Opaque editorial masks cover the Yahoo league/opponent band and Huddle recent-team detail region. Raw evidence stays private and unchanged."
 }

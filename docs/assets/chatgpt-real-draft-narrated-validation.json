@@ -3,7 +3,7 @@
   "voice": "Kokoro af_heart stock synthetic voice",
   "music": "New original A-minor electronic composition",
   "modelConfiguration": "User-confirmed Astra, Extra High effort; computer use while recording",
-  "interpretation": "Postproduction explanation, not live recorded reasoning. No reconstructed application UI. Every shot is a crop of the actual recording.",
+  "interpretation": "Postproduction explanation, not live recorded reasoning. No reconstructed application UI. Every shot is a crop of the actual recording; league and opponent identity bands are masked.",
   "scenes": [
     {
       "outputStart": 0,
@@ -218,7 +218,7 @@
       "seconds": 10,
       "focus": "both",
       "label": "YAHOO\u2019S DRAFT GRADE",
-      "title": "Blitzkrieg: C\u2212. The Bomb: B+.",
+      "title": "Blitzkrieg: C\u2212. Top grade: B+.",
       "explanation": "Yahoo criticized Maye at 25 versus ADP 48."
     },
     {
@@ -239,8 +239,8 @@
       "fps": 30,
       "frames": 7500,
       "seconds": 250.0,
-      "bytes": 14824901,
-      "sha256": "63c77a9f5cd2f59cfe3db1cc7a98f5e6b3839b2cbb643a95d96519f686fd5d66",
+      "bytes": 13686831,
+      "sha256": "4b1228453c1c21d8854e0d1fcecec5e58b85de7289a2e59cab9d23bef241c6d4",
       "video": "H.264 yuv420p",
       "audio": "AAC-LC stereo 48 kHz",
       "captions": "English mov_text; sidecar round-trip passed",
@@ -254,7 +254,7 @@
         "output_i": "-15.99",
         "output_tp": "-1.50",
         "output_lra": "2.50",
-        "output_thresh": "-26.21",
+        "output_thresh": "-26.20",
         "normalization_type": "dynamic",
         "target_offset": "-0.01"
       }
@@ -266,8 +266,8 @@
       "fps": 30,
       "frames": 7500,
       "seconds": 250.0,
-      "bytes": 12381446,
-      "sha256": "9a326c43231bf97a31b72892d26492648017202defc8a4c615156c628ab143b7",
+      "bytes": 12098591,
+      "sha256": "f3721896544267c7cdd7c8680cea16bc88db03494125e638439c64ac6446d5db",
       "video": "H.264 yuv420p",
       "audio": "AAC-LC stereo 48 kHz",
       "captions": "English mov_text; sidecar round-trip passed",
@@ -281,7 +281,7 @@
         "output_i": "-15.99",
         "output_tp": "-1.50",
         "output_lra": "2.50",
-        "output_thresh": "-26.21",
+        "output_thresh": "-26.20",
         "normalization_type": "dynamic",
         "target_offset": "-0.01"
       }
@@ -293,8 +293,8 @@
       "fps": 30,
       "frames": 3900,
       "seconds": 130.0,
-      "bytes": 5821960,
-      "sha256": "7c6dce7adce777f930897ef335baa5c7a66ed99c836e7521b8776456d5fced46",
+      "bytes": 5564653,
+      "sha256": "f7e663aedc35835c3ea2872212d02553b6feb8945a97e059b224e5c07bbee510",
       "video": "H.264 yuv420p",
       "audio": "AAC-LC stereo 48 kHz",
       "captions": "English mov_text; sidecar round-trip passed",
@@ -304,17 +304,17 @@
         "input_i": "-16.12",
         "input_tp": "-1.41",
         "input_lra": "2.40",
-        "input_thresh": "-26.34",
-        "output_i": "-16.06",
+        "input_thresh": "-26.32",
+        "output_i": "-16.04",
         "output_tp": "-1.50",
         "output_lra": "2.40",
-        "output_thresh": "-26.25",
+        "output_thresh": "-26.24",
         "normalization_type": "dynamic",
-        "target_offset": "0.06"
+        "target_offset": "0.04"
       }
     }
   ],
-  "visualReview": "Representative landscape, portrait and 720p frames inspected: opening/user Gibbs, recommended Josh Allen, audible Irving, missed deadline and grade comparison. Labels are legible and unclipped; original app defects remain visible. Not a frame-by-frame semantic review.",
+  "visualReview": "Representative revised landscape/poster, portrait and X frames reviewed; identity bands and detail regions are continuously masked. Titles, grade explanation and captions checked.",
   "captionTiming": "Estimated phrase timing, not forced word alignment",
   "portraitTreatment": "Actual Huddle viewport enlarged; dual-screen scenes cut from Yahoo to Huddle after five seconds. Same narration and chronology.",
   "platformUploadTested": false,
@@ -338,16 +338,5 @@
     ],
     "scope": "All five audibles, one followed recommendation, one fallback, the user opening pick, missed deadline, verified totals, Yahoo grades and closing context. Full twenty-pick review remains in landscape and feed."
   },
-  "animatedPreview": {
-    "file": "chatgpt-real-draft-preview.gif",
-    "dimensions": [
-      720,
-      405
-    ],
-    "frames": 96,
-    "seconds": 12.01,
-    "fullDecode": "passed",
-    "silent": true,
-    "sha256": "5764f9440aba1e71ec7db20d6629fe4024e169ce5768ccae0e8014ae58c7a0f1"
-  }
+  "identityTreatment": "Yahoo and Blitzkrieg only. Opaque editorial masks cover the Yahoo league/opponent band and Huddle recent-team detail region. Raw evidence stays private and unchanged."
 }
