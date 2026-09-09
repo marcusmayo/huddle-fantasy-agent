@@ -56,7 +56,9 @@ export function createLiveDraftController({ room, huddle, display, identity, rol
     let timer;
     const work = Promise.resolve().then(() => {
       if (state.haltReason && !cleanup) throw error('CONTROLLER_STOPPED', state.haltReason);
-      return fn({ timeoutMs: budget, signal: abort.signal });
+      // Let the adapter's own deadline return before this outer watchdog fires.
+      // Browser transport/settlement time is part of the active invocation.
+      return fn({ timeoutMs: Math.max(80,budget-Math.min(500,budget*.2)), signal: abort.signal });
     }).finally(() => {
       if (state.inflight === operation) state.inflight = null;
       (state.timings[name] ||= []).push(now() - started);
@@ -161,6 +163,8 @@ export function createLiveDraftController({ room, huddle, display, identity, rol
     if (state.pending) return verifyPending();
     let o = await readRoom(), w = await workspace();
     if (w.session.picks.length !== o.completedPicks) {
+      const reconciliationBudget = estimate('results') + estimate('reconcile') + estimate('workspace') + estimate('observe') + estimate('controller');
+      if (state.windowDeadline - now() < reconciliationBudget) return { yielded:true };
       await reconcile(); w = await workspace(); o = await readRoom();
     }
     if (w.session.picks.length !== o.completedPicks) throw error('BOARD_CHANGED', 'The board advanced during reconciliation; read it again');
@@ -284,6 +288,7 @@ export function createLiveDraftController({ room, huddle, display, identity, rol
     return { stage: state.stage, completed: state.completed, pending: state.pending ? { ...state.pending } : null,
       fatal: state.fatal?.message || null, haltReason: state.haltReason, stopConfirmed: state.stopConfirmed,
       stopEvidenceSaved: state.stopEvidenceSaved, unsettled: Boolean(state.inflight), windowActive: Boolean(state.windowOwner),
+      unsettledOperation: state.inflight ? { name:state.inflight.name,startedAt:new Date(state.inflight.started).toISOString(),inputDispatched:state.pending?.inputDispatched===true } : null,
       continuationRequired: !state.completed && !state.fatal && !state.haltReason,
       activeRunId: state.lease?.runId || null, receipts: structuredClone(state.receipts),
       fullyVerified: state.completed && state.receipts.length === identity.totalPicks / identity.teamCount

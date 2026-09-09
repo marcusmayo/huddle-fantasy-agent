@@ -33,7 +33,7 @@ export function readYahooDocument() {
     autodraft: Boolean(tab('Autodraft')?.querySelector('[data-icon="checkmark-default"]')), autoKnown: Boolean(tab('Autodraft')),
     playersSelected: tab('Players')?.getAttribute('aria-selected') === 'true', resultsSelected: tab('Results')?.getAttribute('aria-selected') === 'true',
     roundsSelected: tab('Round by Round')?.getAttribute('aria-selected') === 'true', tables, searches, resets, positionFilters,
-    buttons: buttons.map(b => ({ name: b.getAttribute('aria-label') || b.title || b.innerText.trim(), text: b.innerText.trim() })) };
+    buttons: buttons.map(b => ({ name: b.getAttribute('aria-label') || b.title || b.innerText.trim(), text: b.innerText.trim(), role: b.getAttribute('role') || 'button' })) };
 }
 
 export function parseYahooObservation(raw, identity) {
@@ -46,7 +46,13 @@ export function parseYahooObservation(raw, identity) {
   const overallPick = completed ? identity.totalPicks + 1 : waiting ? 1 : Number(raw.header.match(/ROUND\s+\d+,\s*PICK\s+(\d+)/i)?.[1]);
   if (!Number.isInteger(overallPick) || overallPick < 1 || overallPick > identity.totalPicks + 1) fail('ROOM_TURN_UNREADABLE', 'Yahoo current pick is not readable');
   const matches = [...raw.header.matchAll(/(?:^|\n)\s*(\d{1,2}):(\d{2})\s*(?=\n|$)/g)];
-  const secondsLeft = matches.length === 1 ? Number(matches[0][1]) * 60 + Number(matches[0][2]) : null;
+  // Yahoo replaces mm:ss with an integer near expiry. Accept that integer only
+  // immediately before the current turn label, never from ranks or team text.
+  const lines = raw.header.split('\n').map(line => line.trim());
+  const turnLine = lines.findIndex(line => /ROUND\s+\d+,\s*PICK\s+\d+/i.test(line));
+  const short = turnLine > 0 && /^\d{1,2}$/.test(lines[turnLine-1]) && Number(lines[turnLine-1]) < 60 ? Number(lines[turnLine-1]) : null;
+  const secondsLeft = matches.length === 1 && Number(matches[0][2]) < 60 && short === null
+    ? Number(matches[0][1]) * 60 + Number(matches[0][2]) : matches.length === 0 ? short : null;
   if (phase === 'drafting' && secondsLeft === null) fail('ROOM_CLOCK_UNREADABLE', 'Yahoo clock is missing or ambiguous');
   return { observedAt: raw.observedAt, phase, overallPick, completedPicks: overallPick - 1, secondsLeft,
     onClock: phase === 'drafting' && /YOUR TURN\s*•\s*ROUND/i.test(raw.header),
@@ -81,19 +87,35 @@ export function createYahooLiveRoom({ tab, identity, simulation = false, now = D
   const left = b => { if (b.signal?.aborted || b.until - now() < 80) fail('ROOM_OPERATION_DEADLINE', 'The browser operation exhausted its time budget'); return Math.max(80, Math.floor(b.until - now())); };
   const inspect = b => tab.playwright.evaluate(readYahooDocument, undefined, { timeoutMs: left(b) });
   const namedButton = text => tab.playwright.getByRole('button', { name: text, exact: true });
+  function navigation(name, raw) {
+    const matches = raw.buttons.filter(button => button.text === name);
+    if (matches.length !== 1 || !['tab','button'].includes(matches[0].role || 'button')) fail('ROOM_NAVIGATION_UNAVAILABLE', `Identify the unique visible ${name} tab`);
+    return tab.playwright.getByRole(matches[0].role || 'button', { name, exact: true });
+  }
+  async function waitForView(raw, predicate, b) {
+    while (!predicate(raw)) {
+      await tab.playwright.waitForTimeout(Math.min(80,left(b)));
+      raw = await inspect(b); parseYahooObservation(raw,identity);
+    }
+    return raw;
+  }
   async function view(name, b) {
     let raw = await inspect(b);
     parseYahooObservation(raw, identity);
     const selected = name === 'Players' ? raw.playersSelected : raw.resultsSelected;
     if (!selected) {
-      if (!raw.buttons.some(button => button.text === name)) fail('ROOM_NAVIGATION_UNAVAILABLE', `The ${name} control is not visible`);
-      await namedButton(name).press('Enter', { timeoutMs: left(b) }); raw = await inspect(b);
+      await navigation(name,raw).press('Enter', { timeoutMs: left(b) }); raw = await inspect(b);
+      raw = await waitForView(raw, r => name === 'Players' ? r.playersSelected : r.resultsSelected,b);
     }
-    if (name === 'Results' && !raw.roundsSelected && raw.buttons.some(button => button.text === 'Round by Round')) {
-      await namedButton('Round by Round').press('Enter', { timeoutMs: left(b) }); raw = await inspect(b);
+    if (name === 'Results' && !raw.roundsSelected) {
+      raw = await waitForView(raw, r => r.roundsSelected || r.buttons.some(button => button.text === 'Round by Round'),b);
+      if (!raw.roundsSelected) {
+        await navigation('Round by Round',raw).press('Enter', { timeoutMs: left(b) }); raw = await inspect(b);
+        raw = await waitForView(raw, r => r.roundsSelected,b);
+      }
     }
     const kind = name.toLowerCase();
-    if (!raw.tables.some(t => t.kind === kind)) fail('ROOM_TABLE_UNAVAILABLE', `The ${name} table has not rendered`);
+    raw = await waitForView(raw, r => r.tables.some(t => t.kind === kind),b);
     return raw;
   }
   const rows = parseYahooRows;

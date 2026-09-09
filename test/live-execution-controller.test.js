@@ -229,6 +229,20 @@ test('a bounded window yields before a new selection when it cannot retain its v
   assert.equal((await f.controller.step()).matched,true);
 });
 
+test('a short remaining invocation does not start multi-step Results navigation and reconciliation', async () => {
+  const f=fixture();await f.controller.step();f.begin();f.accept(f.players[0],true);f.opponents();
+  let reads=0;const results=f.room.results;f.room.results=async(...args)=>{reads++;return results(...args);};
+  await f.controller.runWindow({durationMs:4000});
+  assert.equal(reads,0);assert.equal(f.controller.status().unsettled,false);assert.equal(f.actions.length,0);
+  await f.controller.step();assert.ok(reads>0);
+});
+
+test('operation deadlines leave transport settlement time inside the active invocation', async () => {
+  const f=fixture();let innerBudget;const observe=f.room.observe;
+  f.room.observe=async options=>{innerBudget=options.timeoutMs;return observe(options);};
+  await f.controller.step();assert.ok(innerBudget<=4000&&innerBudget>=3000);
+});
+
 test('abort during preparation prevents any later Yahoo input and revokes active control', async () => {
   const f = fixture(); await f.controller.step(); f.begin();
   const abort = new AbortController(), prepare = f.room.prepare;

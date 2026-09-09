@@ -42,6 +42,38 @@ test('room mismatch records the actual and expected route without authentication
   });
 });
 
+test('Yahoo short countdown seconds are read only next to the current turn label', () => {
+  for (const seconds of [0, 3, 9]) {
+    const raw = {...fixture().raw,header:`YAHOO FANTASY FOOTBALL DRAFT\nFlea Flicker - H2H\n${seconds}\nYOUR TURN • ROUND 1, PICK 8\nLast:\nPlayer`};
+    assert.equal(parseYahooObservation(raw,identity).secondsLeft,seconds);
+  }
+  for (const header of ['3\nUnrelated number\nYOUR TURN • ROUND 1, PICK 8', '00:99\nYOUR TURN • ROUND 1, PICK 8',
+    '00:30\n3\nYOUR TURN • ROUND 1, PICK 8']) assert.throws(()=>parseYahooObservation({...fixture().raw,header},identity),{code:'ROOM_CLOCK_UNREADABLE'});
+});
+
+test('Results navigation uses observed tab roles and waits for the selected table without repeating input', async () => {
+  for (const role of ['tab','button']) {
+    const raw=fixture().raw, actions=[];
+    raw.buttons=[{text:'Players',name:'Players',role},{text:'Results',name:'Results',role}];
+    let pending=null, reads=0, subtabDelay=0;
+    const room=createYahooLiveRoom({identity,tab:{playwright:{
+      evaluate:async()=>{
+        if(subtabDelay && --subtabDelay===0) raw.buttons.push({text:'Round by Round',name:'Round by Round',role});
+        if(pending&&++reads>=2){
+          if(pending==='Results') {raw.resultsSelected=true;raw.playersSelected=false;subtabDelay=2;raw.tables=[{kind:'other',headers:['Slot','Player','Bye','Pick'],rows:[]}];}
+          else {raw.roundsSelected=true;raw.tables=[{kind:'results',headers:['Pick','Player','Team'],rows:[]}];}
+          pending=null;
+        }
+        return structuredClone(raw);
+      },
+      waitForTimeout:async()=>{},
+      getByRole:(observed,options)=>({press:async key=>{assert.equal(observed,role);assert.equal(key,'Enter');actions.push(options.name);pending=options.name;reads=0;}})
+    }}});
+    const result=await room.results();assert.deepEqual(result.picks,[]);
+    assert.deepEqual(actions,['Results','Round by Round']);assert.equal(raw.roundsSelected,true);
+  }
+});
+
 test('DOM reader separates column headings and direct data cells from turn dividers and nested tables', () => {
   const vm = require('node:vm');
   const visible = { getClientRects: () => [{}] };
