@@ -10,8 +10,8 @@ test.before(async () => ({ createLiveDraftController } = await import('../script
 
 function fixture({ full = false, choose, faults = {}, cadence } = {}) {
   let time = Date.parse('2026-09-09T00:00:00Z'), sequence = 0;
-  const league = { ...structuredClone(require('../config/leagues/yahoo-example.json')), teamCount: cadence ? 8 : 6,
-    roster: cadence ? { QB: 1, RB: 2, WR: 2, TE: 1, 'R/W/T': 1, K: 1, DEF: 1, BN: 6 } : full ? { QB: 2, WR: 4, RB: 3, TE: 1, 'W/T': 1, 'W/R': 1, K: 1, DEF: 2, BN: 5, IR: 2 } : { QB: 1, RB: 1 },
+  const league = { ...structuredClone(require('../config/leagues/yahoo-example.json')), teamCount: full ? 6 : cadence ? 8 : 6,
+    roster: full ? { QB: 2, WR: 4, RB: 3, TE: 1, 'W/T': 1, 'W/R': 1, K: 1, DEF: 2, BN: 5, IR: 2 } : cadence ? { QB: 1, RB: 2, WR: 2, TE: 1, 'R/W/T': 1, K: 1, DEF: 1, BN: 6 } : { QB: 1, RB: 1 },
     provenance: { yahooLeagueKey: 'nfl.l.153454', yahooTeamKey: 'nfl.l.153454.t.2' } };
   const positions = ['QB', 'RB', 'WR', 'TE', 'RB', 'WR', 'DEF', 'K'];
   const players = Array.from({ length: full || cadence ? 240 : 40 }, (_, i) => ({ id: `p${i}`, yahooPlayerKey: `nfl.p.${1000 + i}`,
@@ -20,7 +20,7 @@ function fixture({ full = false, choose, faults = {}, cadence } = {}) {
     projectionLeagueId: league.id, projectionScoringFingerprint: scoringFingerprint(league), projectionScoringVerified: true, projectionSource: 'synthetic-replay' }));
   const args = { league, playerPool: { players, source: 'synthetic-replay', complete: true, season: 2026 }, store: new MemoryStateStore(), now: () => new Date(time) };
   let drafts = new DraftService(args);
-  const slot = cadence ? 8 : 1;
+  const slot = full ? 1 : cadence ? 8 : 1;
   const session = drafts.createSession({ draftSlot: slot, sourceMode: 'yahoo' }), picks = [], actions = [], auditReads = [], autopicks = [];
   let phase = 'waiting', expires = Infinity, remainingSeconds = 75;
   let opponentDue = Infinity, opponentIndex = 0;
@@ -89,6 +89,51 @@ function fixture({ full = false, choose, faults = {}, cadence } = {}) {
     get drafts() { return drafts; }, begin(seconds = 75) { remainingSeconds = seconds; phase = 'drafting'; expires = time + seconds * 1000; scheduleOpponent(); },
     restart() { drafts = new DraftService(args); }, bump, accept, opponents };
 }
+
+const clockValidationCases = [
+  {clock:15,gap:0,complete:false},
+  {clock:30,gap:0,complete:true},
+  {clock:45,gap:0,complete:true},
+  {clock:70,gap:0,complete:true,full:true},
+  {clock:120,gap:0,complete:true},
+  {clock:30,gap:31584,complete:false},
+  {clock:45,gap:31584,complete:false},
+  {clock:70,gap:31584,complete:true,full:true},
+  {clock:120,gap:31584,complete:true},
+  {clock:70,gap:0,complete:true,switchClock:30}
+];
+const clockValidationResults=[];
+for(const scenario of clockValidationCases) test(`clock validation: ${scenario.clock}s${scenario.switchClock?' to '+scenario.switchClock+'s':''}, caller gap ${scenario.gap}ms, ${scenario.full?'DR':'mock'}`,async()=>{
+  // Exercise the actual service/controller with a simulated fast room. This
+  // does not replace the separate real browser invocation-boundary gate.
+  const f=fixture({full:scenario.full,cadence:[100]});
+  await f.controller.step();f.begin(scenario.clock);
+  let switched=false,windows=0;
+  while(f.controller.status().continuationRequired&&windows++<80){
+    await f.controller.runWindow({durationMs:45000});
+    if(scenario.switchClock&&!switched&&f.actions.length>=2){f.begin(scenario.switchClock);switched=true;}
+    if(f.controller.status().continuationRequired)f.bump(scenario.gap);
+  }
+  const s=f.controller.status(),audit=new DraftService(f.args).exportDecisionAudit(f.session.id);
+  const expected=Array.from({length:f.session.totalPicks},(_,i)=>i+1).filter(p=>pickOwner(p,f.identity.teamCount)===f.identity.draftSlot);
+  const record={...scenario,scope:'Injected-clock simulation, not actual browser acceptance',windows,
+    fullyVerified:s.fullyVerified,inputs:f.actions.map(a=>a.overallPick),autopicks:f.autopicks,
+    results:f.picks.length,expectedOwned:expected,fatal:s.fatal,auditIntegrity:audit.integrityVerified,
+    displayConfirmations:audit.events.filter(e=>e.type==='display-confirmed').length};
+  clockValidationResults.push(record);
+  if(process.env.HUDDLE_CLOCK_VALIDATION_REPORT)require('node:fs').writeFileSync(process.env.HUDDLE_CLOCK_VALIDATION_REPORT,JSON.stringify({
+    observedAt:new Date().toISOString(),expectedCases:clockValidationCases.length,cases:clockValidationResults,
+    note:'A passing test may confirm a rejected/failed draft case; inspect fullyVerified, not test exit status.'
+  },null,2));
+  assert.equal(s.fullyVerified,scenario.complete,JSON.stringify(record));
+  assert.equal(audit.integrityVerified,true);
+  if(scenario.complete){
+    assert.deepEqual(record.inputs,expected);assert.deepEqual(f.autopicks,[]);assert.equal(f.picks.length,120);
+    for(const type of ['plan','display-confirmed','submit-started','input-acknowledged','accepted'])
+      assert.equal(audit.events.filter(e=>e.type===type).length,expected.length,type);
+    assert.ok(f.auditReads.every(Boolean));
+  }else assert.ok(s.fatal||f.autopicks.length,'A failed scenario must retain the actual rejection or missed selection');
+});
 
 test('all fifteen 30-second mock turns survive delayed opponents and the measured caller gap', async () => {
   // Fourteen opponents at 2.8 seconds each put pick 24 ~29.6 seconds into
