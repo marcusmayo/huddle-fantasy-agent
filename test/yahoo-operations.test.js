@@ -168,10 +168,17 @@ test('Yahoo operations readiness and one-shot draft sync are fail-loud and idemp
   });
   assert.equal(operations.readiness().readyForLiveDraft, true);
   const first = await operations.syncDraftOnce({ leagueId: league.id, sessionId: session.id });
-  assert.equal(first.state, 'running');
+  assert.equal(first.state, 'idle');
+  assert.equal(first.recurring, false);
   assert.equal(drafts.getSession(session.id).picks.length, 1);
   await operations.syncDraftOnce({ leagueId: league.id, sessionId: session.id });
   assert.equal(drafts.getSession(session.id).picks.length, 1);
+  const started = operations.startDraftSync({ leagueId: league.id, sessionId: session.id });
+  assert.equal(started.recurring, true);
+  assert.equal(started.state, 'running');
+  const existing = operations.draftPollers.get(operations.key(league.id, session.id));
+  operations.startDraftSync({ leagueId: league.id, sessionId: session.id });
+  assert.equal(operations.draftPollers.get(operations.key(league.id, session.id)), existing);
   operations.stop();
 });
 
@@ -486,6 +493,7 @@ test('Yahoo rehearsal fills a two-defense league shortfall from current-season a
         player: async () => ({ name: 'Current Season Player' }),
         availablePlayers: async (_leagueKey, options) => {
           calls.push(options);
+          if (options.start) return {};
           return { fantasy_content: { league: [{ players: Object.assign(
             Object.fromEntries(defenseRows.map((row, index) => [index, row])),
             { count: defenseRows.length }
@@ -504,11 +512,13 @@ test('Yahoo rehearsal fills a two-defense league shortfall from current-season a
   const after = operations.readiness();
   assert.equal(result.ready, true);
   assert.equal(result.localEvidenceUpdated, true);
-  assert.equal(result.localEvidenceAdded, 5);
-  assert.deepEqual(result.checks.map((check) => check.name), ['league-settings', 'draft-results', 'player-lookup', 'draft-depth']);
-  assert.deepEqual(calls, [{ start: 0, count: 100, status: 'A', position: 'DEF' }]);
+  assert.equal(result.localEvidenceAdded, 12);
+  assert.deepEqual(result.checks.map((check) => check.name), ['league-settings', 'draft-results', 'player-lookup', 'draft-depth', 'candidate-window']);
+  assert.deepEqual(calls, [{ start: 0, count: 100, status: 'A', position: 'DEF' },
+    { start: 0, count: 25, status: 'A', sort: 'OR', season: 2026 },
+    { start: 12, count: 25, status: 'A', sort: 'OR', season: 2026 }]);
   assert.equal(after.readyForLiveDraft, true);
-  assert.equal(after.playerEvidence.crosswalk.positions.find((item) => item.position === 'DEF').loaded, 15);
+  assert.equal(after.playerEvidence.crosswalk.positions.find((item) => item.position === 'DEF').loaded, 22);
   assert.equal(runtime.playerPool.players.filter((item) => item.evidenceRole === 'yahoo-available-depth').length, 5);
   assert.equal(runtime.playerPool.source, 'fantasypros+tank01+sleeper+yahoo');
   assert.doesNotMatch(JSON.stringify(result), /RAW_WEEKLY_YAHOO_MUST_NOT_PERSIST/);
@@ -535,7 +545,8 @@ test('Yahoo rehearsal validates read-only settings, draft, and player endpoints 
       readClient: () => ({
         leagueSettings: async () => { calls.push('GET settings'); return { raw: 'not returned' }; },
         draftResults: async () => { calls.push('GET draft'); return { payload: { raw: 'not returned' }, picks: [] }; },
-        player: async (key) => { calls.push(`GET player ${key}`); return { name: 'Quarterback One' }; }
+        player: async (key) => { calls.push(`GET player ${key}`); return { name: 'Quarterback One' }; },
+        availablePlayers: async (_key, options) => options.start ? {} : { players: [player('999.p.1', 'Quarterback One', 'QB', 'BN', 0, 300)] }
       })
     },
     draftServices: new Map(),
@@ -546,7 +557,7 @@ test('Yahoo rehearsal validates read-only settings, draft, and player endpoints 
   assert.equal(result.ready, true);
   assert.equal(result.mutations, false);
   assert.equal(result.rawPayloadPersisted, false);
-  assert.deepEqual(result.checks.map((check) => check.name), ['league-settings', 'draft-results', 'player-lookup']);
+  assert.deepEqual(result.checks.map((check) => check.name), ['league-settings', 'draft-results', 'player-lookup', 'candidate-window']);
   assert.deepEqual(calls, ['GET settings', 'GET draft', 'GET player 999.p.1']);
   assert.doesNotMatch(JSON.stringify(result), /not returned/);
 });
@@ -575,7 +586,8 @@ test('Yahoo rehearsal qualifies numeric and stale player IDs for the imported le
       readClient: () => ({
         leagueSettings: async () => ({}),
         draftResults: async () => ({ payload: {}, picks: [] }),
-        player: async (key) => { lookedUp.push(key); return { name: 'Qualified Player' }; }
+        player: async (key) => { lookedUp.push(key); return { name: 'Qualified Player' }; },
+        availablePlayers: async (_key, options) => options.start ? {} : { players: [player('470.p.40059', 'Quarterback One', 'QB', 'BN', 0, 300)] }
       })
     },
     draftServices: new Map(),

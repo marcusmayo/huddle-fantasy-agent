@@ -2,6 +2,15 @@
 
 const RESULT_TTL_MS = 15 * 60 * 1000;
 
+function semanticConfig(config) {
+  const { provenance, ...settings } = config;
+  return { ...settings, provenance: provenance ? {
+    season: provenance.season,
+    verificationStatus: provenance.verificationStatus,
+    warnings: provenance.warnings
+  } : undefined };
+}
+
 function needsLiveEvidence(report, maximumAgeHours) {
   const evidence = report.playerEvidence;
   const crosswalk = evidence.crosswalk;
@@ -34,7 +43,7 @@ class DraftReadinessService {
       generation: this.generation,
       account: { enabled, clientConfigured, encryptedTokenStorageConfigured, connected },
       leagues: this.runtime.leagues.map(({ id, config, yahooLeagueKey, yahooTeamKey, verificationStatus }) =>
-        ({ id, config, yahooLeagueKey, yahooTeamKey, verificationStatus })),
+        ({ id, config: semanticConfig(config), yahooLeagueKey, yahooTeamKey, verificationStatus })),
       autoSync: this.runtime.yahooDraftAutoSyncEnabled,
       rehearsal: this.runtime.preflightYahooRehearsalEnabled,
       coverage: this.runtime.yahooDraftMinimumCrosswalkCoverage,
@@ -46,7 +55,7 @@ class DraftReadinessService {
   poolVersion() {
     const pool = this.runtime.playerPool;
     return JSON.stringify([pool.source, pool.fetchedAt, pool.complete,
-      (pool.players || []).map((player) => [player.id, player.yahooPlayerKey, player.position])]);
+      pool.players || []]);
   }
 
   invalidate() {
@@ -60,6 +69,9 @@ class DraftReadinessService {
       && this.checkedPool === this.poolVersion()
       && this.now().getTime() - Date.parse(this.last.checkedAt) < RESULT_TTL_MS);
     const blockers = [...current.blockers];
+    for (const coverage of current.yahooCandidateCoverage || []) {
+      if (!coverage.valid) blockers.push(`${coverage.leagueId}: ${coverage.reason}. Check draft readiness to refresh the Yahoo candidate window.`);
+    }
     if (fresh) blockers.push(...this.last.checkBlockers);
     if (!fresh) blockers.push('Run Check draft readiness in the app before opening a live Yahoo draft.');
     if (this.inFlight) blockers.push('Draft readiness check is still running.');

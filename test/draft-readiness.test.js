@@ -34,6 +34,19 @@ function fixture() {
   return { runtime, report, operations, refresh, service, calls, advance: (ms) => { clock += ms; } };
 }
 
+test('readiness ignores verification timestamps but invalidates actual draft settings and player values', async () => {
+  const f = fixture();
+  f.runtime.leagues[0].config.provenance = { season: 2026, draftSlotUpdatedAt: 'old' };
+  await f.service.start();
+  f.runtime.leagues[0].config.provenance.draftSlotUpdatedAt = 'new';
+  assert.equal(f.service.status().state, 'ready');
+  f.runtime.leagues[0].config.roster.QB = 2;
+  assert.equal(f.service.status().state, 'unchecked');
+  await f.service.start();
+  f.runtime.playerPool.players[0].projectedPoints = 400;
+  assert.equal(f.service.status().state, 'unchecked');
+});
+
 test('full in-app check is required, concurrent runs coalesce and status reads do not spend requests', async () => {
   const { service, calls } = fixture();
   assert.equal(service.status().state, 'unchecked');

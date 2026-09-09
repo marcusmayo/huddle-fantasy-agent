@@ -150,6 +150,7 @@ function loadRuntimeConfig() {
     yahooOAuthEnabled: parseBoolean(process.env.HUDDLE_YAHOO_OAUTH_ENABLED, false),
     yahooTokenFile: path.resolve(process.env.HUDDLE_YAHOO_TOKEN_FILE || './data/secrets/yahoo-tokens.enc.json'),
     yahooDraftAutoSyncEnabled: parseBoolean(process.env.HUDDLE_YAHOO_DRAFT_AUTO_SYNC_ENABLED, true),
+    yahooDraftMaximumCandidates: Math.max(25, Math.min(1000, Number(process.env.HUDDLE_YAHOO_DRAFT_MAX_CANDIDATES || 500))),
     yahooDraftPollIntervalMs: Math.max(5, Number(process.env.HUDDLE_YAHOO_DRAFT_POLL_SECONDS || 15)) * 1000,
     yahooDraftMinimumCrosswalkCoverage: Math.max(0.5, Math.min(1, Number(process.env.HUDDLE_YAHOO_DRAFT_MINIMUM_CROSSWALK_COVERAGE || 0.8))),
     yahooDraftPositionDepthBuffer: Math.max(0, Math.min(1, Number(process.env.HUDDLE_DRAFT_POSITION_DEPTH_BUFFER_PERCENT || 20) / 100)),

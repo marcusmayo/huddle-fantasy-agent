@@ -1,4 +1,5 @@
 'use strict';
+const { normalizeTeam } = require('../domain/player-snapshot');
 
 const SOURCE_WEIGHTS = Object.freeze({ fantasyPros: 0.675, tank01: 0.325 });
 const SUPPORTED_POSITIONS = new Set(['QB', 'RB', 'WR', 'TE', 'K', 'DEF']);
@@ -104,7 +105,7 @@ function positionalScores(rows, rankOf) {
 }
 
 function draftRank(player, fallback) {
-  const value = Number(player?.expertRank ?? player?.adp);
+  const value = Number(player?.expertRank ?? player?.adp ?? player?.yahooObservedOrder);
   return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
@@ -137,10 +138,10 @@ function ensureDraftProjections(players = []) {
       player,
       rank: draftRank(player, index + 1),
       points: Number(player.projectedPoints)
-    })).filter((item) => Number.isFinite(item.points) && item.points > 0);
+    })).filter((item) => Number.isFinite(item.points) && item.points > 0 && !item.player.projectionImputed);
     group.forEach((player, index) => {
       let projectedPoints = positiveNumber(player.projectedPoints);
-      const hasProjection = projectedPoints != null;
+      const hasProjection = projectedPoints != null && !player.projectionImputed;
       if (hasProjection) provided += 1;
       else {
         projectedPoints = Math.max(1, projectedFromNeighbors(player, index, group, known));
@@ -263,6 +264,9 @@ function reconcilePlayerEvidence(primaryPool, { tank01 = null, sleeper = null, e
       : null;
     return {
       ...player,
+      team: normalizeTeam(player.team) || normalizeTeam(tankPlayer?.team) || normalizeTeam(sleeperIdentity?.team) || 'FA',
+      byeWeek: player.byeWeek ?? tankPlayer?.byeWeek ?? sleeperIdentity?.byeWeek ?? null,
+      injuryStatus: player.injuryStatus ?? tankPlayer?.injuryStatus ?? sleeperIdentity?.injuryStatus ?? null,
       yahooPlayerKey: player.yahooPlayerKey || (sleeperIdentity?.yahooId ? String(sleeperIdentity.yahooId) : null),
       sourceConsensus: Math.round(sourceConsensus * 1000) / 1000,
       sourceRanks: {
@@ -308,13 +312,13 @@ function reconcilePlayerEvidence(primaryPool, { tank01 = null, sleeper = null, e
       id: tankPlayer.tank01Id ? `tank01:${tankPlayer.tank01Id}` : `secondary:${identityKey(tankPlayer)}`,
       name: String(tankPlayer.name),
       position,
-      team: String(tankPlayer.team || sleeperIdentity?.team || 'FA').toUpperCase(),
+      team: normalizeTeam(tankPlayer.team) || normalizeTeam(sleeperIdentity?.team) || 'FA',
       yahooPlayerKey: fallbackYahooId,
       expertRank: null,
       adp: Number.isFinite(rank) ? rank : null,
       tier: 99,
-      byeWeek: null,
-      injuryStatus: null,
+      byeWeek: tankPlayer.byeWeek ?? sleeperIdentity?.byeWeek ?? null,
+      injuryStatus: tankPlayer.injuryStatus ?? sleeperIdentity?.injuryStatus ?? null,
       risk: 0.3,
       projectedPoints: positiveNumber(tankPlayer.projectedPoints),
       projectionSource: positiveNumber(tankPlayer.projectedPoints) != null ? 'tank01-api' : 'missing',

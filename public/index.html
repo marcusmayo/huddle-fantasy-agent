@@ -107,12 +107,14 @@
         <div><span class="eyebrow">YOUR NEXT TURN</span><strong id="next-turn">—</strong></div>
         <div><span class="eyebrow">PLAYER DATA</span><strong id="coverage">—</strong></div>
         <div class="draft-session-actions">
+          <a id="draft-view-link" class="ghost" href="#">Draft view</a>
           <button id="complete-session" class="ghost">Complete session</button>
           <button id="new-session" class="ghost">Exit to sessions</button>
         </div>
       </div>
 
       <div id="evidence-warning" class="warning hidden"></div>
+      <p id="workspace-health" role="status" aria-live="polite">Waiting for a verified board update.</p>
 
       <section id="mock-room-import" class="panel hidden" aria-labelledby="mock-room-title">
         <p class="eyebrow">PRACTICE ROOM</p>
@@ -198,7 +200,7 @@
           </div>
           <div id="board-scroll" class="table-wrap board-scroll" tabindex="0" aria-label="Resizable best available players">
             <table>
-              <thead><tr><th>#</th><th>Player</th><th>Pos</th><th>Score</th><th>Next-turn chance</th><th>Flag</th></tr></thead>
+              <thead><tr><th>#</th><th>Player</th><th>Pos</th><th>Score</th><th title="Uncalibrated ADP heuristic">Wait estimate</th><th>Flag</th></tr></thead>
               <tbody id="board-body"></tbody>
             </table>
           </div>
@@ -435,6 +437,7 @@
     <span>Huddle is an independent, recommendation-only assistant. Raw Yahoo responses are transient; saved weeks contain compact normalized results only.</span>
   </footer>
   <div id="app-toast" class="app-toast hidden" role="status" aria-live="assertive"></div>
+  <script src="/request.js" defer></script>
   <script src="/app.js" defer></script>
 </body>
 </html>

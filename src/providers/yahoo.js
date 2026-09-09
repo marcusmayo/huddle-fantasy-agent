@@ -2,6 +2,7 @@
 
 const { extractYahooLeagues } = require('./yahoo-normalizer');
 const { pickOwner } = require('../domain/league');
+const { normalizeTeam } = require('../domain/player-snapshot');
 
 const DEFAULT_BASE_URL = 'https://fantasysports.yahooapis.com/fantasy/v2';
 
@@ -65,11 +66,25 @@ function extractYahooPlayer(payload, expectedPlayerKey) {
   const firstName = first('first');
   const lastName = first('last');
   const name = String(fullName || [firstName, lastName].filter(Boolean).join(' ') || '').trim();
+  // Scope the week lookup to bye_weeks; a weekly-stat period is not a bye.
+  const findBye = (value) => {
+    if (!value || typeof value !== 'object') return null;
+    if (value.bye_weeks) {
+      const week = Number(recursivelyFindScalars(value.bye_weeks, 'week')[0]);
+      if (Number.isInteger(week) && week >= 1 && week <= 18) return week;
+    }
+    for (const child of Object.values(value)) { const week = findBye(child); if (week != null) return week; }
+    return null;
+  };
+  const byeWeek = findBye(payload);
+  const injuryStatus = first('status');
   return {
     yahooPlayerKey,
     name: name || null,
     position: ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'].includes(position) ? position : null,
-    team: String(first('editorial_team_abbr') || 'FA').toUpperCase()
+    team: normalizeTeam(first('editorial_team_abbr')) || 'FA',
+    ...(byeWeek != null ? { byeWeek, byeSource: 'yahoo-player' } : {}),
+    ...(injuryStatus != null ? { injuryStatus: String(injuryStatus).slice(0, 32), injurySource: 'yahoo-player' } : {})
   };
 }
 
@@ -133,9 +148,11 @@ class YahooReadOnlyClient {
     return this.get(`/team/${encodeURIComponent(teamKey)}/roster;week=${Number(week)}`);
   }
 
-  async availablePlayers(leagueKey, { start = 0, count = 100, status = 'A', position = null } = {}) {
+  async availablePlayers(leagueKey, { start = 0, count = 100, status = 'A', position = null, sort = null, season = null } = {}) {
     const filters = [`status=${encodeURIComponent(status)}`];
     if (position) filters.push(`position=${encodeURIComponent(position)}`);
+    if (sort) filters.push(`sort=${encodeURIComponent(sort)}`);
+    if (season) filters.push('sort_type=season', `sort_season=${Number(season)}`);
     filters.push(`start=${Number(start)}`, `count=${Number(count)}`);
     return this.get(`/league/${encodeURIComponent(leagueKey)}/players;${filters.join(';')}`);
   }
@@ -212,9 +229,20 @@ class YahooDraftPoller {
     );
     this.timer = null;
     this.running = false;
+    this.syncInFlight = null;
+    this.runGeneration = 0;
   }
 
-  async syncOnce() {
+  syncOnce() {
+    // A manual refresh and the recurring loop share one read/reconciliation.
+    if (this.syncInFlight) return this.syncInFlight;
+    this.syncInFlight = Promise.resolve().then(() => this.readAndReconcile())
+      .finally(() => { this.syncInFlight = null; });
+    return this.syncInFlight;
+  }
+
+  async readAndReconcile() {
+    this.onStatus({ level: 'info', code: 'READ_STARTED' });
     const { picks } = await this.client.draftResults(this.leagueKey);
     const session = this.draftService.getSession(this.sessionId);
     const unresolvedPicks = [];
@@ -288,16 +316,18 @@ class YahooDraftPoller {
   }
 
   start() {
-    if (this.timer) return;
+    if (this.running) return;
     this.running = true;
+    const generation = ++this.runGeneration;
     const tick = async () => {
-      if (!this.running) return;
+      if (!this.running || generation !== this.runGeneration) return;
+      this.timer = null;
       try {
         await this.syncOnce();
       } catch (error) {
         this.onStatus({ level: 'error', code: error.code || 'SYNC_FAILED', message: error.message });
       } finally {
-        if (this.running) this.timer = setTimeout(tick, this.intervalMs);
+        if (this.running && generation === this.runGeneration) this.timer = setTimeout(tick, this.intervalMs);
       }
     };
     tick();
@@ -305,6 +335,7 @@ class YahooDraftPoller {
 
   stop() {
     this.running = false;
+    this.runGeneration += 1;
     clearTimeout(this.timer);
     this.timer = null;
   }

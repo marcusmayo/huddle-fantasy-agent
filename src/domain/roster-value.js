@@ -90,7 +90,16 @@ function byeCoverageReport(players, league) {
     return available.assignments.filter(item=>!item.player && base.has(`${item.slot}:${item.slotIndex}`))
       .map(item=>({week,slot:item.slot,slotIndex:item.slotIndex}));
   });
-  return {gaps, unknownByes:players.filter(player=>!Number.isInteger(player.byeWeek)||player.byeWeek<1||player.byeWeek>18).length,
+  const unknownByes = players.filter(player=>!Number.isInteger(player.byeWeek)||player.byeWeek<1||player.byeWeek>18).length;
+  const unknownValues = players.filter(player => player.projectedPoints == null || !Number.isFinite(Number(player.projectedPoints))).length;
+  const weeklyLosses = weeks.map(week => {
+    const available = seasonLineup(players.filter(player => player.byeWeek !== week), league.roster);
+    return { week, estimatedPointsLost: Math.round(Math.max(0, starters.total - available.total) / 17 * 100) / 100 };
+  });
+  return {gaps, unknownByes, unknownValues,
+    coverageVerified: unknownByes === 0 && unknownValues === 0,
+    weeklyLosses: unknownByes || unknownValues ? null : weeklyLosses,
+    lossBasis: 'Season totals divided by 17 games; owned replacements only, not a matchup-specific weekly forecast.',
     streamingPositions:league.draftStrategy?.streamingPositions || ['K','DEF'],
     assumption:'Future waiver availability is unverified. Offensive bye coverage is valued from owned players; K/DEF streaming uses an estimate.'};
 }

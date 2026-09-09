@@ -18,6 +18,7 @@ const { DraftReadinessService } = require('./services/draft-readiness-service');
 const { FantasyProsRefreshController } = require('./services/fantasypros-refresh');
 const { LeagueOnboardingService } = require('./services/league-onboarding');
 const { reconcilePlayerEvidence } = require('./services/player-evidence');
+const { mergeProviderPool, publishPlayerPool } = require('./services/player-pool-store');
 const { WeeklyFleetRunner, WeeklyManagementService } = require('./services/weekly-management-service');
 const { YahooAccountService, YAHOO_ACCOUNT_CREDENTIAL } = require('./services/yahoo-account-service');
 const { YahooOperationsService } = require('./services/yahoo-operations-service');
@@ -115,7 +116,7 @@ function availablePlayers(runtime, service, sessionId) {
   };
 }
 
-async function handleDraftRoutes(request, response, service, parts, { visionClient, league, leagueEntry: entry, yahooOperations, draftReadiness } = {}) {
+async function handleDraftRoutes(request, response, service, parts, { visionClient, league, leagueEntry: entry, yahooOperations, draftReadiness, runtime, yahooAccount } = {}) {
   if (parts[0] !== 'sessions') return false;
   if (parts.length === 1 && request.method === 'GET') {
     json(response, 200, { sessions: service.listSessions() });
@@ -201,6 +202,30 @@ async function handleDraftRoutes(request, response, service, parts, { visionClie
     json(response, 200, service.recordPick(sessionId, await readBody(request)));
     return true;
   }
+  if (parts[2] === 'browser-results' && request.method === 'POST') {
+    json(response, 200, service.reconcileBrowserResults(sessionId, await readBody(request)));
+    return true;
+  }
+  if (parts[2] === 'decisions' && request.method === 'GET') {
+    json(response, 200, service.decisionSummary(sessionId));
+    return true;
+  }
+  if (parts[2] === 'controller' && request.method === 'GET') {
+    json(response, 200, service.controllers.status(sessionId));
+    return true;
+  }
+  if (parts[2] === 'controller' && request.method === 'POST') {
+    json(response, 200, service.controllers.update(sessionId, await readBody(request)));
+    return true;
+  }
+  if (parts[2] === 'decisions' && request.method === 'POST') {
+    json(response, 201, service.recordDecision(sessionId, await readBody(request)));
+    return true;
+  }
+  if (parts[2] === 'decision-audit' && request.method === 'GET') {
+    json(response, 200, service.exportDecisionAudit(sessionId));
+    return true;
+  }
   if (parts[2] === 'mock-snapshot' && request.method === 'POST') {
     const result = service.importMockSnapshot(sessionId, await readBody(request));
     result.card.explanation = deterministicExplanation(result.card);
@@ -210,6 +235,12 @@ async function handleDraftRoutes(request, response, service, parts, { visionClie
   if (parts[2] === 'workspace' && request.method === 'GET') {
     const result = service.workspace(sessionId);
     result.card.explanation = deterministicExplanation(result.card);
+    result.context = { instance: runtime?.instanceName || 'Huddle', leagueName: service.league.name,
+      simulation: runtime?.draftSimulation === true,
+      teamName: service.league.targetTeam, leagueId: service.league.id, sourceMode: result.session.sourceMode,
+      yahooLeagueKey: entry?.yahooLeagueKey || null, yahooTeamKey: entry?.yahooTeamKey || null,
+      accountConnected: Boolean(yahooAccount?.status().connected), oauthEnabled: Boolean(runtime?.yahooOAuthEnabled),
+      sync: result.session.sourceMode === 'yahoo' && yahooOperations && entry ? yahooOperations.draftStatus(entry.id, sessionId) : null };
     json(response, 200, result);
     return true;
   }
@@ -305,20 +336,14 @@ async function syncFantasyPros(runtime, fantasyProsClient, input = {}, { tank01C
       ? capture('sleeper', () => sleeperClient.loadDraftEvidence({ force: Boolean(input.force) }))
       : Promise.resolve(null)
   ]);
-  const pool = sanitizePlayerPool(reconcilePlayerEvidence(primaryPool, { tank01, sleeper, errors }), runtime.playerHeadshots);
+  const pool = sanitizePlayerPool(mergeProviderPool(runtime, reconcilePlayerEvidence(primaryPool, { tank01, sleeper, errors })), runtime.playerHeadshots);
+  publishPlayerPool(runtime, pool);
   runtime.sourceSyncStatus = {
     lastAttemptAt: new Date().toISOString(),
     tank01Loaded: Boolean(tank01?.players?.length),
     sleeperLoaded: Boolean(sleeper?.players?.length),
     errors
   };
-  Object.assign(runtime.playerPool, pool);
-  if (runtime.playerSnapshotFile) {
-    fs.mkdirSync(path.dirname(runtime.playerSnapshotFile), { recursive: true });
-    const tempPath = `${runtime.playerSnapshotFile}.tmp`;
-    fs.writeFileSync(tempPath, `${JSON.stringify(pool, null, 2)}\n`, { mode: 0o600 });
-    fs.renameSync(tempPath, runtime.playerSnapshotFile);
-  }
   return {
     source: pool.source,
     complete: pool.complete,
@@ -504,7 +529,7 @@ function createHandler({ runtime, draftServices, weeklyServices, weeklyFleetRunn
         if (tail[0] === 'players' && request.method === 'GET') {
           return json(response, 200, availablePlayers(runtime, service, url.searchParams.get('sessionId')));
         }
-        if (tail[0] === 'draft' && await handleDraftRoutes(request, response, service, tail.slice(1), { visionClient, league: entry.config, leagueEntry: entry, yahooOperations, draftReadiness })) return;
+        if (tail[0] === 'draft' && await handleDraftRoutes(request, response, service, tail.slice(1), { visionClient, league: entry.config, leagueEntry: entry, yahooOperations, draftReadiness, runtime, yahooAccount })) return;
         if (tail[0] === 'weekly' && tail[1] === 'yahoo') {
           if (tail[2] === 'status' && request.method === 'GET') {
             return json(response, 200, yahooOperations.weeklyStatus(entry.id));
@@ -536,7 +561,7 @@ function createHandler({ runtime, draftServices, weeklyServices, weeklyFleetRunn
       }
       if (segments[0] === 'api' && segments[1] === 'draft') {
         const defaultContext = serviceFor(runtime, draftServices, runtime.defaultLeagueId);
-        if (await handleDraftRoutes(request, response, defaultContext.service, segments.slice(2), { visionClient, league: defaultContext.entry.config, leagueEntry: defaultContext.entry, yahooOperations, draftReadiness })) return;
+        if (await handleDraftRoutes(request, response, defaultContext.service, segments.slice(2), { visionClient, league: defaultContext.entry.config, leagueEntry: defaultContext.entry, yahooOperations, draftReadiness, runtime, yahooAccount })) return;
       }
       if (segments[0] === 'api' && segments[1] === 'weekly') {
         const defaultContext = serviceFor(runtime, draftServices, runtime.defaultLeagueId);
@@ -703,6 +728,7 @@ function buildApp(inputRuntime = loadRuntimeConfig(), options = {}) {
         league: entry.config,
         playerPool: runtime.playerPool,
         store: storeFactory(entry),
+        simulation: runtime.draftSimulation === true,
         evidenceRetentionDays: runtime.yahooEvidenceRetentionDays
       });
       draftServices.set(entry.id, draftService);

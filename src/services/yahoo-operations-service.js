@@ -8,6 +8,7 @@ const { YahooTransientWeeklyAdapter } = require('../providers/yahoo-transient-we
 const { extractPlayers, normalizeYahooWeeklyBundle } = require('../providers/yahoo-weekly-normalizer');
 const { draftedRosterSize, positionTargets } = require('../domain/league');
 const { ensureDraftProjections, identityKey, yahooId } = require('./player-evidence');
+const { coverageStatus, refreshYahooDraftEvidence, persistPool } = require('./yahoo-draft-evidence');
 
 const DRAFT_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
 
@@ -80,6 +81,7 @@ class YahooOperationsService {
     this.startedAt = null;
     this.nextWeeklyRefreshAt = null;
     this.draftDepthSupplement = Promise.resolve();
+    this.evidenceRefreshes = new Map();
   }
 
   iso() {
@@ -96,8 +98,8 @@ class YahooOperationsService {
     return `${leagueId}:${sessionId}`;
   }
 
-  crosswalk() {
-    const players = this.runtime.playerPool.players || [];
+  crosswalk(pool = this.runtime.playerPool) {
+    const players = pool.players || [];
     const mapped = players.filter((player) => player.yahooPlayerKey).length;
     const positionBuffer = Number(this.runtime.yahooDraftPositionDepthBuffer ?? 0);
     const draftRequirements = yahooLeagueEntries(this.runtime).map((entry) => {
@@ -200,6 +202,7 @@ class YahooOperationsService {
         ageHours: evidenceAgeHours,
         crosswalk
       },
+      yahooCandidateCoverage: yahooLeagues.map(entry => ({ leagueId: entry.id, ...coverageStatus(this.runtime, entry, this.now()), candidateYahooIds: undefined })),
       yahooAutomation: {
         draftAutoSyncEnabled: this.runtime.yahooDraftAutoSyncEnabled,
         draftPollSeconds: this.runtime.yahooDraftPollIntervalMs / 1000,
@@ -218,10 +221,20 @@ class YahooOperationsService {
   draftStatus(leagueId, sessionId) {
     const key = this.key(leagueId, sessionId);
     const status = this.draftStatuses.get(key);
-    return status ? structuredClone(status) : {
+    const poller = this.draftPollers.get(key);
+    return status ? {
+      ...structuredClone(status),
+      recurring: Boolean(poller?.running),
+      readInFlight: Boolean(poller?.syncInFlight),
+      state: ['completed', 'degraded', 'blocked', 'recovering'].includes(status.state) ? status.state
+        : poller?.running ? (status.lastSuccessAt ? 'running' : 'starting')
+          : status.state === 'stopped' ? 'stopped' : status.lastSuccessAt ? 'idle' : 'stopped'
+    } : {
       leagueId: String(leagueId),
       sessionId: String(sessionId),
       state: 'stopped',
+      recurring: false,
+      readInFlight: false,
       configuredIntervalSeconds: this.runtime.yahooDraftPollIntervalMs / 1000,
       lastAttemptAt: null,
       lastSuccessAt: null,
@@ -244,28 +257,9 @@ class YahooOperationsService {
     if (!entry.yahooLeagueKey || !entry.yahooTeamKey) {
       throw operationsError('YAHOO_IDENTIFIERS_MISSING', 'Yahoo league and target-team keys are required');
     }
-    const crosswalk = this.crosswalk();
-    if (crosswalk.playerShortfall) {
-      throw operationsError(
-        'DRAFT_PLAYER_POOL_TOO_SHALLOW',
-        `Player evidence pool has ${crosswalk.players} players; automated polling requires at least ${crosswalk.requiredPlayers}`,
-        crosswalk
-      );
-    }
-    if (crosswalk.positionShortfalls.length) {
-      throw operationsError(
-        'DRAFT_POSITION_POOL_TOO_SHALLOW',
-        `Player evidence is too shallow at ${crosswalk.positionShortfalls.map((item) => item.position).join(', ')}`,
-        crosswalk
-      );
-    }
-    if (!crosswalk.mapped || crosswalk.coverage < crosswalk.requiredCoverage) {
-      throw operationsError(
-        'YAHOO_PLAYER_CROSSWALK_INCOMPLETE',
-        `Yahoo player-key coverage is ${(crosswalk.coverage * 100).toFixed(1)}%; automated polling requires ${(crosswalk.requiredCoverage * 100).toFixed(0)}%`,
-        crosswalk
-      );
-    }
+    // Accepted Yahoo picks remain authoritative even when recommendation data
+    // is missing. The poller can record unresolved IDs and enrich later.
+    // Launch/recommendation readiness owns depth checks, never reconciliation.
     const key = this.key(entry.id, sessionId);
     const status = {
       leagueId: entry.id,
@@ -288,9 +282,10 @@ class YahooOperationsService {
       intervalMs: this.runtime.yahooDraftPollIntervalMs,
       onStatus: (event) => {
         const current = this.draftStatuses.get(key) || status;
-        current.lastAttemptAt = this.iso();
+        if (event.code === 'READ_STARTED') current.lastAttemptAt = this.iso();
         if (event.code === 'SYNCED') {
-          current.state = event.unresolvedPicks?.length ? 'degraded' : 'running';
+          current.state = event.unresolvedPicks?.length ? 'degraded'
+            : this.draftPollers.get(key)?.running ? 'running' : 'idle';
           current.lastSuccessAt = this.iso();
           current.observedPicks = event.observedPicks;
           current.draftSlot = service.getSession(sessionId).draftSlot;
@@ -324,8 +319,10 @@ class YahooOperationsService {
     if (!this.runtime.yahooDraftAutoSyncEnabled) throw operationsError('YAHOO_DRAFT_AUTO_SYNC_DISABLED', 'Yahoo draft auto-sync is disabled');
     const key = this.key(leagueId, sessionId);
     const existing = this.draftPollers.get(key);
-    if (existing) return this.draftStatus(leagueId, sessionId);
-    const poller = this.createDraftPoller({ leagueId, sessionId });
+    if (this.draftServices.get(String(leagueId))?.getSession(sessionId).status === 'completed') {
+      throw operationsError('DRAFT_SESSION_COMPLETED', 'This draft is completed');
+    }
+    const poller = existing || this.createDraftPoller({ leagueId, sessionId });
     poller.start();
     return this.draftStatus(leagueId, sessionId);
   }
@@ -383,7 +380,17 @@ class YahooOperationsService {
     return run;
   }
 
+  refreshDraftEvidence(entry, client = this.yahooAccount.readClient()) {
+    if (this.evidenceRefreshes.has(entry.id)) return this.evidenceRefreshes.get(entry.id);
+    const run = this.draftDepthSupplement.then(() => refreshYahooDraftEvidence({ runtime: this.runtime, entry, client, now: this.now }))
+      .finally(() => this.evidenceRefreshes.delete(entry.id));
+    this.draftDepthSupplement = run.catch(() => undefined);
+    this.evidenceRefreshes.set(entry.id, run);
+    return run;
+  }
+
   async _supplementDraftDepth(entry, client) {
+    const scopeAtStart = JSON.stringify([entry.yahooLeagueKey, entry.yahooTeamKey, entry.config, this.runtime.season]);
     const before = this.crosswalk();
     if (!before.positionShortfalls.length) {
       return { requestedPositions: [], added: 0, addedByPosition: {}, remainingShortfalls: [] };
@@ -392,7 +399,22 @@ class YahooOperationsService {
       throw operationsError('YAHOO_DRAFT_DEPTH_UNAVAILABLE', 'Yahoo available-player reads are unavailable');
     }
 
-    const existing = this.runtime.playerPool.players || [];
+    const requestedPositions = [];
+    const observedCandidates = [];
+    for (const shortage of before.positionShortfalls) {
+      requestedPositions.push(shortage.position);
+      const payload = await client.availablePlayers(entry.yahooLeagueKey, {
+        start: 0, count: 100, status: 'A', position: shortage.position
+      });
+      observedCandidates.push(...extractPlayers(payload, { available: true }).filter(player => player.position === shortage.position));
+    }
+    if (JSON.stringify([entry.yahooLeagueKey, entry.yahooTeamKey, entry.config, this.runtime.season]) !== scopeAtStart) {
+      throw operationsError('YAHOO_DRAFT_DEPTH_SCOPE_CHANGED', 'League settings changed during the Yahoo depth read; refresh the new scope');
+    }
+    // Provider refresh can finish while Yahoo reads are in flight. Merge into
+    // the latest pool only after all reads finish, then commit without awaits.
+    const original = this.runtime.playerPool;
+    const existing = original.players || [];
     const additions = [];
     const seenYahooIds = new Set(existing.map(yahooId).filter(Boolean));
     const seenIdentities = new Set(existing.map(identityKey).filter((key) => !key.startsWith('|')));
@@ -400,19 +422,10 @@ class YahooOperationsService {
       .filter((player) => player.position === 'DEF')
       .map((player) => String(player.team || '').toUpperCase())
       .filter((team) => team && team !== 'FA'));
-    const requestedPositions = [];
     const addedByPosition = {};
 
-    for (const shortage of before.positionShortfalls) {
-      requestedPositions.push(shortage.position);
-      const payload = await client.availablePlayers(entry.yahooLeagueKey, {
-        start: 0,
-        count: 100,
-        status: 'A',
-        position: shortage.position
-      });
-      const candidates = extractPlayers(payload, { available: true })
-        .filter((player) => player.position === shortage.position);
+    for (const shortage of this.crosswalk().positionShortfalls) {
+      const candidates = observedCandidates.filter(player => player.position === shortage.position);
       for (const candidate of candidates) {
         if ((addedByPosition[shortage.position] || 0) >= shortage.shortfall) break;
         const qualifiedKey = qualifyYahooPlayerKey(candidate.yahooPlayerKey, entry.yahooLeagueKey);
@@ -435,12 +448,21 @@ class YahooOperationsService {
           adp: null,
           tier: 99,
           byeWeek: candidate.byeWeek,
+          byeSource: candidate.byeWeek != null ? 'yahoo-available-depth' : null,
+          byeObservedAt: candidate.byeWeek != null ? this.iso() : null,
+          teamSource: team !== 'FA' ? 'yahoo-available-depth' : null,
+          teamObservedAt: team !== 'FA' ? this.iso() : null,
           injuryStatus: candidate.injuryStatus || null,
+          injurySource: 'yahoo-current-designation',
+          injuryObservedAt: this.iso(),
+          yahooEvidenceObservedAt: this.iso(),
+          yahooEvidenceSeason: entry.config.provenance?.season || this.runtime.season,
           risk: 0.4,
-          projectedPoints: candidate.projectedPoints,
+          projectedPoints: null,
+          yahooObservedProjection: candidate.projectedPoints == null ? null : { value: candidate.projectedPoints, period: 'unverified', leagueKey: entry.yahooLeagueKey, observedAt: this.iso() },
           floor: null,
           ceiling: null,
-          projectionSource: candidate.projectedPoints ? 'yahoo-api' : 'missing',
+          projectionSource: 'missing',
           evidenceRole: 'yahoo-available-depth',
           sourceConsensus: 0.05,
           sourceRanks: {
@@ -461,27 +483,28 @@ class YahooOperationsService {
       }
     }
 
+    let next = original;
     if (additions.length) {
       const completed = ensureDraftProjections([...existing, ...additions]);
-      const source = String(this.runtime.playerPool.source || 'player-evidence');
-      this.runtime.playerPool.players = completed.players;
-      this.runtime.playerPool.source = source.split('+').includes('yahoo') ? source : `${source}+yahoo`;
-      this.runtime.playerPool.sourceEvidence = {
-        ...(this.runtime.playerPool.sourceEvidence || {}),
+      const source = String(original.source || 'player-evidence');
+      next = { ...original, players: completed.players, source: source.split('+').includes('yahoo') ? source : `${source}+yahoo`,
+        complete: Boolean(original.complete && !completed.coverage.imputed), projectionCoverage: completed.coverage,
+        sourceEvidence: {
+        ...(original.sourceEvidence || {}),
         yahooRole: 'league scoring, player availability, and current-season depth identities are authoritative filters',
         coverage: {
-          ...(this.runtime.playerPool.sourceEvidence?.coverage || {}),
-          yahooAvailableDepthPlayers: (this.runtime.playerPool.sourceEvidence?.coverage?.yahooAvailableDepthPlayers || 0) + additions.length
+          ...(original.sourceEvidence?.coverage || {}),
+          yahooAvailableDepthPlayers: (original.sourceEvidence?.coverage?.yahooAvailableDepthPlayers || 0) + additions.length
         },
         fetchedAt: {
-          ...(this.runtime.playerPool.sourceEvidence?.fetchedAt || {}),
+          ...(original.sourceEvidence?.fetchedAt || {}),
           yahoo: this.iso()
         },
         projectionCoverage: completed.coverage
-      };
+      } };
     }
 
-    const after = this.crosswalk();
+    const after = this.crosswalk(next);
     if (after.positionShortfalls.length) {
       throw operationsError(
         'YAHOO_DRAFT_DEPTH_INCOMPLETE',
@@ -489,6 +512,7 @@ class YahooOperationsService {
         { requestedPositions, added: additions.length, addedByPosition, remainingShortfalls: after.positionShortfalls }
       );
     }
+    if (additions.length) persistPool(this.runtime, next);
     return {
       requestedPositions,
       added: additions.length,
@@ -558,6 +582,8 @@ class YahooOperationsService {
         )
         : null
     ].filter(Boolean));
+    checks.push(await timedCheck('candidate-window', () => this.refreshDraftEvidence(entry, client),
+      value => `${value.mappedPlayers}/${value.observedPlayers} observed Yahoo candidates mapped; ${value.entireAvailableUniverseRead ? 'available list exhausted' : `top ${value.maximumCandidates} window`}; ${value.enriched} existing identities enriched`));
     const depthAfter = this.crosswalk();
     const localEvidenceAdded = Math.max(0, depthAfter.players - depthBefore.players);
     return {
@@ -568,7 +594,7 @@ class YahooOperationsService {
       checks,
       mutations: false,
       rawPayloadPersisted: false,
-      normalizedEvidencePersisted: false,
+      normalizedEvidencePersisted: Boolean(this.runtime.playerSnapshotFile && checks.some(check => check.ok && ['candidate-window', 'draft-depth'].includes(check.name))),
       localEvidenceUpdated: localEvidenceAdded > 0,
       localEvidenceAdded
     };
@@ -747,6 +773,13 @@ class YahooOperationsService {
             lastError: { code: error.code || 'YAHOO_DRAFT_SYNC_BLOCKED', message: error.message }
           });
         }
+      }
+      const entry = this.entry(leagueId);
+      if (service.listSessions().some(item => item.status === 'active' && item.sourceMode === 'yahoo')
+        && !coverageStatus(this.runtime, entry, this.now()).valid) {
+        this.refreshDraftEvidence(entry).catch(error => {
+          this.logger.warn?.(JSON.stringify({ event: 'yahoo-draft-evidence-recovery', leagueId, code: error.code || 'RECOVERY_FAILED', message: error.message }));
+        });
       }
     }
   }

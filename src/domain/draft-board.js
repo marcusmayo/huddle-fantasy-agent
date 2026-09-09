@@ -2,6 +2,7 @@
 
 const { FLEX_POSITIONS, benchDemandShares, draftedRosterSize, nextUserPick, pickOwner, positionTargets } = require('./league');
 const { contribution, rosterValue, byeCoverageReport } = require('./roster-value');
+const { ownedPlayer } = require('./player-snapshot');
 
 const BENCH_SLOTS = new Set(['BN', 'BENCH', 'IR', 'IL', 'NA']);
 const SLOT_ELIGIBILITY = {
@@ -240,11 +241,7 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
   const baselines = replacementBaselines(available, league, resolvedPicks);
   const targets = positionTargets(league.roster);
   const mine = countMineByPosition(picks, playerById);
-  const owned = picks.filter(pick => pick.isMine).map(pick => ({
-    ...playerById.get(pick.playerId), ...pick, id: pick.playerId,
-    position: pick.position || playerById.get(pick.playerId)?.position,
-    projectedPoints: pick.projectedPoints ?? playerById.get(pick.playerId)?.projectedPoints ?? baselines[pick.position] ?? 0
-  }));
+  const owned = picks.filter(pick => pick.isMine).map(pick => ownedPlayer(pick, playerById.get(pick.playerId)));
   const valueBefore = rosterValue(owned, league, baselines);
   const currentOverall = picks.length + 1;
   const currentOwner = draftSlot ? pickOwner(currentOverall, league.teamCount) : null;
@@ -356,30 +353,33 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
 }
 
 function buildRecommendationCard(input) {
-  const board = scoreAvailablePlayers({ ...input, style: 'balanced' });
-  const upside = scoreAvailablePlayers({ ...input, style: 'upside' });
-  const safe = scoreAvailablePlayers({ ...input, style: 'safe' });
   const picks = input.picks;
-  const currentOverall = picks.length + 1;
-  const owner = input.draftSlot ? pickOwner(currentOverall, input.league.teamCount) : null;
+  const completed = input.status === 'completed' || picks.length >= draftedRosterSize(input.league.roster) * input.league.teamCount;
+  const board = completed ? [] : scoreAvailablePlayers({ ...input, style: 'balanced' });
+  const upside = completed ? [] : scoreAvailablePlayers({ ...input, style: 'upside' });
+  const safe = completed ? [] : scoreAvailablePlayers({ ...input, style: 'safe' });
+  const currentOverall = completed ? null : picks.length + 1;
+  const owner = !completed && input.draftSlot ? pickOwner(currentOverall, input.league.teamCount) : null;
   const preferred = board.find((item) => item.rosterFeasible) || null;
   const mine = countMineByPosition(picks, new Map(input.players.map(player => [player.id, player])));
   const roster = input.league.roster;
   const byId = new Map(input.players.map(player=>[player.id,player]));
-  const ownedPlayers = picks.filter(pick=>pick.isMine).map(pick=>({...byId.get(pick.playerId),...pick,id:pick.playerId,
-    projectedPoints:pick.projectedPoints ?? byId.get(pick.playerId)?.projectedPoints ?? 0}));
+  const ownedPlayers = picks.filter(pick=>pick.isMine).map(pick=>ownedPlayer(pick, byId.get(pick.playerId)));
   const dedicatedRoster = Object.fromEntries(Object.entries(roster).filter(([slot]) => !FLEX_POSITIONS[slot]));
   const startingCovered = maximumStarterAssignments(mine, roster);
   const flexTypes = Object.entries(roster).filter(([slot, count]) => FLEX_POSITIONS[slot] && count)
     .map(([slot, count]) => ({ slot, count, positions: FLEX_POSITIONS[slot] }));
   return {
     generatedAt: new Date().toISOString(),
+    completed,
     currentOverall,
     draftSlot: input.draftSlot || null,
     onClock: Boolean(input.draftSlot && owner === input.draftSlot),
-    nextUserPick: remainingUserPick(currentOverall, input.league, input.draftSlot, owner !== input.draftSlot),
+    nextUserPick: completed ? null : remainingUserPick(currentOverall, input.league, input.draftSlot, owner !== input.draftSlot),
     preferred,
     rosterCoverage: {
+      unknownValues: ownedPlayers.filter(player => player.valueStatus === 'missing').length,
+      valueVerified: ownedPlayers.every(player => player.valueStatus === 'verified'),
       positions: mine,
       byeCoverage: byeCoverageReport(ownedPlayers, input.league),
       quarterbackPlan:ownedQuarterbackPlan(input.league),

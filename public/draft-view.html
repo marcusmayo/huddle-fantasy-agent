@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Huddle · Draft view</title><link rel="stylesheet" href="/draft-view.css"></head>
+<body>
+  <main class="stage" aria-label="Draft view">
+    <header class="identity"><div><p class="eyebrow" id="environment">HUDDLE / DRAFT VIEW</p><h1 id="league">Loading this draft…</h1><p id="identity-detail"></p></div><a id="back" href="/">Full workspace</a></header>
+    <section class="health" aria-live="polite"><strong id="feed">Waiting for a board update</strong><span id="controller">Draft controller not confirmed</span><span id="clock">Yahoo clock not observed</span></section>
+    <section class="recommendation panel" aria-labelledby="preferred"><div class="row"><p class="eyebrow" id="turn">HUDDLE RECOMMENDS</p><span id="revision"></span></div><div class="row"><h2 id="preferred">Waiting for player evidence</h2><strong id="score"></strong></div><p class="meta" id="preferred-meta"></p><ul id="reasons"></ul><p class="quality" id="quality"></p></section>
+    <section class="alternatives" aria-label="All recommendation alternatives"><article class="panel"><p class="eyebrow">SAFER BUILD</p><h3 id="safe">—</h3><p class="meta" id="safe-meta"></p></article><article class="panel"><p class="eyebrow">UPSIDE SWING</p><h3 id="upside">—</h3><p class="meta" id="upside-meta"></p></article></section>
+    <section class="decision panel" aria-labelledby="selected"><div class="row"><p class="eyebrow" id="decision-type">OPERATOR DECISION</p><span id="decision-status"></span></div><h2 id="selected">No decision recorded for this turn</h2><p id="comparison"></p><p id="decision-reason"></p></section>
+    <section class="receipts"><article class="panel"><div class="row"><p class="eyebrow">YAHOO RECONCILIATION</p><strong id="reconciled">0 picks</strong></div><p id="receipt-detail"></p><ol id="recent"></ol></article><article class="panel"><div class="row"><p class="eyebrow">YOUR ACCEPTED PICKS</p><strong id="owned-count">0</strong></div><ol id="roster"></ol></article></section>
+    <footer><span id="audit-status">Decision history loading</span><a id="audit" href="#">Saved decision history</a><span id="layout-status"></span></footer>
+  </main>
+  <script src="/request.js"></script><script src="/draft-view-model.js"></script><script src="/draft-view.js"></script>
+</body></html>

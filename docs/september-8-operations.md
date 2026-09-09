@@ -1,5 +1,7 @@
 # September 8, 2026 operations plan
 
+**Draft-day update, 6:33 p.m. EDT:** today's final mock (Quarterback Sneak 11087535) completed with 120 reconciled picks, 12 verified manual selections and three unverified acceptance receipts. It is not a new 15/0 acceptance. Use one selection per controller call and immediately continue on adjacent turns; keyboard panel activation has only post-draft navigation validation so far. Hosted Huddle access and actual screen-capture verification remain pending. See the [current readiness report](../../draft-day/draft-day-readiness.md). The overnight handoff below describes the earlier successful mock.
+
 ## Verified overnight handoff
 
 Yahoo's DR FANTASY FOOTBALL page was checked on September 8: **draft at 7:30 p.m. EDT; room opens at 7:00 p.m.; begin readiness at 6:30 p.m.** Recheck for commissioner changes. Blitzkrieg's draft slot is still unpublished. Current settings: six teams, QB2/RB3/WR4/TE1/W-T1/W-R1/K1/DEF2/BN5/IR2, PPR1, passing TD6. This means 15 starters, 20 drafted players and 120 total picks; IR is excluded from draft rounds. The owned-QB coverage plan targets three QBs when feasible under this league's limits.

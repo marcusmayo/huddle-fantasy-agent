@@ -220,6 +220,9 @@ class LeagueOnboardingService {
       throw onboardingError('LEAGUE_UPDATE_NOT_ALLOWED', 'Draft-slot updates are available only for imported or dashboard-managed leagues');
     }
     const resolved = integer(draftSlot, 'Draft slot', { min: 1, max: entry.config.teamCount });
+    if (entry.config.draft.draftSlot === resolved && entry.config.provenance?.draftSlotSource === source) {
+      return { leagueId: id, draftSlot: resolved, source, updatedAt: entry.config.provenance.draftSlotUpdatedAt, changed: false };
+    }
     entry.config.draft.draftSlot = resolved;
     entry.config.provenance ||= {};
     entry.config.provenance.draftSlotSource = source;

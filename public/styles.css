@@ -101,6 +101,10 @@ button.danger { color: #ffd49b; border-color: #7e5925; }
 .choice p:last-child { margin-bottom: 0; color: var(--muted); }
 .choice.safe { border-left: 3px solid var(--blue); }
 .choice.upside { border-left: 3px solid var(--orange); }
+/* Keep recommendations and the reconciliation receipt together during recording. */
+.hero-card { padding: 24px; }
+.hero-card #explanation { display: none; }
+.choice { padding: 14px 18px; }
 .content-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(280px, .7fr); gap: 16px; padding-bottom: 50px; }
 .pick-panel { align-self: start; }
 .pick-form-priority { border: 1px solid var(--line); border-radius: 12px; padding: 14px; background: #0a1813; }

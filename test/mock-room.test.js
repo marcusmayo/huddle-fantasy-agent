@@ -104,6 +104,21 @@ test('a burst of 14 picks commits once, derives snake ownership, and is idempote
   assert.equal(x.service.getSession(x.session.id).picks.length, 14);
 });
 
+test('a failed snapshot save rolls back picks, receipt events and the newly captured ranking pool together', () => {
+  const x = setup();
+  const saved = x.service.getSession(x.session.id);
+  const save = x.store.save.bind(x.store);
+  x.store.save = () => { throw Error('Disk unavailable'); };
+  assert.throws(() => x.service.importMockSnapshot(x.session.id, snapshot(14)), /Disk unavailable/);
+  assert.deepEqual(x.service.getSession(x.session.id).picks, saved.picks);
+  assert.equal(x.service.decisionSummary(x.session.id).events.length, 0);
+  assert.equal(x.service.decisionSummary(x.session.id).recommendationSnapshots, 0);
+  assert.deepEqual(x.service.state.draftAudit.pools, {});
+  x.store.save = save;
+  assert.equal(x.service.importMockSnapshot(x.session.id, snapshot(14)).imported, 14);
+  assert.equal(x.service.decisionSummary(x.session.id).integrityVerified, true);
+});
+
 test('all 120 observed picks replay exactly with 15 target picks and automatic completion', () => {
   const x = setup();
   const started = performance.now();

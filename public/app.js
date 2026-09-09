@@ -122,13 +122,7 @@ function updateScreenshotPurpose({ resetAnalysis = true } = {}) {
 }
 
 async function api(path, options = {}) {
-  const response = await fetch(path, {
-    ...options,
-    headers: { 'content-type': 'application/json', ...(options.headers || {}) }
-  });
-  const body = await response.json();
-  if (!response.ok) throw new Error(body.message || 'Request failed');
-  return body;
+  return HuddleRequests.requestJSON(path, options);
 }
 
 function yahooReady() {
@@ -1281,7 +1275,7 @@ async function createSession(event) {
     const sourceMode = $('#source-mode').value;
     if (sourceMode === 'yahoo') {
       await refreshYahooDraftPosition({ silent: true });
-      const readiness = await refreshDraftReadiness();
+      const readiness = await checkDraftReadiness({ reuse: true });
       if (!readiness?.report.readyForLiveDraft) {
         $('#draft-readiness-details').open = true;
         $('#draft-readiness').scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1348,7 +1342,8 @@ function showDraftRoom() {
   $('#screenshot-assistant').classList.toggle('hidden', !screenshotMode);
   $('#reconcile-help').textContent = mockMode ? 'Import the room above to reconcile all completed selections and refresh the recommendation together.' : screenshotMode
     ? 'Choose what the Yahoo screenshot shows, analyze it through OpenRouter, then confirm every extracted row. Draft logs create picks; other pages add review-only evidence.'
-    : 'Until Yahoo OAuth is connected, record each selection here. The board refreshes immediately.';
+    : yahooMode ? 'Yahoo sync reconciles completed picks. If the feed is delayed, record the accepted Yahoo result here; Huddle does not submit picks.'
+      : 'Record each completed selection here to update this manual draft board.';
   if (screenshotMode) {
     const configured = Boolean(state.providerStatus?.vision?.configured);
     $('#analyze-screenshot').disabled = !configured || !state.screenshotFile;
@@ -1373,10 +1368,10 @@ function renderYahooDraftSync(status) {
   $('#yahoo-draft-sync-detail').textContent = status.lastError
     ? `${status.lastError.code}: ${status.lastError.message}. Use manual entry while resolving this.`
     : status.lastSuccessAt
-      ? `Last Yahoo read ${new Date(status.lastSuccessAt).toLocaleTimeString()} · every ${status.configuredIntervalSeconds || 15}s · recommendation only.`
+      ? `Last Yahoo read ${new Date(status.lastSuccessAt).toLocaleTimeString()} · ${status.recurring ? `recurring every ${status.configuredIntervalSeconds || 15}s` : 'recurring sync is off'} · recommendation only.`
       : `Waiting for the first Yahoo read · every ${status.configuredIntervalSeconds || 15}s · recommendation only.`;
-  $('#yahoo-draft-sync-start').disabled = ['running', 'starting'].includes(stateName);
-  $('#yahoo-draft-sync-stop').disabled = stateName === 'stopped';
+  $('#yahoo-draft-sync-start').disabled = status.recurring === true || stateName === 'completed';
+  $('#yahoo-draft-sync-stop').disabled = !status.recurring;
 }
 
 async function controlYahooDraftSync(action) {
@@ -1418,7 +1413,7 @@ function renderBoardRows() {
       <td><strong>${escapeHtml(item.player.name)}</strong><small>${escapeHtml(item.player.team)}</small></td>
       <td><span class="position">${escapeHtml(item.player.position)}</span></td>
       <td><strong>${item.score}</strong></td>
-      <td>${item.waitProbability === null ? 'No later turn' : `${Math.round(item.waitProbability * 100)}%`}</td>
+      <td title="Uncalibrated ADP heuristic; not a verified probability">${item.waitProbability === null ? 'No later turn' : item.waitProbability < .35 ? 'Low' : item.waitProbability < .7 ? 'Uncertain' : 'Higher'}</td>
       <td>${[
         item.sleeper ? '<span class="badge">SLEEPER</span>' : '',
         item.rosterFeasible === false ? '<span class="badge roster-blocked-badge">ROSTER BLOCKED</span>' : '',
@@ -1449,16 +1444,16 @@ function setBoardHeight(height) {
 
 function renderRecommendation(card) {
   state.recommendation = card;
-  $('#current-pick').textContent = card.currentOverall;
-  $('#next-turn').textContent = card.nextUserPick || 'slot required';
+  $('#current-pick').textContent = card.completed ? 'Complete' : card.currentOverall;
+  $('#next-turn').textContent = card.completed ? 'Draft finished' : card.nextUserPick || (card.draftSlot ? 'No later turn' : 'slot required');
   $('#coverage').textContent = card.evidence.complete ? card.evidence.source : `${card.evidence.source} · partial projections`;
-  $('#clock-state').textContent = card.mockReadiness && !card.mockReadiness.ready ? card.mockReadiness.reasons.join(' ') : card.onClock ? 'YOU ARE ON THE CLOCK' : 'Watching the room';
+  $('#clock-state').textContent = card.completed ? 'DRAFT COMPLETED' : card.mockReadiness && !card.mockReadiness.ready ? card.mockReadiness.reasons.join(' ') : card.onClock ? 'YOU ARE ON THE CLOCK' : 'Watching the room';
   $('#clock-state').classList.toggle('hot', card.onClock);
   $('#evidence-warning').classList.toggle('hidden', !card.evidence.warning);
   $('#evidence-warning').textContent = card.evidence.warning || '';
   renderBoardEvidence(card);
   const preferred = card.preferred;
-  $('#preferred-name').textContent = preferred?.player.name || 'No eligible player';
+  $('#preferred-name').textContent = card.completed ? 'All picks reconciled' : preferred?.player.name || 'No eligible player';
   $('#preferred-meta').textContent = preferred ? `${preferred.player.position} · ${preferred.player.team} · ADP ${preferred.player.adp ?? '—'}` : '';
   $('#preferred-observed-name').textContent = preferred?.player.observedName ? `Yahoo name: ${preferred.player.observedName}` : '';
   $('#preferred-observed-name').dataset.yahooPlayerId = preferred?.player.yahooPlayerId || '';
@@ -1469,9 +1464,15 @@ function renderRecommendation(card) {
   $('#draft-bye-coverage').textContent = bye
     ? `${qbPlan?.enabled ? `QB cover plan: ${card.rosterCoverage.positions.QB || 0}/${qbPlan.minimumQuarterbacks} drafted. ` : ''}Bye-week plan: ${bye.gaps.length ? bye.gaps.map(gap=>`Week ${gap.week} ${gap.slot}`).join(', ') + ' need outside help.' : 'No gaps identified among known byes.'} ${bye.unknownByes ? `${bye.unknownByes} player byes are unknown. ` : ''}Future waivers are unverified. ${bye.streamingPositions.join('/')} streaming is assumed; offensive reserves receive credit for covering actual bye gaps.`
     : '';
+  if (bye && (bye.unknownByes || bye.unknownValues)) {
+    $('#draft-bye-coverage').textContent = `Coverage unverified: ${bye.unknownByes} missing byes; ${bye.unknownValues || 0} missing player values. Complete player evidence is required to assess coverage and point losses.`;
+  }
   $('#explanation').textContent = card.explanation;
   renderChoice('safe', card.alternatives.safe);
   renderChoice('upside', card.alternatives.upside);
+  if (card.alternatives.safe && card.alternatives.safe.player.id === card.alternatives.upside?.player.id) {
+    $('#upside-meta').textContent += ' · same player leads both styles';
+  }
   makePlayerSelectable(document.querySelector('.hero-card'), preferred?.player);
   makePlayerSelectable(document.querySelector('.choice.safe'), card.alternatives.safe?.player);
   makePlayerSelectable(document.querySelector('.choice.upside'), card.alternatives.upside?.player);
@@ -1759,7 +1760,13 @@ function renderPlayerPicker(players) {
 function refresh() {
   if (refreshPromise) return refreshPromise;
   const generation = ++refreshGeneration;
-  refreshPromise = refreshOnce(generation).finally(() => { refreshPromise = null; });
+  refreshPromise = refreshOnce(generation).catch((error) => {
+    if (generation === refreshGeneration) {
+      $('#workspace-health').textContent = `${error.message} Last board: ${state.recommendation?.generatedAt ? new Date(state.recommendation.generatedAt).toLocaleTimeString() : 'none'}.`;
+      $('#workspace-health').dataset.stale = 'true';
+    }
+    throw error;
+  }).finally(() => { refreshPromise = null; });
   return refreshPromise;
 }
 
@@ -1767,29 +1774,35 @@ async function refreshOnce(generation) {
   if (!state.session) return;
   const sessionId = state.session.id;
   const shouldRefreshProviderStatus = Date.now() - state.providerStatusAt > 30_000;
-  const [workspace, providerStatus, yahooSync] = await Promise.all([
-    api(scoped(`/draft/sessions/${sessionId}/workspace`)),
-    shouldRefreshProviderStatus ? api('/api/provider-status') : Promise.resolve(null),
-    state.session.sourceMode === 'yahoo'
-      ? api(scoped(`/draft/sessions/${sessionId}/yahoo-sync`)).catch((error) => ({ state: 'degraded', lastError: { code: 'YAHOO_SYNC_STATUS_FAILED', message: error.message } }))
-      : Promise.resolve(null)
-  ]);
-  if (generation !== refreshGeneration || state.session?.id !== sessionId) return;
-  if (providerStatus) {
-    state.providerStatus = providerStatus;
+  // Secondary health endpoints cannot hold the board update behind them.
+  if (shouldRefreshProviderStatus) {
     state.providerStatusAt = Date.now();
+    api('/api/provider-status', { timeoutMs: 3000 }).then((providerStatus) => {
+      if (state.session?.id === sessionId) state.providerStatus = providerStatus;
+    }).catch(() => { state.providerStatusAt = 0; });
   }
-  if (yahooSync) renderYahooDraftSync(yahooSync);
+  if (state.session.sourceMode === 'yahoo') {
+    api(scoped(`/draft/sessions/${sessionId}/yahoo-sync`), { timeoutMs: 3000 })
+      .then((status) => { if (generation === refreshGeneration && state.session?.id === sessionId) renderYahooDraftSync(status); })
+      .catch((error) => { if (generation === refreshGeneration && state.session?.id === sessionId) renderYahooDraftSync({ state: 'degraded', lastError: { code: 'YAHOO_SYNC_STATUS_FAILED', message: error.message } }); });
+  }
+  const workspace = await api(scoped(`/draft/sessions/${sessionId}/workspace`), { timeoutMs: 8000 });
+  if (generation !== refreshGeneration || state.session?.id !== sessionId) return;
   applyDraftWorkspace(workspace);
+  $('#workspace-health').textContent = `Board received ${new Date().toLocaleTimeString()} · ${workspace.session.picks.length} picks reconciled. Confirm Yahoo’s current pick before selecting.`;
+  $('#workspace-health').dataset.stale = 'false';
 }
 
 function applyDraftWorkspace({ session, card, pool, unresolved }) {
+  const justCompleted = state.session?.status !== 'completed' && session.status === 'completed';
   state.session = session;
+  $('#draft-view-link').href = `/draft-view.html?leagueId=${encodeURIComponent(state.leagueId)}&sessionId=${encodeURIComponent(session.id)}`;
   if (session.status === 'completed') {
     clearInterval(state.timer);
     $('#complete-session').disabled = true;
     $('#complete-session').textContent = 'Draft completed';
     localStorage.removeItem(sessionKey());
+    if (justCompleted) refreshFleetSummary().catch((error) => showToast(`Draft completed; fleet update failed: ${error.message}`));
   }
   $('#pick-form button[type="submit"]').disabled = session.status !== 'active';
   renderUnresolvedPlayers(unresolved);

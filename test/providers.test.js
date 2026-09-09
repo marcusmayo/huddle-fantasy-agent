@@ -336,7 +336,7 @@ test('Yahoo draft polling resolves an out-of-pool selection through the read-onl
   assert.equal(saved.resolutionStatus, 'resolved-yahoo');
 });
 
-test('Yahoo draft polling completes a full 126-pick DR Fantasy shaped draft', async () => {
+test('Yahoo draft polling completes a six-team 21-round variant without a phantom next pick', async () => {
   const league = structuredClone(demoLeague);
   league.platform = 'yahoo';
   league.teamCount = 6;
@@ -374,7 +374,12 @@ test('Yahoo draft polling completes a full 126-pick DR Fantasy shaped draft', as
   const saved = drafts.getSession(session.id);
   assert.equal(saved.picks.length, 126);
   assert.equal(saved.picks[85].playerName, 'Out of Pool Player');
-  assert.equal(saved.currentOverall, 127);
+  assert.equal(saved.status, 'completed');
+  assert.equal(saved.currentOverall, null);
+  const card = drafts.recommendation(session.id);
+  assert.equal(card.currentOverall, null);
+  assert.equal(card.nextUserPick, null);
+  assert.equal(card.onClock, false);
 });
 
 test('Yahoo provider exposes GET-only league methods', () => {

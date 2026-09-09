@@ -1,10 +1,15 @@
 'use strict';
 
 const { leagueProjection } = require('../domain/league-projections');
+const { playerSnapshot } = require('../domain/player-snapshot');
+const { yahooId } = require('./player-evidence');
+const { DraftControllerService } = require('./draft-controller-service');
+const { isFreshObservation } = require('../domain/observation-time');
+const { digest, rankingPlayer, choiceSnapshot, appendEvent, verifyEvents, validatePlan } = require('../domain/decision-audit');
 
 const crypto = require('node:crypto');
 const { buildRecommendationCard, STYLES } = require('../domain/draft-board');
-const { draftedRosterSize } = require('../domain/league');
+const { draftedRosterSize, pickOwner } = require('../domain/league');
 const { prepareMockSnapshot, mockReadiness } = require('../domain/mock-room');
 
 const POSITIONS = new Set(['QB', 'RB', 'WR', 'TE', 'K', 'DEF']);
@@ -45,6 +50,7 @@ function externalYahooPlayer(input) {
   const suppliedName = String(value.name || '').trim().slice(0, 80);
   return {
     id: `yahoo:${yahooPlayerKey}`,
+    ...playerSnapshot(value),
     yahooPlayerKey,
     name: suppliedName.length >= 2 ? suppliedName : `Yahoo player ${yahooId}`,
     position,
@@ -54,16 +60,19 @@ function externalYahooPlayer(input) {
 }
 
 class DraftService {
-  constructor({ league, playerPool, store, evidenceRetentionDays = 30, now = () => new Date() }) {
+  constructor({ league, playerPool, store, evidenceRetentionDays = 30, now = () => new Date(), simulation = false }) {
     this.league = league;
     this.playerPool = playerPool;
     this.store = store;
     this.evidenceRetentionDays = Math.max(1, Math.min(30, Number(evidenceRetentionDays) || 30));
     this.now = now;
+    this.simulation = simulation === true;
     this.state = store.load();
     this.state.sessions ||= {};
+    this.state.draftAudit ||= { schemaVersion: 1, recommendations: {}, pools: {}, events: {} };
+    this.controllers = new DraftControllerService(this);
     const pruned = this.pruneExpiredEvidence({ persist: false });
-    if (pruned.deletedReviews || pruned.deletedSessions) this.persist();
+    if (pruned.deletedReviews || pruned.deletedSessions || pruned.deletedAuditSessions) this.persist();
   }
 
   currentIso() {
@@ -166,6 +175,9 @@ class DraftService {
     const session = this.state.sessions[id];
     if (!session) return this.getSession(id);
     delete this.state.sessions[id];
+    delete this.state.draftAudit.recommendations[id];
+    delete this.state.draftAudit.events[id];
+    this.pruneAuditPools();
     this.persist();
     return {
       leagueId: this.league.id,
@@ -204,7 +216,15 @@ class DraftService {
       error.code = 'DRAFT_SESSION_COMPLETED';
       throw error;
     }
-    if (session.picks.some((pick) => pick.playerId === playerId || pick.playerName.toLowerCase() === player.name.toLowerCase())) {
+    const candidateYahooId = yahooId({ ...player, yahooPlayerKey: input.yahooPlayerKey || player.yahooPlayerKey });
+    if (session.picks.some((pick) => {
+      if (pick.playerId === playerId) return true;
+      const pickedYahooId = yahooId(pick);
+      if (candidateYahooId && pickedYahooId) return candidateYahooId === pickedYahooId;
+      // Display names, especially Yahoo abbreviations, cannot override distinct IDs.
+      return !candidateYahooId && !pickedYahooId && pick.playerName.toLowerCase() === player.name.toLowerCase()
+        && pick.position === player.position && pick.team === player.team;
+    })) {
       return { applied: false, reason: 'player-already-drafted', session: this.decorate(session) };
     }
     const expectedOverall = session.picks.length + 1;
@@ -213,7 +233,10 @@ class DraftService {
       error.code = 'OUT_OF_ORDER_PICK';
       throw error;
     }
+    const before = structuredClone(session);
+    const oldEvents = structuredClone(this.state.draftAudit.events[id] || []);
     session.picks.push({
+      ...playerSnapshot(leagueProjection(player, this.league), { observedAt: this.currentIso(), source: input.source || session.sourceMode }),
       eventId,
       overallPick: expectedOverall,
       playerId,
@@ -234,7 +257,12 @@ class DraftService {
       session.completionReason = 'draft-board-complete';
       session.completedAt = session.updatedAt;
     }
-    this.persist();
+    this.auditAcceptedPick(id, session.picks.at(-1));
+    try { this.persist(); } catch (error) {
+      this.state.sessions[id] = before;
+      this.state.draftAudit.events[id] = oldEvents;
+      throw error;
+    }
     return { applied: true, reason: null, session: this.decorate(session) };
   }
 
@@ -300,6 +328,40 @@ class DraftService {
     return { applied: true, reason: null, review: structuredClone(review), session: this.decorate(session) };
   }
 
+  reconcileBrowserResults(id, input) {
+    const session = this.getSession(id);
+    const fail = (code, message) => { throw Object.assign(new Error(message), { code }); };
+    const age = this.now().getTime() - Date.parse(input?.observedAt);
+    if (session.sourceMode !== 'yahoo') fail('BROWSER_RESULTS_LIVE_SESSION_REQUIRED', 'Use the mock snapshot importer for a practice session');
+    if (!isFreshObservation(input?.observedAt, this.now().getTime())) fail('BROWSER_RESULTS_STALE', 'Read the Yahoo Results table again');
+    if (!this.league.provenance?.yahooLeagueKey || input.leagueKey !== this.league.provenance.yahooLeagueKey
+      || !this.league.provenance?.yahooTeamKey || input.teamKey !== this.league.provenance.yahooTeamKey
+      || input.draftSlot !== session.draftSlot) fail('BROWSER_RESULTS_ROOM_MISMATCH', 'Results must match the active league, team and seat');
+    const rows = input.picks;
+    if (!Array.isArray(rows) || rows.length < session.picks.length || rows.length > session.totalPicks) fail('BROWSER_RESULTS_INCOMPLETE', 'Read the complete results prefix without dropping accepted picks');
+    const ids = new Set();
+    for (const [index, row] of rows.entries()) {
+      if (row.overallPick !== index + 1 || !/^[1-9]\d*$/.test(String(row.yahooPlayerId || '')) || ids.has(String(row.yahooPlayerId))
+        || !row.name || !POSITIONS.has(row.position) || row.isMine !== (pickOwner(index + 1, this.league.teamCount) === session.draftSlot)) fail('BROWSER_RESULTS_INVALID', 'Results need consecutive picks, unique Yahoo IDs, player positions and verified ownership');
+      ids.add(String(row.yahooPlayerId));
+      const existing = session.picks[index];
+      if (existing && (yahooId(existing) !== String(row.yahooPlayerId) || existing.isMine !== row.isMine)) fail('BROWSER_RESULTS_CONFLICT', 'The observed results disagree with an accepted pick; inspect the room before continuing');
+    }
+    // Validate the whole prefix first. Each accepted pick is then durable and
+    // idempotent, so interruption can resume from the last saved receipt.
+    const before = session.picks.length;
+    for (const row of rows.slice(before)) {
+      const player = this.playerPool.players.find(p => yahooId(p) === String(row.yahooPlayerId));
+      const key = player?.yahooPlayerKey || `nfl.p.${row.yahooPlayerId}`;
+      const result = this.recordPick(id, { eventId: `yahoo-browser:${id}:${row.overallPick}:${row.yahooPlayerId}`,
+        overallPick: row.overallPick, playerId: player?.id, yahooPlayerKey: key, isMine: row.isMine,
+        source: 'yahoo-browser-results', observedAt: input.observedAt,
+        externalPlayer: { name: row.name, position: row.position, team: row.team, yahooPlayerKey: key } });
+      if (!result.applied) fail('BROWSER_RESULTS_CONFLICT', 'This result did not reconcile at its expected pick');
+    }
+    return { imported: rows.length - before, session: this.getSession(id), decisions: this.decisionSummary(id) };
+  }
+
   deleteEvidenceReviews(id) {
     const session = this.state.sessions[id];
     if (!session) return this.getSession(id);
@@ -316,6 +378,8 @@ class DraftService {
     const cutoff = this.now().getTime() - this.evidenceRetentionDays * 24 * 60 * 60 * 1_000;
     let deletedReviews = 0;
     let deletedSessions = 0;
+    const audit = this.state.draftAudit;
+    let deletedAuditSessions = 0;
     for (const [sessionId, session] of Object.entries(this.state.sessions)) {
       const hasExpiredVisionPick = (session.picks || []).some((pick) =>
         pick.source === 'openrouter-screenshot' && Number.isFinite(Date.parse(pick.observedAt)) && Date.parse(pick.observedAt) < cutoff
@@ -338,12 +402,21 @@ class DraftService {
       session.appliedEvidenceEventIds = (session.appliedEvidenceEventIds || []).filter((eventId) => !removedEventIds.has(eventId));
       session.updatedAt = this.currentIso();
     }
-    if (persist && (deletedReviews || deletedSessions)) this.persist();
+    for (const id of new Set([...Object.keys(audit.recommendations), ...Object.keys(audit.events)])) {
+      const times = [...(audit.recommendations[id] || []).map(item => Date.parse(item.capturedAt)),
+        ...(audit.events[id] || []).map(item => Date.parse(item.observedAt))].filter(Number.isFinite);
+      if (!this.state.sessions[id] || (times.length && Math.max(...times) < cutoff)) {
+        delete audit.recommendations[id]; delete audit.events[id]; deletedAuditSessions++;
+      }
+    }
+    this.pruneAuditPools();
+    if (persist && (deletedReviews || deletedSessions || deletedAuditSessions)) this.persist();
     return {
       leagueId: this.league.id,
       retentionDays: this.evidenceRetentionDays,
       deletedReviews,
       deletedSessions,
+      deletedAuditSessions,
       rawImagesPersisted: false
     };
   }
@@ -395,9 +468,23 @@ class DraftService {
     const next = prepareMockSnapshot({ snapshot, session, league: this.league, playerPool: this.playerPool, now: this.now() });
     const imported = next.picks.length - session.picks.length;
     // Validate the entire observation before replacing state; persist exactly once.
+    const priorEvents = structuredClone(this.state.draftAudit.events[id] || []);
+    const priorSnapshots = this.state.draftAudit.recommendations[id]?.length || 0;
+    const priorPoolKeys = new Set(Object.keys(this.state.draftAudit.pools));
     this.state.sessions[id] = next;
-    try { this.persist(); } catch (error) { this.state.sessions[id] = session; throw error; }
-    return { imported, ...this.workspace(id) };
+    try {
+      for (const pick of next.picks.slice(session.picks.length)) this.auditAcceptedPick(id, pick);
+      const result = this.workspace(id, { saveRecommendation: false });
+      this.persist();
+      return { imported, ...result };
+    } catch (error) {
+      this.state.sessions[id] = session; this.state.draftAudit.events[id] = priorEvents; throw error;
+    } finally {
+      if (this.state.sessions[id] === session) {
+        this.state.draftAudit.recommendations[id]?.splice(priorSnapshots);
+        for (const key of Object.keys(this.state.draftAudit.pools)) if (!priorPoolKeys.has(key)) delete this.state.draftAudit.pools[key];
+      }
+    }
   }
 
   sessionPlayers(id) {
@@ -408,25 +495,30 @@ class DraftService {
     return players.filter((player) => !draftedIds.has(player.id));
   }
 
-  workspace(id) {
+  workspace(id, { saveRecommendation = true } = {}) {
+    const card = this.recommendation(id, { saveSnapshot: saveRecommendation });
     return {
       session: this.getSession(id),
-      card: this.recommendation(id),
+      card,
+      decisions: this.decisionSummary(id),
+      controller: this.controllers.status(id),
       pool: { source: this.state.sessions[id].sourceMode === 'mock' ? 'yahoo-browser-observation' : this.playerPool.source, players: this.sessionPlayers(id) },
       unresolved: { players: this.unresolvedPlayers() }
     };
   }
 
-  recommendation(id) {
+  recommendation(id, { saveSnapshot = true } = {}) {
     const session = this.state.sessions[id];
     if (!session) return this.getSession(id);
     session.evidenceReviews ||= [];
+    const normalizedPlayers = session.sourceMode === 'mock' ? this.sessionPlayers(id) : this.playerPool.players.map(player => leagueProjection(player, this.league));
     const rawCard = buildRecommendationCard({
-      players: session.sourceMode === 'mock' ? this.sessionPlayers(id) : this.playerPool.players.map(player => leagueProjection(player, this.league)),
+      players: normalizedPlayers,
       picks: session.picks,
       league: session.sourceMode === 'mock' && session.mockRoom?.rules.rosterMaximums
         ? { ...this.league, rosterMaximums: session.mockRoom.rules.rosterMaximums } : this.league,
-      draftSlot: session.draftSlot
+      draftSlot: session.draftSlot,
+      status: session.status
     });
     const draftedIds = new Set(session.picks.map((pick) => pick.playerId));
     const tagsByPlayer = new Map();
@@ -451,7 +543,7 @@ class DraftService {
     };
     const latestReview = session.evidenceReviews.at(-1) || null;
     const readiness = session.sourceMode === 'mock' ? mockReadiness(session, this.now()) : null;
-    return {
+    const result = {
       ...card,
       ...(readiness && !readiness.ready ? { preferred: null, alternatives: { safe: null, upside: null }, onClock: false } : {}),
       mockReadiness: readiness,
@@ -505,6 +597,131 @@ class DraftService {
       },
       execution: 'recommendation-only'
     };
+    return this.captureRecommendation(session, result, normalizedPlayers, { persist: saveSnapshot });
+  }
+
+  captureRecommendation(session, card, players, { persist = true } = {}) {
+    const audit = this.state.draftAudit;
+    const pool = players.map(rankingPlayer);
+    const poolRevision = digest(pool);
+    const revision = digest([session.id, session.draftSlot, session.status, session.picks, this.league, poolRevision, card.evidence.ranking]);
+    const snapshots = audit.recommendations[session.id] ||= [];
+    let snapshot = snapshots.find(item => item.id === revision);
+    if (!snapshot) {
+      const newPool = !audit.pools[poolRevision];
+      audit.pools[poolRevision] ||= { capturedAt: this.currentIso(), players: pool };
+      snapshot = { id: revision, sessionId: session.id, leagueId: this.league.id, capturedAt: this.currentIso(),
+        poolRevision, reconciledPicks: session.picks.length, overallPick: card.currentOverall, onClock: card.onClock,
+        completed: card.completed, draftSlot: session.draftSlot, league: structuredClone(this.league),
+        ownedPicks: structuredClone(session.picks.filter(pick => pick.isMine)),
+        preferred: choiceSnapshot(card.preferred), alternatives: { safe: choiceSnapshot(card.alternatives.safe), upside: choiceSnapshot(card.alternatives.upside) },
+        ranking: structuredClone(card.evidence.ranking), evidenceSource: card.evidence.source };
+      snapshot.contentHash = digest(snapshot);
+      snapshots.push(snapshot);
+      try { if (persist) this.persist(); } catch (error) { snapshots.pop(); if (newPool) delete audit.pools[poolRevision]; throw error; }
+    }
+    return { ...card, recommendationId: revision, poolRevision, reconciledPicks: session.picks.length, snapshotCapturedAt: snapshot.capturedAt };
+  }
+
+  recordDecision(id, input) {
+    const session = this.state.sessions[id];
+    if (!session) return this.getSession(id);
+    const events = this.state.draftAudit.events[id] ||= [];
+    if (!this.decisionSummary(id).integrityVerified) throw Object.assign(new Error('Decision history integrity check failed'), { code: 'DECISION_AUDIT_CORRUPT' });
+    const eventId = String(input.eventId || '').trim().slice(0, 120);
+    if (!eventId) throw Object.assign(new Error('A unique decision event ID is required'), { code: 'DECISION_EVENT_ID_REQUIRED' });
+    const duplicate = events.find(event => event.eventId === eventId);
+    if (duplicate) return { applied: false, reason: 'duplicate-event', event: structuredClone(duplicate) };
+    let event;
+    if (input.type === 'plan') {
+      if (input.executor?.mode === 'computer-use') {
+        const controllerId = this.controllers.assertLease(id, input.controllerToken, input.executor);
+        if (input.executor.controllerId !== controllerId) throw Object.assign(new Error('Decision executor differs from the active controller'), { code: 'CONTROLLER_ID_MISMATCH' });
+      }
+      const current = this.recommendation(id);
+      const snapshot = this.state.draftAudit.recommendations[id]?.find(item => item.id === input.recommendationId);
+      event = validatePlan({ input, session, league: this.league, snapshot, recommendationId: current.recommendationId, poolRevision: current.poolRevision, now: this.now() });
+    } else {
+      const plan = events.find(item => item.hash === input.planId && item.type === 'plan');
+      if (!plan) throw Object.assign(new Error('A saved decision plan is required'), { code: 'DECISION_PLAN_REQUIRED' });
+      if (!['submit-started', 'submit-uncertain', 'input-acknowledged', 'display-confirmed', 'abandoned'].includes(input.type)) throw Object.assign(new Error('Unsupported decision event type'), { code: 'INVALID_DECISION_EVENT' });
+      const reportingInput = ['submit-uncertain', 'input-acknowledged'].includes(input.type);
+      if (!reportingInput && events.some(item => item.type === 'accepted' && item.overallPick === plan.overallPick)) throw Object.assign(new Error('This pick already has an accepted result'), { code: 'DECISION_ALREADY_ACCEPTED' });
+      if (reportingInput && !events.some(item => item.type === 'submit-started' && item.planId === plan.hash)) throw Object.assign(new Error('Input acknowledgment requires a previously recorded dispatch'), { code: 'DECISION_DISPATCH_REQUIRED' });
+      if (input.type === 'submit-started' && events.some(item => item.type === 'submit-started' && item.overallPick === plan.overallPick)) throw Object.assign(new Error('A submission was already started; inspect Yahoo before any retry'), { code: 'DECISION_SUBMISSION_ALREADY_STARTED' });
+      let dispatchObservation;
+      let viewObservation;
+      if (input.type === 'display-confirmed') {
+        const view = input.viewObservation, age = this.now().getTime() - Date.parse(view?.observedAt);
+        if (!view || !isFreshObservation(view.observedAt, this.now().getTime()) || view.planId !== plan.hash || view.recommendationId !== plan.recommendationId
+          || view.overallPick !== plan.overallPick || view.selected !== plan.playerName || view.preferred !== plan.recommendedPlayer
+          || view.allPanelsInFrame !== true || view.stale !== false) throw Object.assign(new Error('The exact current recommendation and decision must be visibly rendered in frame'), { code: 'DECISION_DISPLAY_UNVERIFIED' });
+        viewObservation = { observedAt: view.observedAt, planId: plan.hash, recommendationId: plan.recommendationId, overallPick: plan.overallPick,
+          selected: view.selected, preferred: view.preferred, allPanelsInFrame: true, stale: false, width: Number(view.width), height: Number(view.height), source: 'reported-rendered-dom' };
+      }
+      if (input.type === 'submit-started') {
+        if (events.some(item => item.type === 'abandoned' && item.planId === plan.hash)) throw Object.assign(new Error('An abandoned plan cannot authorize a submission'), { code: 'DECISION_PLAN_ABANDONED' });
+        if (events.findLast(item => item.type === 'plan' && item.overallPick === plan.overallPick)?.hash !== plan.hash) throw Object.assign(new Error('Use the latest reviewed decision plan'), { code: 'DECISION_PLAN_SUPERSEDED' });
+        if (plan.executor?.mode === 'computer-use') {
+          this.controllers.assertLease(id, input.controllerToken, plan.executor);
+          const painted = events.findLast(item => item.type === 'display-confirmed' && item.planId === plan.hash);
+          if (!painted || this.now().getTime() - Date.parse(painted.viewObservation.observedAt) > 5000) throw Object.assign(new Error('Confirm the displayed recommendation and decision immediately before dispatch'), { code: 'DECISION_DISPLAY_UNVERIFIED' });
+        }
+        const current = this.recommendation(id);
+        const snapshot = this.state.draftAudit.recommendations[id]?.find(item => item.id === plan.recommendationId);
+        const validated = validatePlan({ input: { ...plan, yahooObservation: input.yahooObservation || plan.yahooObservation }, session,
+          league: this.league, snapshot, recommendationId: current.recommendationId, poolRevision: current.poolRevision, now: this.now() });
+        dispatchObservation = validated.yahooObservation;
+      }
+      event = { type: input.type, planId: plan.hash, overallPick: plan.overallPick,
+        observedAt: this.currentIso(), ...(dispatchObservation ? { yahooObservation: dispatchObservation } : {}), ...(viewObservation ? { viewObservation } : {}), details: String(input.details || '').slice(0, 1200) };
+    }
+    const saved = appendEvent(events, { ...event, eventId });
+    try { this.persist(); } catch (error) { events.pop(); throw error; }
+    return { applied: true, event: structuredClone(saved), decisions: this.decisionSummary(id) };
+  }
+
+  auditAcceptedPick(id, pick) {
+    if (!pick.isMine) return;
+    const events = this.state.draftAudit.events[id] ||= [];
+    if (events.some(item => item.type === 'accepted' && item.overallPick === pick.overallPick)) return;
+    const submitted = events.find(item => item.type === 'submit-started' && item.overallPick === pick.overallPick);
+    const plan = submitted ? events.find(item => item.type === 'plan' && item.hash === submitted.planId)
+      : [...events].reverse().find(item => item.type === 'plan' && item.overallPick === pick.overallPick && !events.some(e => e.type === 'abandoned' && e.planId === item.hash));
+    const actualYahooId = String(pick.yahooPlayerKey || '').split('.p.').at(-1) || null;
+    const matched = Boolean(plan && (plan.yahooPlayerId ? plan.yahooPlayerId === actualYahooId : plan.playerId === pick.playerId));
+    appendEvent(events, { type: 'accepted', eventId: `accepted:${pick.eventId}`, overallPick: pick.overallPick,
+      observedAt: pick.observedAt, playerId: pick.playerId, yahooPlayerId: actualYahooId, playerName: pick.playerName,
+      planId: plan?.hash || null, recommendationId: plan?.recommendationId || null,
+      recommendedPlayer: plan?.recommendedPlayer || null, reason: plan?.reason || null,
+      classification: matched ? plan.classification : 'unattributed',
+      inputAcknowledged: Boolean(matched && events.some(item => item.type === 'input-acknowledged' && item.planId === plan.hash)),
+      verification: matched ? 'matched-plan' : plan ? 'different-player-accepted' : 'accepted-without-plan', source: pick.source });
+  }
+
+  decisionSummary(id) {
+    this.getSession(id);
+    const events = this.state.draftAudit.events[id] || [];
+    const snapshots = this.state.draftAudit.recommendations[id] || [];
+    const snapshotIntegrity = snapshots.every(({ contentHash, ...snapshot }) => digest(snapshot) === contentHash
+      && this.state.draftAudit.pools[snapshot.poolRevision]
+      && digest(this.state.draftAudit.pools[snapshot.poolRevision].players) === snapshot.poolRevision);
+    return { events: structuredClone(events), integrityVerified: verifyEvents(events) && snapshotIntegrity,
+      latestPlan: structuredClone(events.findLast(event => event.type === 'plan') || null),
+      lastAccepted: structuredClone(events.findLast(event => event.type === 'accepted') || null),
+      recommendationSnapshots: (this.state.draftAudit.recommendations[id] || []).length };
+  }
+
+  exportDecisionAudit(id) {
+    const summary = this.decisionSummary(id);
+    const recommendations = this.state.draftAudit.recommendations[id] || [];
+    return { schemaVersion: 1, session: this.getSession(id), ...summary, recommendations: structuredClone(recommendations),
+      pools: Object.fromEntries([...new Set(recommendations.map(item => item.poolRevision))].map(revision => [revision, structuredClone(this.state.draftAudit.pools[revision])])) };
+  }
+
+  pruneAuditPools() {
+    const referenced = new Set(Object.values(this.state.draftAudit.recommendations).flat().map(item => item.poolRevision));
+    for (const revision of Object.keys(this.state.draftAudit.pools)) if (!referenced.has(revision)) delete this.state.draftAudit.pools[revision];
   }
 
   decorate(session) {
@@ -514,7 +731,7 @@ class DraftService {
     const draftedFromPool = session.picks.filter((pick) => poolIds.has(pick.playerId)).length;
     return {
       ...structuredClone(session),
-      currentOverall: session.picks.length + 1,
+      currentOverall: session.status === 'completed' ? null : session.picks.length + 1,
       availableCount: session.sourceMode === 'mock' ? session.mockRoom?.players.length || 0 : this.playerPool.players.length - draftedFromPool,
       totalPicks: draftedRosterSize(this.league.roster) * this.league.teamCount
     };

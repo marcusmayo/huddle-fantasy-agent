@@ -84,11 +84,13 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules, teamCoun
       if (selected && correctTable) return data;
       if (!selected && switches < 2) {
         switches += 1;
-        try { await button(view).click({ timeoutMs: 8000 }); }
+        // Keyboard activation avoids the moving Results-tab mouse target that
+        // delayed acceptance checks in the September 8 draft-day rehearsal.
+        try { await button(view).press('Enter', { timeoutMs: 4000 }); }
         catch (error) { state.events.push({ stage: 'navigation-response-error', view, error: String(error), at: Date.now() }); }
       } else if (view === 'Results' && selected && !data.roundsSelected && subtabSwitches < 2) {
         subtabSwitches += 1;
-        try { await button('Round by Round').click({ timeoutMs: 8000 }); }
+        try { await button('Round by Round').press('Enter', { timeoutMs: 4000 }); }
         catch (error) { state.events.push({ stage: 'subtab-response-error', error: String(error), at: Date.now() }); }
       } else await state.yahoo.playwright.waitForTimeout(150);
     } while (Date.now() < deadline);
@@ -246,9 +248,9 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules, teamCoun
       unverifiedPicks: unverified.map(p => p.overallPick),
       roster: card.roster, picks: captured.snapshot.picks, timings: state.log };
   };
-  // Keep consecutive snake turns within one control call. Return compact
-  // progress; retain the full audit on state until the live clock has ended.
-  state.window = async function ({ maxPicks = 2, waitMs = 1000 } = {}) {
+  // Bound each call to one selection by default. Immediately invoke the next
+  // call on adjacent snake turns; retain the full audit until the clock ends.
+  state.window = async function ({ maxPicks = 1, waitMs = 1000 } = {}) {
     const results = [];
     for (let i = 0; i < maxPicks; i++) {
       const value = await state.batch({ waitMs });
@@ -267,7 +269,7 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules, teamCoun
     // Use the same case-insensitive turn parser and selection path on every
     // turn. A separate opening import can consume the first clock without
     // submitting anything. Do not attach media capture to sync or cycle.
-    return state.window({ maxPicks: 2, waitMs: 20000 });
+    return state.window({ maxPicks: 1, waitMs: 10000 });
   };
   return state;
 }
