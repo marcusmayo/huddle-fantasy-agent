@@ -13,6 +13,7 @@ function rankingPlayer(player) {
     'projectedPoints', 'floor', 'ceiling', 'rangeEstimated', 'projectionImputed', 'projectionSource', 'projectionLeagueId',
     'projectionScoringFingerprint', 'projectionScoringVerified', 'projectionScoringWarning', 'sourceConsensus', 'sourceRanks',
     'sleeperTrend', 'sourceDisagreement', 'yahooEvidenceObservedAt', 'yahooEvidenceSeason', 'injuryObservedAt', 'injurySource',
+    'injuryUpdatedAt', 'injurySeason', 'injuryStatusKnown', 'draftHealth',
     'byeSource', 'byeObservedAt', 'teamSource', 'teamObservedAt', 'projectionSeason', 'projectionPeriod'];
   return Object.fromEntries(fields.filter(field => player[field] !== undefined).map(field => [field, structuredClone(player[field])]));
 }
@@ -20,6 +21,7 @@ function rankingPlayer(player) {
 function choiceSnapshot(choice) {
   return choice ? { player: rankingPlayer(choice.player), score: choice.score, why: structuredClone(choice.why || []),
     rosterContribution: structuredClone(choice.rosterContribution || null), rosterFeasible: choice.rosterFeasible,
+    healthEvidence: structuredClone(choice.healthEvidence || null),
     waitProbability: choice.waitProbability, waitEstimateCalibrated: false } : null;
 }
 

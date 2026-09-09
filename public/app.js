@@ -1393,7 +1393,7 @@ async function controlYahooDraftSync(action) {
 
 function renderChoice(prefix, choice) {
   $(`#${prefix}-name`).textContent = choice ? choice.player.name : '—';
-  $(`#${prefix}-meta`).textContent = choice ? `${choice.player.position} · ${choice.score} score` : '';
+  $(`#${prefix}-meta`).textContent = choice ? `${choice.player.position} · ${choice.score} score · ${choice.healthEvidence?.label || 'Injury evidence unverified'}` : '';
 }
 
 function trendBadge(player) {
@@ -1454,11 +1454,23 @@ function renderRecommendation(card) {
   renderBoardEvidence(card);
   const preferred = card.preferred;
   $('#preferred-name').textContent = card.completed ? 'All picks reconciled' : preferred?.player.name || 'No eligible player';
-  $('#preferred-meta').textContent = preferred ? `${preferred.player.position} · ${preferred.player.team} · ADP ${preferred.player.adp ?? '—'}` : '';
+  $('#preferred-meta').textContent = preferred ? `${preferred.player.position} · ${preferred.player.team} · ADP ${preferred.player.adp ?? '—'} · ${preferred.healthEvidence?.label || 'Injury evidence unverified'}` : '';
   $('#preferred-observed-name').textContent = preferred?.player.observedName ? `Yahoo name: ${preferred.player.observedName}` : '';
   $('#preferred-observed-name').dataset.yahooPlayerId = preferred?.player.yahooPlayerId || '';
   $('#preferred-score').textContent = preferred?.score ?? '—';
   $('#preferred-why').innerHTML = (preferred?.why || []).map((line) => `<li>${escapeHtml(line)}</li>`).join('');
+  $('#draft-health-evidence').innerHTML = [['Preferred', preferred], ['Safer', card.alternatives.safe], ['Upside', card.alternatives.upside]]
+    .filter(([, choice]) => choice).map(([label, choice]) => {
+      const health = choice.healthEvidence;
+      const observations = ['designation', 'practice', 'role'].map(kind => {
+        const observation = health?.[kind];
+        if (!observation) return `<li>${escapeHtml(kind)}: no sourced report.</li>`;
+        const published = observation.publishedAt ? `published ${new Date(observation.publishedAt).toLocaleString()}` : 'publication time unknown';
+        const observed = observation.observedAt ? `observed ${new Date(observation.observedAt).toLocaleString()}` : 'observation time unknown';
+        return `<li>${escapeHtml(kind)}: ${escapeHtml(observation.value)} · ${escapeHtml(observation.source || 'Source unknown')} · ${escapeHtml(published)} · ${escapeHtml(observed)}${observation.summary ? ' · ' + escapeHtml(observation.summary) : ''}</li>`;
+      }).join('');
+      return `<article><h4>${escapeHtml(label)}: ${escapeHtml(choice.player.name)}</h4><p>${escapeHtml(health?.summary || 'Evidence unverified.')}</p><ul>${observations}</ul></article>`;
+    }).join('') + (preferred?.healthEvidence ? `<p>${escapeHtml(preferred.healthEvidence.limitation)}</p>` : '') || 'No recommendation to review.';
   const bye = card.rosterCoverage?.byeCoverage;
   const qbPlan = card.rosterCoverage?.quarterbackPlan;
   $('#draft-bye-coverage').textContent = bye

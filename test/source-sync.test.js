@@ -194,8 +194,10 @@ test('current Yahoo IDs remain stable while new projections and explicitly newer
   const value = runtime(); await enrichYahoo(value);
   const incoming = primaryPool(); incoming.players[0].yahooPlayerKey = '470.p.1001';
   incoming.players[0].injuryStatus = null; incoming.players[0].injurySource = 'newer-dated-report'; incoming.players[0].injuryObservedAt = '2026-09-08T20:00:00Z';
+  assert.equal(mergeProviderPool(value, incoming).players.find(p => p.yahooPlayerKey === '470.p.1001').injuryStatus, 'Q', 'Null status is missing evidence, not clearance');
+  incoming.players[0].injuryStatus = '';
   const next = mergeProviderPool(value, incoming), player = next.players.find(p => p.yahooPlayerKey === '470.p.1001');
-  assert.equal(player.id, 'yahoo:470.p.1001'); assert.equal(player.injuryStatus, null); assert.equal(player.injurySource, 'newer-dated-report');
+  assert.equal(player.id, 'yahoo:470.p.1001'); assert.equal(player.injuryStatus, ''); assert.equal(player.injurySource, 'newer-dated-report');
   const carried = next.players.find(p => p.yahooPlayerKey === '470.p.40993');
   assert.equal(carried.projectionImputed, true); assert.notEqual(carried.projectionScoringVerified, true);
   assert.equal(carried.yahooEvidenceObservedAt, '2026-09-08T19:00:00.000Z');

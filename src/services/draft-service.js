@@ -2,6 +2,7 @@
 
 const { leagueProjection } = require('../domain/league-projections');
 const { playerSnapshot } = require('../domain/player-snapshot');
+const { POLICY: HEALTH_POLICY, mergedHealthFields, validateHealthObservations } = require('../domain/draft-health');
 const { yahooId } = require('./player-evidence');
 const { DraftControllerService } = require('./draft-controller-service');
 const { isFreshObservation } = require('../domain/observation-time');
@@ -236,7 +237,7 @@ class DraftService {
     const before = structuredClone(session);
     const oldEvents = structuredClone(this.state.draftAudit.events[id] || []);
     session.picks.push({
-      ...playerSnapshot(leagueProjection(player, this.league), { observedAt: this.currentIso(), source: input.source || session.sourceMode }),
+      ...playerSnapshot(leagueProjection(this.playerWithHealth(session, player), this.league), { observedAt: this.currentIso(), source: input.source || session.sourceMode }),
       eventId,
       overallPick: expectedOverall,
       playerId,
@@ -492,7 +493,44 @@ class DraftService {
     if (!session) return this.getSession(id);
     const players = session.sourceMode === 'mock' ? (session.mockRoom?.players || []) : this.playerPool.players;
     const draftedIds = new Set(session.picks.map((pick) => pick.playerId));
-    return players.filter((player) => !draftedIds.has(player.id));
+    return players.filter((player) => !draftedIds.has(player.id)).map(player => this.playerWithHealth(session, player));
+  }
+
+  playerWithHealth(session, player) {
+    const reviews = (this.state.draftAudit.events[session.id] || []).filter(event => event.type === 'health-review'
+      && event.review.yahooPlayerId === yahooId(player)).map(event => event.review);
+    if (!reviews.length) return player;
+    const season = this.playerPool.season || this.league.provenance?.season || this.now().getFullYear();
+    return { ...player, ...mergedHealthFields([player, ...reviews.map(review => ({ draftHealth: { observations: review.observations } }))], { season, now: this.now() }) };
+  }
+
+  recordHealthReview(id, input) {
+    const session = this.state.sessions[id];
+    if (!session) return this.getSession(id);
+    if (session.status !== 'active') throw Object.assign(new Error('Completed drafts cannot receive new health reviews'), { code: 'DRAFT_SESSION_COMPLETED' });
+    const eventId = String(input.eventId || '').trim().slice(0, 120), playerId = String(input.yahooPlayerId || '');
+    const candidates = session.sourceMode === 'mock' ? session.mockRoom?.players || [] : this.playerPool.players;
+    const matches = candidates.filter(player => yahooId(player) === playerId);
+    if (!eventId || !/^[1-9]\d*$/.test(playerId) || matches.length !== 1 || matches[0].position !== input.position) {
+      throw Object.assign(new Error('Review exactly one identified player in this session, with matching position and an event ID'), { code: 'HEALTH_PLAYER_IDENTITY_REQUIRED' });
+    }
+    const season = this.playerPool.season || this.league.provenance?.season || this.now().getFullYear();
+    const observations = validateHealthObservations(input.observations, { season, now: this.now() });
+    const review = { eventId, yahooPlayerId: playerId, playerName: matches[0].name, position: matches[0].position,
+      season, source: 'operator-observed', observations };
+    const contentHash = digest(review), prior = (this.state.draftAudit.events[id] || [])
+      .find(event => event.type === 'health-review' && event.review.eventId === eventId)?.review;
+    if (prior) {
+      if (prior.contentHash !== contentHash) throw Object.assign(new Error('This review ID already contains different evidence'), { code: 'HEALTH_REVIEW_CONFLICT' });
+      return { applied: false, review: structuredClone(prior) };
+    }
+    if (!this.decisionSummary(id).integrityVerified) throw Object.assign(new Error('Decision history integrity must be verified before saving a review'), { code: 'DECISION_AUDIT_CORRUPT' });
+    const events = this.state.draftAudit.events[id] ||= [];
+    const oldLength = events.length;
+    const saved = { ...review, contentHash, savedAt: this.currentIso() };
+    appendEvent(events, { type: 'health-review', eventId: `health:${eventId}`, observedAt: saved.savedAt, review: structuredClone(saved) });
+    try { this.persist(); } catch (error) { events.splice(oldLength); throw error; }
+    return { applied: true, review: structuredClone(saved) };
   }
 
   workspace(id, { saveRecommendation = true } = {}) {
@@ -511,13 +549,15 @@ class DraftService {
     const session = this.state.sessions[id];
     if (!session) return this.getSession(id);
     session.evidenceReviews ||= [];
-    const normalizedPlayers = session.sourceMode === 'mock' ? this.sessionPlayers(id) : this.playerPool.players.map(player => leagueProjection(player, this.league));
+    const normalizedPlayers = session.sourceMode === 'mock' ? this.sessionPlayers(id) : this.playerPool.players.map(player => leagueProjection(this.playerWithHealth(session, player), this.league));
     const rawCard = buildRecommendationCard({
       players: normalizedPlayers,
       picks: session.picks,
       league: session.sourceMode === 'mock' && session.mockRoom?.rules.rosterMaximums
         ? { ...this.league, rosterMaximums: session.mockRoom.rules.rosterMaximums } : this.league,
       draftSlot: session.draftSlot,
+      now: this.now(),
+      season: this.playerPool.season || this.league.provenance?.season || this.now().getFullYear(),
       status: session.status
     });
     const draftedIds = new Set(session.picks.map((pick) => pick.playerId));
@@ -565,6 +605,8 @@ class DraftService {
         },
         ranking: {
           algorithm: 'roster-contribution-v4-offensive-completion',
+          healthPolicy: HEALTH_POLICY,
+          healthStateRevision: digest(card.board.map(row => [row.player.id, row.healthEvidence])),
           weights: structuredClone(STYLES.balanced),
           playerInputs: ['projected points', 'floor', 'ceiling', 'ECR', 'ADP', 'FantasyPros normalized positional rank', 'Tank01 ADP/projection rank', 'Sleeper add/drop trend', 'tier', 'injury status', 'risk'],
           computedFactors: ['marginal legal-lineup contribution', 'diminishing bench depth with ownership-credit floor', 'owned offensive bye coverage', 'disclosed K/DEF streaming estimate', 'remaining league replacement demand', 'actual uncovered starter/Flex need', 'roster-useful urgency and rank bonuses', 'provider upside only', 'injury risk', 'Yahoo position limits', 'K/DEF draft phase']

@@ -222,6 +222,10 @@ async function handleDraftRoutes(request, response, service, parts, { visionClie
     json(response, 201, service.recordDecision(sessionId, await readBody(request)));
     return true;
   }
+  if (parts[2] === 'health-reviews' && request.method === 'POST') {
+    json(response, 201, service.recordHealthReview(sessionId, await readBody(request)));
+    return true;
+  }
   if (parts[2] === 'decision-audit' && request.method === 'GET') {
     json(response, 200, service.exportDecisionAudit(sessionId));
     return true;

@@ -1,5 +1,6 @@
 'use strict';
 const { normalizeTeam } = require('../domain/player-snapshot');
+const { mergedHealthFields } = require('../domain/draft-health');
 
 const SOURCE_WEIGHTS = Object.freeze({ fantasyPros: 0.675, tank01: 0.325 });
 const SUPPORTED_POSITIONS = new Set(['QB', 'RB', 'WR', 'TE', 'K', 'DEF']);
@@ -47,6 +48,12 @@ function yahooId(player) {
 
 function identityKey(player) {
   return `${normalizeName(player?.name)}|${normalizePosition(player?.position)}`;
+}
+
+function compatibleHealth(player, evidence) {
+  if (!evidence || player.position !== evidence.position) return null;
+  const a = yahooId(player), b = yahooId(evidence);
+  return a && b && a !== b ? null : evidence;
 }
 
 function evidenceIndex(rows = []) {
@@ -266,7 +273,8 @@ function reconcilePlayerEvidence(primaryPool, { tank01 = null, sleeper = null, e
       ...player,
       team: normalizeTeam(player.team) || normalizeTeam(tankPlayer?.team) || normalizeTeam(sleeperIdentity?.team) || 'FA',
       byeWeek: player.byeWeek ?? tankPlayer?.byeWeek ?? sleeperIdentity?.byeWeek ?? null,
-      injuryStatus: player.injuryStatus ?? tankPlayer?.injuryStatus ?? sleeperIdentity?.injuryStatus ?? null,
+      injuryStatus: player.injuryStatus ?? null,
+      ...mergedHealthFields([player, compatibleHealth(player, tankPlayer), compatibleHealth(player, sleeperIdentity)], { season: primaryPool.season }),
       yahooPlayerKey: player.yahooPlayerKey || (sleeperIdentity?.yahooId ? String(sleeperIdentity.yahooId) : null),
       sourceConsensus: Math.round(sourceConsensus * 1000) / 1000,
       sourceRanks: {
@@ -319,6 +327,7 @@ function reconcilePlayerEvidence(primaryPool, { tank01 = null, sleeper = null, e
       tier: 99,
       byeWeek: tankPlayer.byeWeek ?? sleeperIdentity?.byeWeek ?? null,
       injuryStatus: tankPlayer.injuryStatus ?? sleeperIdentity?.injuryStatus ?? null,
+      ...mergedHealthFields([tankPlayer, compatibleHealth(tankPlayer, sleeperIdentity)], { season: primaryPool.season }),
       risk: 0.3,
       projectedPoints: positiveNumber(tankPlayer.projectedPoints),
       projectionSource: positiveNumber(tankPlayer.projectedPoints) != null ? 'tank01-api' : 'missing',

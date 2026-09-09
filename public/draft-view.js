@@ -4,7 +4,7 @@
   const $=id=>document.getElementById(id), text=(id,value)=>{$(id).textContent=value||'';};
   const base=`/api/leagues/${encodeURIComponent(leagueId||'')}/draft/sessions/${encodeURIComponent(sessionId||'')}`;
   let workspace=null,receivedAt=0,requestedAt=0,error=null,running=false,timer=null;
-  const meta=choice=>choice?`${choice.player.position} · ${choice.player.team||'team unknown'} · Bye ${choice.player.byeWeek||'unknown'}${choice.player.injuryStatus?' · '+choice.player.injuryStatus:''}`:'No alternative';
+  const meta=choice=>choice?`${choice.player.position} · ${choice.player.team||'team unknown'} · Bye ${choice.player.byeWeek||'unknown'} · ${choice.healthEvidence?.label||'Injury evidence unverified'}`:'No alternative';
   function render(){
     const m=HuddleDraftView.viewModel(workspace,{receivedAt,requestedAt,error});if(!m)return;
     document.body.dataset.complete=String(m.completed);document.body.dataset.stale=String(m.stale);
@@ -20,7 +20,9 @@
     text('revision',m.card.recommendationId?`Saved ${m.card.recommendationId.slice(0,8)}`:'Snapshot unverified');
     text('preferred',m.completed?'All results reconciled':m.card.preferred?.player.name||'Recommendation unavailable');text('score',m.card.preferred?`${m.card.preferred.score} score`:'');
     text('preferred-meta',m.completed?`${m.owned.length} owned picks · final receipts below`:meta(m.card.preferred));
-    $('reasons').replaceChildren(...(m.completed?[]:(m.card.preferred?.why||[]).slice(0,2)).map(reason=>{const li=document.createElement('li');li.textContent=reason;return li;}));
+    const health=m.card.preferred?.healthEvidence;
+    const healthLine=health&&(health.designation?.value!=='NONE'||health.practice||health.role)?[health.summary]:[];
+    $('reasons').replaceChildren(...(m.completed?[]:[...healthLine,...(m.card.preferred?.why||[])].slice(0,2)).map(reason=>{const li=document.createElement('li');li.textContent=reason;return li;}));
     text('quality',m.completed?'Saved evidence remains available for review.':m.card.evidence?.warning||(!m.card.evidence?.complete?'Player evidence incomplete; review uncertainty.':'Wait estimates are uncalibrated.'));
     for(const key of ['safe','upside']){const choice=m.completed?null:m.card.alternatives?.[key];text(key,choice?.player.name||'—');text(key+'-meta',m.completed?'Draft complete':meta(choice));}
     if(!m.completed&&m.card.alternatives?.safe?.player.id===m.card.alternatives?.upside?.player.id&&m.card.alternatives?.safe)text('upside-meta',$('upside-meta').textContent+' · leads both styles');

@@ -7,6 +7,7 @@ const { normalizeTeam } = require('../domain/player-snapshot');
 const { scoringFingerprint } = require('../domain/league-projections');
 const { ensureDraftProjections, yahooId } = require('./player-evidence');
 const { publishPlayerPool } = require('./player-pool-store');
+const { mergedHealthFields } = require('../domain/draft-health');
 
 function scope(entry) {
   return JSON.stringify([entry.yahooLeagueKey, entry.yahooTeamKey, entry.config.provenance?.season,
@@ -101,9 +102,10 @@ async function refreshYahooDraftEvidence({ runtime, entry, client, now = () => n
     if (Number.isInteger(candidate.byeWeek) && candidate.byeWeek >= 1 && candidate.byeWeek <= 18) {
       player.byeWeek = candidate.byeWeek; player.byeSource = 'yahoo-candidate-window'; player.byeObservedAt = observedAt;
     }
-    player.injuryStatus = candidate.injuryStatus;
-    player.injurySource = 'yahoo-current-designation';
-    player.injuryObservedAt = observedAt;
+    if (candidate.injuryStatusKnown) Object.assign(player, mergedHealthFields([player, {
+      injuryStatus: candidate.injuryStatus, injurySource: 'yahoo-current-designation', injuryObservedAt: observedAt,
+      injurySeason: Number(season)
+    }], { season: Number(season), now: new Date(observedAt) }));
     player.yahooPlayerKey = candidate.yahooPlayerKey;
     player.yahooObservedOrder = candidate.windowOrder;
     // A bare projected total may be weekly or use a different scoring basis.

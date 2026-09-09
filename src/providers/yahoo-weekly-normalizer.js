@@ -47,6 +47,7 @@ function normalizeYahooPlayer(raw, { available = false } = {}) {
   const selectedPosition = resourceScalar(raw, 'selected_position', 'position');
   const position = normalizePosition(findScalar(raw, 'display_position') || findScalar(raw, 'primary_position'));
   if (!position) return null;
+  const status = findScalar(raw, 'status', { stopAt: new Set(['ownership', 'selected_position', 'transaction']) });
   return {
     playerId: playerKey,
     yahooPlayerKey: playerKey,
@@ -57,7 +58,8 @@ function normalizeYahooPlayer(raw, { available = false } = {}) {
     actualPoints: finite(resourceScalar(raw, 'player_points', 'total')),
     projectedPoints: finite(resourceScalar(raw, 'player_projected_points', 'total')),
     remainingProjectedPoints: null,
-    injuryStatus: String(findScalar(raw, 'status') || '').toUpperCase(),
+    injuryStatus: String(status || '').toUpperCase(),
+    injuryStatusKnown: typeof status === 'string',
     byeWeek: integer(resourceScalar(raw, 'bye_weeks', 'week')),
     available,
     availabilityStatus: available ? String(resourceScalar(raw, 'ownership', 'ownership_type') || 'free-agent') : null

@@ -268,8 +268,15 @@ class FantasyProsClient {
         .map(([id, raw]) => [String(id), raw]));
       for (const raw of responsePlayers(batch.rankings.payload)) {
         const rawId = raw?.player_id || raw?.playerId || raw?.id;
-        const player = normalizeRankedPlayer({ ...(metadataById.get(String(rawId)) || {}), ...raw }, batch.position);
+        const metadataRow = metadataById.get(String(rawId)) || {};
+        const player = normalizeRankedPlayer({ ...metadataRow, ...raw }, batch.position);
         if (!player) continue;
+        if (player.injuryStatus != null) {
+          const fromRanking = raw.injury_status != null || raw.injuryStatus != null;
+          player.injurySource = 'fantasypros-player-designation';
+          player.injuryObservedAt = (fromRanking ? batch.rankings : metadata).cachedAt || null;
+          player.injurySeason = Number(season);
+        }
         const projection = projectionById.get(player.fantasyProsId) || {};
         const projectedPoints = projectionPoints(projection, scoring);
         if (Number.isFinite(projectedPoints)) projectedPlayers += 1;

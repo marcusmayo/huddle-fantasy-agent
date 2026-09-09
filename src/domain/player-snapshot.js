@@ -27,6 +27,7 @@ function playerSnapshot(player = {}, context = {}) {
     if (player[field] != null) snapshot[field] = String(player[field]).slice(0, 500);
   }
   if (context.observedAt) snapshot.evidenceObservedAt ||= context.observedAt;
+  for (const field of ['draftHealth', 'injuryStatusKnown', 'injurySeason']) if (player[field] !== undefined) snapshot[field] = structuredClone(player[field]);
   if (context.source) snapshot.evidenceSource = context.source;
   return snapshot;
 }

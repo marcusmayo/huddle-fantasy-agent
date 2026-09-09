@@ -2,12 +2,13 @@
 const { JsonStateStore } = require('../storage/json-state-store');
 const { yahooId, ensureDraftProjections } = require('./player-evidence');
 const { normalizeTeam } = require('../domain/player-snapshot');
+const { mergedHealthFields } = require('../domain/draft-health');
 
 const fail = (code, message) => { throw Object.assign(new Error(message), { code }); };
 const numberId = player => /^\d+$/.test(yahooId(player) || '') ? yahooId(player) : null;
 const yahooFields = ['yahooPlayerKey', 'yahooEvidenceObservedAt', 'yahooEvidenceSeason', 'yahooObservedOrder',
   'yahooObservedProjection', 'team', 'teamSource', 'teamObservedAt', 'byeWeek', 'byeSource', 'byeObservedAt'];
-const injuryFields = ['injuryStatus', 'injurySource', 'injuryObservedAt'];
+const injuryFields = ['injuryStatus', 'injurySource', 'injuryObservedAt', 'injuryUpdatedAt', 'injurySeason', 'injuryStatusKnown', 'draftHealth'];
 
 // Save the complete next view before publishing it to services that share the
 // existing object. Serialization makes disk and memory the same normalized view.
@@ -45,11 +46,11 @@ function mergeProviderPool(runtime, incoming) {
   const retained = new Set();
   const players = (incoming.players || []).map(row => {
     const prior = old.byYahoo.get(numberId(row)) || old.byId.get(row.id);
-    if (!prior) return { ...row };
+    if (!prior) return { ...row, ...mergedHealthFields([row], { season }) };
     if (prior.position !== row.position || (numberId(prior) && numberId(row) && numberId(prior) !== numberId(row))) {
       fail('PLAYER_POOL_ID_CONFLICT', 'A refreshed identity conflicts with its previously observed player');
     }
-    if (!hasYahooEvidence(prior)) return { ...row };
+    if (!hasYahooEvidence(prior)) return { ...row, ...mergedHealthFields(Number(current.season) === season ? [prior, row] : [row], { season }) };
     retained.add(prior.id);
     const merged = { ...row, id: prior.id };
     for (const field of yahooFields) {
@@ -57,12 +58,7 @@ function mergeProviderPool(runtime, incoming) {
       if (['byeWeek', 'byeSource', 'byeObservedAt'].includes(field) && !(Number.isInteger(prior.byeWeek) && prior.byeWeek >= 1 && prior.byeWeek <= 18)) continue;
       if (prior[field] !== undefined) merged[field] = structuredClone(prior[field]);
     }
-    // A genuinely newer, dated injury observation wins; provider refresh time
-    // alone is not an injury-news timestamp.
-    const incomingInjuryAt = Date.parse(row.injuryObservedAt), priorInjuryAt = Date.parse(prior.injuryObservedAt);
-    if (!Number.isFinite(incomingInjuryAt) || (Number.isFinite(priorInjuryAt) && incomingInjuryAt <= priorInjuryAt)) {
-      for (const field of injuryFields) if (prior[field] !== undefined) merged[field] = prior[field];
-    }
+    Object.assign(merged, mergedHealthFields([prior, row], { season }));
     return merged;
   });
   let carried = 0;

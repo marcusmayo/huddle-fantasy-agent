@@ -3,6 +3,7 @@
 const { FLEX_POSITIONS, benchDemandShares, draftedRosterSize, nextUserPick, pickOwner, positionTargets } = require('./league');
 const { contribution, rosterValue, byeCoverageReport } = require('./roster-value');
 const { ownedPlayer } = require('./player-snapshot');
+const { reviewDraftHealth } = require('./draft-health');
 
 const BENCH_SLOTS = new Set(['BN', 'BENCH', 'IR', 'IL', 'NA']);
 const SLOT_ELIGIBILITY = {
@@ -197,14 +198,6 @@ function phasePenalty(position, currentOverall, league) {
   return 0;
 }
 
-function injuryPenalty(player) {
-  const status = String(player.injuryStatus || '').toLowerCase();
-  if (['ir', 'out', 'o', 'pup', 'nfi', 'susp', 'suspended'].includes(status)) return 0.35;
-  if (['doubtful', 'd'].includes(status)) return 0.22;
-  if (['questionable', 'q'].includes(status)) return 0.08;
-  return 0;
-}
-
 function whyLines(player, components, mine, targets, waitProbability) {
   const lines = [];
   if (player.projectionScoringWarning) lines.push(player.projectionScoringWarning);
@@ -221,7 +214,7 @@ function whyLines(player, components, mine, targets, waitProbability) {
   return lines.slice(0, 3);
 }
 
-function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'balanced' }) {
+function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'balanced', now = new Date(), season = league.provenance?.season || new Date(now).getFullYear() }) {
   if (!STYLES[style]) throw new Error(`Unknown recommendation style: ${style}`);
   const draftedIds = new Set(picks.map((pick) => pick.playerId));
   const draftedYahooKeys = new Set(picks.map((pick) => String(pick.yahooPlayerKey || '')).filter(Boolean));
@@ -256,6 +249,7 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
     ? Math.max(0, nextPick - currentOverall - 1)
     : 0;
   const raw = available.map((player) => {
+    const healthEvidence = reviewDraftHealth(player, { now, season });
     const positionGroup = groups[player.position] || [];
     const positionIndex = positionGroup.findIndex((candidate) => candidate.id === player.id);
     const nextAtPosition = positionGroup[positionIndex + 1];
@@ -288,7 +282,8 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
       upside: player.rangeEstimated ? 0 : Math.max(0, (player.ceiling || player.projectedPoints) - player.projectedPoints) * Math.min(1, rosterContribution.marginalValue / Math.max(1, player.projectedPoints)),
       floor: Math.max(0, (player.floor || player.projectedPoints) - baselines[player.position]) * Math.min(1, rosterContribution.marginalValue / Math.max(1, player.projectedPoints)),
       consensus: (Number.isFinite(player.sourceConsensus) ? player.sourceConsensus : 0.5) * usable,
-      risk: clamp(Number(player.risk) || 0) + injuryPenalty(player),
+      healthEvidence,
+      risk: clamp(Number(player.risk) || 0) + healthEvidence.penalty,
       penalty: phasePenalty(player.position, currentOverall, league)
     };
   });
@@ -330,6 +325,7 @@ function scoreAvailablePlayers({ players, picks, league, draftSlot, style = 'bal
       rosterFeasible: row.rosterConstraint.feasible,
       rosterConstraint: row.rosterConstraint,
       rosterContribution: row.rosterContribution,
+      healthEvidence: row.healthEvidence,
       offensiveStarterPriority:row.offensiveStarterPriority,
       style,
       sleeper,
@@ -370,7 +366,7 @@ function buildRecommendationCard(input) {
   const flexTypes = Object.entries(roster).filter(([slot, count]) => FLEX_POSITIONS[slot] && count)
     .map(([slot, count]) => ({ slot, count, positions: FLEX_POSITIONS[slot] }));
   return {
-    generatedAt: new Date().toISOString(),
+    generatedAt: new Date(input.now || Date.now()).toISOString(),
     completed,
     currentOverall,
     draftSlot: input.draftSlot || null,
