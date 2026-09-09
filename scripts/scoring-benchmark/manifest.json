@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "baselineCommit": "c42b0c5ceaf18b4bce1b51f02be77048c9dafb8f",
+  "baselineFiles": ["src/domain/draft-board.js", "src/domain/roster-value.js", "src/domain/league.js", "src/domain/player-snapshot.js", "src/domain/draft-health.js"],
+  "developmentSeeds": [101, 211],
+  "heldOutSeeds": [307, 401, 503],
+  "opponents": ["adp", "qb-run", "balanced"],
+  "policies": ["frozen-huddle", "adp", "projection", "next-turn"],
+  "candidate": {
+    "version": "two-choice-scenarios-v1",
+    "perPositionShortlist": 2,
+    "forecastBehaviors": ["adp", "balanced"],
+    "aggregation": "Equal-scenario mean of two-choice roster value; not probability weighted",
+    "deadlineMs": 5000
+  },
+  "auditOwnTurns": [5, 7],
+  "evaluationWeeks": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
+  "releaseCriteria": {
+    "minimumMeanHeldOutGainPercent": 1,
+    "minimumSeatBehaviorGainPercent": -1,
+    "maximumAdditionalIncompleteRosters": 0,
+    "maximumDeadlineMisses": 0,
+    "requiresIndependentSourcedInputs": true,
+    "requiresActualBrowserTimingAcceptance": true
+  }
+}

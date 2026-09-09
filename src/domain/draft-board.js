@@ -209,7 +209,7 @@ function whyLines(player, components, mine, targets, waitProbability) {
   if (components.upside >= 0.75 && !player.rangeEstimated) lines.push('Provider ceiling projection adds upside evidence.');
   if (player.sourceDisagreement) lines.push('FantasyPros and Tank01 disagree materially; review both source ranks.');
   if (player.sleeperTrend?.direction === 'rising') lines.push('Sleeper add activity is rising and breaks close ranking ties.');
-  if (waitProbability !== null && waitProbability < 0.35) lines.push('Model says this player is unlikely to reach your next turn.');
+  if (waitProbability !== null && waitProbability < 0.35) lines.push('The ADP heuristic flags waiting risk; it is uncalibrated for this room.');
   if (!lines.length) lines.push('Best blended projection, roster-fit, scarcity, and next-turn value.');
   return lines.slice(0, 3);
 }

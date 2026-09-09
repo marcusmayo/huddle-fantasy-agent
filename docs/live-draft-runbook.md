@@ -40,7 +40,7 @@ For the dated Codespaces checklist, in-app readiness checks and optional CLI dia
 - Filter Best Available by position when comparing quarterbacks, running backs, wide receivers, tight ends, kickers, or defenses. Use Shorter, Taller, Fit screen, or drag the table's bottom edge to change how many rows remain visible.
 - Check **This was my pick** for selections made by the configured target team.
 - The large card is the balanced recommendation. The smaller cards expose safer and higher-upside roster constructions.
-- “Next-turn chance” estimates whether the player will remain available at the target team's next snake turn. It is not a guarantee.
+- “Next-turn chance” is an uncalibrated ADP heuristic shown as Low, Uncertain or Higher. Its source population may not match this room; it is not a verified survival probability. Review the player's price, remaining positional supply and opponents' needs before using it to justify an early selection.
 - If evidence is marked incomplete or a Yahoo player cannot be resolved, confirm against Yahoo before acting.
 - If a pick is recorded incorrectly, stop. The MVP intentionally lacks destructive editing; correct the event in the persisted state only with a reviewed recovery procedure.
 
