@@ -1,0 +1,321 @@
+1
+00:00:00,300 --> 00:00:04,982
+This is an edited recording of ChatGPT
+operating a real Yahoo draft. The user
+
+2
+00:00:04,982 --> 00:00:09,665
+confirmed Astra at Extra High effort, with
+computer use and screen recording.
+
+3
+00:00:10,300 --> 00:00:14,728
+The user submitted Jahmyr Gibbs because I
+had not started running the draft
+
+4
+00:00:14,728 --> 00:00:18,448
+and needed another prompt. That was my
+opening handoff failure.
+
+5
+00:00:20,300 --> 00:00:24,833
+At twelve, I followed Huddle and selected
+Josh Allen. This league starts two
+
+6
+00:00:24,833 --> 00:00:29,128
+quarterbacks, so Allen filled the first of
+two important starting slots.
+
+7
+00:00:30,300 --> 00:00:34,420
+At thirteen, I again followed Huddle,
+choosing Chase Brown. The paired
+
+8
+00:00:34,420 --> 00:00:38,657
+opening turn added a quarterback and another
+running back to the roster.
+
+9
+00:00:40,300 --> 00:00:44,830
+The dashboard then stopped advancing. I
+selected Nico Collins using the last
+
+10
+00:00:44,830 --> 00:00:48,765
+available Huddle board and Yahoo. This was a
+fallback, not a fresh
+
+11
+00:00:48,765 --> 00:00:49,659
+recommendation.
+
+12
+00:00:50,300 --> 00:00:55,012
+At twenty-five, I selected Drake Maye to
+fill the second starting quarterback
+
+13
+00:00:55,012 --> 00:00:59,296
+slot. Huddle was still unavailable, so this
+also used the prior board.
+
+14
+00:01:00,300 --> 00:01:04,245
+At thirty-six, the feed remained
+unavailable. I chose DeVonta Smith as
+
+15
+00:01:04,245 --> 00:01:08,472
+Yahoo’s highest-ranked available receiver
+without a questionable flag. That
+
+16
+00:01:08,472 --> 00:01:09,655
+was my fallback rule.
+
+17
+00:01:10,300 --> 00:01:14,377
+I chose Colston Loveland over Huddle’s
+preferred Tee Higgins to fill tight
+
+18
+00:01:14,377 --> 00:01:18,233
+end. Higgins had uncertain metadata and a
+questionable flag. My injury
+
+19
+00:01:18,233 --> 00:01:19,665
+comparison was incomplete.
+
+20
+00:01:20,300 --> 00:01:24,889
+I followed Huddle on Tyler Warren for the
+receiver-or-tight-end flex. Warren
+
+21
+00:01:24,889 --> 00:01:29,236
+also carried a questionable flag. I did not
+document a consistent injury
+
+22
+00:01:29,236 --> 00:01:29,659
+review.
+
+23
+00:01:30,300 --> 00:01:34,329
+At forty-nine, I followed Huddle on Terry
+McLaurin. Yahoo confirmed the
+
+24
+00:01:34,329 --> 00:01:38,529
+player despite Huddle’s missing team
+metadata. The accepted result matched
+
+25
+00:01:38,529 --> 00:01:39,664
+the intended player.
+
+26
+00:01:40,300 --> 00:01:44,762
+DJ Moore went at fifty-nine. Huddle updated
+its preferred choice, and I
+
+27
+00:01:44,762 --> 00:01:48,722
+followed it on Davante Adams at sixty.
+Availability changed the
+
+28
+00:01:48,722 --> 00:01:49,665
+recommendation.
+
+29
+00:01:50,300 --> 00:01:54,856
+I overrode Swift for Bucky Irving. Yahoo
+projected Irving higher, without a
+
+30
+00:01:54,856 --> 00:01:59,108
+questionable flag, but Huddle had omitted
+him. My Swift news check was
+
+31
+00:01:59,108 --> 00:01:59,655
+outdated.
+
+32
+00:02:00,300 --> 00:02:04,863
+At seventy-two, I followed Huddle on Swift
+after finding a return-to-practice
+
+33
+00:02:04,863 --> 00:02:09,426
+report. That report already existed at the
+Irving pick. It was my information
+
+34
+00:02:09,426 --> 00:02:09,663
+gap.
+
+35
+00:02:10,300 --> 00:02:14,796
+I followed Huddle on Mike Evans at seventy-
+three, adding a fifth receiver.
+
+36
+00:02:14,796 --> 00:02:18,927
+Evans shared Collins’s bye, which made later
+receiver coverage worth
+
+37
+00:02:18,927 --> 00:02:19,656
+considering.
+
+38
+00:02:20,300 --> 00:02:24,773
+At eighty-four, I missed the deadline. Yahoo
+selected Baltimore defense. My
+
+39
+00:02:24,773 --> 00:02:29,187
+first fresh clock check had only three
+seconds left. This was an execution
+
+40
+00:02:29,187 --> 00:02:29,664
+failure.
+
+41
+00:02:30,300 --> 00:02:34,888
+At eighty-five, I followed Huddle on
+Minnesota defense, filling the second
+
+42
+00:02:34,888 --> 00:02:39,105
+required defense slot. Later bye weeks still
+require outside defense
+
+43
+00:02:39,105 --> 00:02:39,663
+coverage.
+
+44
+00:02:40,300 --> 00:02:44,535
+I selected Jaylen Warren over Huddle’s Tony
+Pollard. Yahoo showed two hundred
+
+45
+00:02:44,535 --> 00:02:48,440
+four projected points versus one hundred
+sixty-one, and Warren supplied
+
+46
+00:02:48,440 --> 00:02:49,650
+running-back coverage.
+
+47
+00:02:50,300 --> 00:02:55,165
+At ninety-seven, I again passed on Pollard,
+selecting Brock Purdy. The third
+
+48
+00:02:55,165 --> 00:02:59,646
+quarterback covered Allen’s week-seven bye
+and Maye’s week-eleven bye.
+
+49
+00:03:00,300 --> 00:03:04,488
+At one hundred eight, I selected Parker
+Washington over Pollard. A sixth
+
+50
+00:03:04,488 --> 00:03:08,850
+receiver helped cover Collins and Evans in
+week eight while retaining week-
+
+51
+00:03:08,850 --> 00:03:09,664
+seven options.
+
+52
+00:03:10,300 --> 00:03:14,369
+I selected Pollard at one hundred nine,
+matching Huddle’s player. But the
+
+53
+00:03:14,369 --> 00:03:18,494
+card still showed one hundred eight. Player
+agreement does not establish a
+
+54
+00:03:18,494 --> 00:03:19,665
+fresh recommendation.
+
+55
+00:03:20,300 --> 00:03:24,832
+At one hundred twenty, I selected Jason
+Myers to fill kicker. Huddle agreed
+
+56
+00:03:24,832 --> 00:03:29,183
+on the player, but its card was two picks
+behind. That freshness failure
+
+57
+00:03:29,183 --> 00:03:29,666
+matters.
+
+58
+00:03:30,300 --> 00:03:34,178
+Eighteen verified submissions: ten aligned
+choices, five overrides, three
+
+59
+00:03:34,178 --> 00:03:37,949
+outage fallbacks. Two aligned choices used
+stale cards. Every submitted
+
+60
+00:03:37,949 --> 00:03:39,649
+player identifier matched Yahoo.
+
+61
+00:03:40,300 --> 00:03:44,161
+Huddle reconciled all one hundred twenty
+results. The failures demand
+
+62
+00:03:44,161 --> 00:03:48,247
+reliable updates, complete player evidence,
+durable decision records, and
+
+63
+00:03:48,247 --> 00:03:49,646
+earlier deadline control.
+
+64
+00:03:50,300 --> 00:03:55,076
+Yahoo graded our draft C minus, versus B
+plus for The Bomb. Maye at twenty-
+
+65
+00:03:55,076 --> 00:03:59,534
+five was the clearest reach. The
+recommendation strategy needs review.
+
+66
+00:04:00,300 --> 00:04:04,116
+The original silent recording is preserved.
+This narration explains the
+
+67
+00:04:04,116 --> 00:04:08,201
+decisions afterward. A completed roster is
+evidence of completion, not proof
+
+68
+00:04:08,201 --> 00:04:09,652
+that the process was clean.

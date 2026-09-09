@@ -1,0 +1,49 @@
+This is an edited recording of ChatGPT operating a real Yahoo draft. The user confirmed Astra at Extra High effort, with computer use and screen recording.
+
+The user submitted Jahmyr Gibbs because I had not started running the draft and needed another prompt. That was my opening handoff failure.
+
+At twelve, I followed Huddle and selected Josh Allen. This league starts two quarterbacks, so Allen filled the first of two important starting slots.
+
+At thirteen, I again followed Huddle, choosing Chase Brown. The paired opening turn added a quarterback and another running back to the roster.
+
+The dashboard then stopped advancing. I selected Nico Collins using the last available Huddle board and Yahoo. This was a fallback, not a fresh recommendation.
+
+At twenty-five, I selected Drake Maye to fill the second starting quarterback slot. Huddle was still unavailable, so this also used the prior board.
+
+At thirty-six, the feed remained unavailable. I chose DeVonta Smith as Yahoo’s highest-ranked available receiver without a questionable flag. That was my fallback rule.
+
+I chose Colston Loveland over Huddle’s preferred Tee Higgins to fill tight end. Higgins had uncertain metadata and a questionable flag. My injury comparison was incomplete.
+
+I followed Huddle on Tyler Warren for the receiver-or-tight-end flex. Warren also carried a questionable flag. I did not document a consistent injury review.
+
+At forty-nine, I followed Huddle on Terry McLaurin. Yahoo confirmed the player despite Huddle’s missing team metadata. The accepted result matched the intended player.
+
+DJ Moore went at fifty-nine. Huddle updated its preferred choice, and I followed it on Davante Adams at sixty. Availability changed the recommendation.
+
+I overrode Swift for Bucky Irving. Yahoo projected Irving higher, without a questionable flag, but Huddle had omitted him. My Swift news check was outdated.
+
+At seventy-two, I followed Huddle on Swift after finding a return-to-practice report. That report already existed at the Irving pick. It was my information gap.
+
+I followed Huddle on Mike Evans at seventy-three, adding a fifth receiver. Evans shared Collins’s bye, which made later receiver coverage worth considering.
+
+At eighty-four, I missed the deadline. Yahoo selected Baltimore defense. My first fresh clock check had only three seconds left. This was an execution failure.
+
+At eighty-five, I followed Huddle on Minnesota defense, filling the second required defense slot. Later bye weeks still require outside defense coverage.
+
+I selected Jaylen Warren over Huddle’s Tony Pollard. Yahoo showed two hundred four projected points versus one hundred sixty-one, and Warren supplied running-back coverage.
+
+At ninety-seven, I again passed on Pollard, selecting Brock Purdy. The third quarterback covered Allen’s week-seven bye and Maye’s week-eleven bye.
+
+At one hundred eight, I selected Parker Washington over Pollard. A sixth receiver helped cover Collins and Evans in week eight while retaining week-seven options.
+
+I selected Pollard at one hundred nine, matching Huddle’s player. But the card still showed one hundred eight. Player agreement does not establish a fresh recommendation.
+
+At one hundred twenty, I selected Jason Myers to fill kicker. Huddle agreed on the player, but its card was two picks behind. That freshness failure matters.
+
+Eighteen verified submissions: ten aligned choices, five overrides, three outage fallbacks. Two aligned choices used stale cards. Every submitted player identifier matched Yahoo.
+
+Huddle reconciled all one hundred twenty results. The failures demand reliable updates, complete player evidence, durable decision records, and earlier deadline control.
+
+Yahoo graded our draft C minus, versus B plus for The Bomb. Maye at twenty-five was the clearest reach. The recommendation strategy needs review.
+
+The original silent recording is preserved. This narration explains the decisions afterward. A completed roster is evidence of completion, not proof that the process was clean.

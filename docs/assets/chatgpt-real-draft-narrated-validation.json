@@ -1,0 +1,353 @@
+{
+  "sourceOriginalSha256": "cad6fe121e229477dfcb80b9a3b736e41600516281922a339bfee35e9bb1847a",
+  "voice": "Kokoro af_heart stock synthetic voice",
+  "music": "New original A-minor electronic composition",
+  "modelConfiguration": "User-confirmed Astra, Extra High effort; computer use while recording",
+  "interpretation": "Postproduction explanation, not live recorded reasoning. No reconstructed application UI. Every shot is a crop of the actual recording.",
+  "scenes": [
+    {
+      "outputStart": 0,
+      "sourceStart": 410,
+      "seconds": 10,
+      "focus": "both",
+      "label": "THE REAL SESSION",
+      "title": "ChatGPT operates the draft.",
+      "explanation": "Astra \u00b7 Extra High effort \u00b7 Computer use \u00b7 Screen recording"
+    },
+    {
+      "outputStart": 10,
+      "sourceStart": 432,
+      "seconds": 10,
+      "focus": "both",
+      "label": "PICK 1 / USER SUBMITTED",
+      "title": "Jahmyr Gibbs",
+      "explanation": "The user had to prompt the assistant again to run the draft."
+    },
+    {
+      "outputStart": 20,
+      "sourceStart": 502,
+      "seconds": 10,
+      "focus": "huddle",
+      "label": "PICK 12 / FOLLOWED HUDDLE",
+      "title": "Josh Allen",
+      "explanation": "Huddle\u2019s preferred player \u00b7 First quarterback"
+    },
+    {
+      "outputStart": 30,
+      "sourceStart": 513,
+      "seconds": 10,
+      "focus": "huddle",
+      "label": "PICK 13 / FOLLOWED HUDDLE",
+      "title": "Chase Brown",
+      "explanation": "Huddle\u2019s preferred player \u00b7 Starting running-back depth"
+    },
+    {
+      "outputStart": 40,
+      "sourceStart": 808,
+      "seconds": 10,
+      "focus": "both",
+      "label": "PICK 24 / FEED-OUTAGE FALLBACK",
+      "title": "Nico Collins",
+      "explanation": "Last available Huddle board; no fresh recommendation."
+    },
+    {
+      "outputStart": 50,
+      "sourceStart": 850,
+      "seconds": 10,
+      "focus": "both",
+      "label": "PICK 25 / FEED-OUTAGE FALLBACK",
+      "title": "Drake Maye",
+      "explanation": "Filled QB2 using the prior board and Yahoo."
+    },
+    {
+      "outputStart": 60,
+      "sourceStart": 1077,
+      "seconds": 10,
+      "focus": "both",
+      "label": "PICK 36 / FEED-OUTAGE FALLBACK",
+      "title": "DeVonta Smith",
+      "explanation": "Highest-ranked available Yahoo receiver without a Q flag."
+    },
+    {
+      "outputStart": 70,
+      "sourceStart": 1136,
+      "seconds": 10,
+      "focus": "huddle",
+      "label": "PICK 37 / AUDIBLE",
+      "title": "Colston Loveland over Tee Higgins",
+      "explanation": "Filled TE \u00b7 Huddle\u2019s second choice \u00b7 Injury comparison incomplete"
+    },
+    {
+      "outputStart": 80,
+      "sourceStart": 1373,
+      "seconds": 10,
+      "focus": "huddle",
+      "label": "PICK 48 / FOLLOWED HUDDLE",
+      "title": "Tyler Warren",
+      "explanation": "Filled W/T flex \u00b7 Q flag was not documented consistently."
+    },
+    {
+      "outputStart": 90,
+      "sourceStart": 1420,
+      "seconds": 10,
+      "focus": "huddle",
+      "label": "PICK 49 / FOLLOWED HUDDLE",
+      "title": "Terry McLaurin",
+      "explanation": "Player identity checked in Yahoo despite Huddle\u2019s missing team."
+    },
+    {
+      "outputStart": 100,
+      "sourceStart": 1685,
+      "seconds": 10,
+      "focus": "huddle",
+      "label": "PICK 60 / FOLLOWED HUDDLE",
+      "title": "Davante Adams",
+      "explanation": "Huddle updated after DJ Moore was taken at 59."
+    },
+    {
+      "outputStart": 110,
+      "sourceStart": 1733,
+      "seconds": 10,
+      "focus": "both",
+      "label": "PICK 61 / AUDIBLE",
+      "title": "Bucky Irving over D\u2019Andre Swift",
+      "explanation": "Yahoo projection: 204 vs 194 \u00b7 Irving absent from Huddle."
+    },
+    {
+      "outputStart": 120,
+      "sourceStart": 1847,
+      "seconds": 10,
+      "focus": "huddle",
+      "label": "PICK 72 / FOLLOWED HUDDLE",
+      "title": "D\u2019Andre Swift",
+      "explanation": "A later check found a September 7 return-to-practice report."
+    },
+    {
+      "outputStart": 130,
+      "sourceStart": 1876,
+      "seconds": 10,
+      "focus": "huddle",
+      "label": "PICK 73 / FOLLOWED HUDDLE",
+      "title": "Mike Evans",
+      "explanation": "Added a fifth receiver \u00b7 Shared Collins\u2019s week-8 bye."
+    },
+    {
+      "outputStart": 140,
+      "sourceStart": 2194,
+      "seconds": 10,
+      "focus": "both",
+      "label": "PICK 84 / MISSED DEADLINE",
+      "title": "Yahoo selected Baltimore defense.",
+      "explanation": "Not an audible \u00b7 First fresh clock observation: 3 seconds left"
+    },
+    {
+      "outputStart": 150,
+      "sourceStart": 2207,
+      "seconds": 10,
+      "focus": "huddle",
+      "label": "PICK 85 / FOLLOWED HUDDLE",
+      "title": "Minnesota defense",
+      "explanation": "Filled the second starting defense slot."
+    },
+    {
+      "outputStart": 160,
+      "sourceStart": 2461,
+      "seconds": 10,
+      "focus": "both",
+      "label": "PICK 96 / AUDIBLE",
+      "title": "Jaylen Warren over Tony Pollard",
+      "explanation": "Yahoo projection: 204 vs 161 \u00b7 Running-back coverage"
+    },
+    {
+      "outputStart": 170,
+      "sourceStart": 2493,
+      "seconds": 10,
+      "focus": "both",
+      "label": "PICK 97 / AUDIBLE",
+      "title": "Brock Purdy over Tony Pollard",
+      "explanation": "QB3 \u00b7 Covers Allen\u2019s week 7 and Maye\u2019s week 11."
+    },
+    {
+      "outputStart": 180,
+      "sourceStart": 2670,
+      "seconds": 10,
+      "focus": "both",
+      "label": "PICK 108 / AUDIBLE",
+      "title": "Parker Washington over Tony Pollard",
+      "explanation": "WR6 \u00b7 Helps cover Collins and Evans in week 8."
+    },
+    {
+      "outputStart": 190,
+      "sourceStart": 2684,
+      "seconds": 10,
+      "focus": "huddle",
+      "label": "PICK 109 / ALIGNED, STALE CARD",
+      "title": "Tony Pollard",
+      "explanation": "Player matched Huddle \u00b7 Recommendation still showed pick 108."
+    },
+    {
+      "outputStart": 200,
+      "sourceStart": 2899,
+      "seconds": 10,
+      "focus": "huddle",
+      "label": "PICK 120 / ALIGNED, STALE CARD",
+      "title": "Jason Myers",
+      "explanation": "Filled kicker \u00b7 Recommendation still showed pick 118."
+    },
+    {
+      "outputStart": 210,
+      "sourceStart": 2910,
+      "seconds": 10,
+      "focus": "both",
+      "label": "THE VERIFIED TOTAL",
+      "title": "18 assistant submissions.",
+      "explanation": "10 aligned \u00b7 5 overrides \u00b7 3 outage fallbacks"
+    },
+    {
+      "outputStart": 220,
+      "sourceStart": 2919,
+      "seconds": 10,
+      "focus": "huddle",
+      "label": "WHAT THE RUN EXPOSED",
+      "title": "Completion was not a clean run.",
+      "explanation": "False sync status \u00b7 Lost updates \u00b7 Missing data \u00b7 Clock control"
+    },
+    {
+      "outputStart": 230,
+      "sourceStart": 2928,
+      "seconds": 10,
+      "focus": "both",
+      "label": "YAHOO\u2019S DRAFT GRADE",
+      "title": "Blitzkrieg: C\u2212. The Bomb: B+.",
+      "explanation": "Yahoo criticized Maye at 25 versus ADP 48."
+    },
+    {
+      "outputStart": 240,
+      "sourceStart": 2932,
+      "seconds": 10,
+      "focus": "both",
+      "label": "THE ACCOUNTABLE FINISH",
+      "title": "Keep the recording. Verify the fixes.",
+      "explanation": "Postproduction narration \u00b7 Real footage \u00b7 No live audio"
+    }
+  ],
+  "files": [
+    {
+      "file": "chatgpt-real-draft-narrated-landscape-1920x1080.mp4",
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "frames": 7500,
+      "seconds": 250.0,
+      "bytes": 14824901,
+      "sha256": "63c77a9f5cd2f59cfe3db1cc7a98f5e6b3839b2cbb643a95d96519f686fd5d66",
+      "video": "H.264 yuv420p",
+      "audio": "AAC-LC stereo 48 kHz",
+      "captions": "English mov_text; sidecar round-trip passed",
+      "faststart": true,
+      "fullDecode": "passed",
+      "loudness": {
+        "input_i": "-16.05",
+        "input_tp": "-1.37",
+        "input_lra": "2.60",
+        "input_thresh": "-26.26",
+        "output_i": "-15.99",
+        "output_tp": "-1.50",
+        "output_lra": "2.50",
+        "output_thresh": "-26.21",
+        "normalization_type": "dynamic",
+        "target_offset": "-0.01"
+      }
+    },
+    {
+      "file": "chatgpt-real-draft-narrated-feed-1080x1350.mp4",
+      "width": 1080,
+      "height": 1350,
+      "fps": 30,
+      "frames": 7500,
+      "seconds": 250.0,
+      "bytes": 12381446,
+      "sha256": "9a326c43231bf97a31b72892d26492648017202defc8a4c615156c628ab143b7",
+      "video": "H.264 yuv420p",
+      "audio": "AAC-LC stereo 48 kHz",
+      "captions": "English mov_text; sidecar round-trip passed",
+      "faststart": true,
+      "fullDecode": "passed",
+      "loudness": {
+        "input_i": "-16.05",
+        "input_tp": "-1.37",
+        "input_lra": "2.60",
+        "input_thresh": "-26.26",
+        "output_i": "-15.99",
+        "output_tp": "-1.50",
+        "output_lra": "2.50",
+        "output_thresh": "-26.21",
+        "normalization_type": "dynamic",
+        "target_offset": "-0.01"
+      }
+    },
+    {
+      "file": "chatgpt-real-draft-narrated-x-1280x720.mp4",
+      "width": 1280,
+      "height": 720,
+      "fps": 30,
+      "frames": 3900,
+      "seconds": 130.0,
+      "bytes": 5821960,
+      "sha256": "7c6dce7adce777f930897ef335baa5c7a66ed99c836e7521b8776456d5fced46",
+      "video": "H.264 yuv420p",
+      "audio": "AAC-LC stereo 48 kHz",
+      "captions": "English mov_text; sidecar round-trip passed",
+      "faststart": true,
+      "fullDecode": "passed",
+      "loudness": {
+        "input_i": "-16.12",
+        "input_tp": "-1.41",
+        "input_lra": "2.40",
+        "input_thresh": "-26.34",
+        "output_i": "-16.06",
+        "output_tp": "-1.50",
+        "output_lra": "2.40",
+        "output_thresh": "-26.25",
+        "normalization_type": "dynamic",
+        "target_offset": "0.06"
+      }
+    }
+  ],
+  "visualReview": "Representative landscape, portrait and 720p frames inspected: opening/user Gibbs, recommended Josh Allen, audible Irving, missed deadline and grade comparison. Labels are legible and unclipped; original app defects remain visible. Not a frame-by-frame semantic review.",
+  "captionTiming": "Estimated phrase timing, not forced word alignment",
+  "portraitTreatment": "Actual Huddle viewport enlarged; dual-screen scenes cut from Yahoo to Huddle after five seconds. Same narration and chronology.",
+  "platformUploadTested": false,
+  "publication": "Repository assets; no LinkedIn or X post",
+  "xHighlights": {
+    "seconds": 130,
+    "fullEditSceneIndices": [
+      0,
+      1,
+      2,
+      4,
+      7,
+      11,
+      14,
+      16,
+      17,
+      18,
+      21,
+      23,
+      24
+    ],
+    "scope": "All five audibles, one followed recommendation, one fallback, the user opening pick, missed deadline, verified totals, Yahoo grades and closing context. Full twenty-pick review remains in landscape and feed."
+  },
+  "animatedPreview": {
+    "file": "chatgpt-real-draft-preview.gif",
+    "dimensions": [
+      720,
+      405
+    ],
+    "frames": 96,
+    "seconds": 12.01,
+    "fullDecode": "passed",
+    "silent": true,
+    "sha256": "5764f9440aba1e71ec7db20d6629fe4024e169ce5768ccae0e8014ae58c7a0f1"
+  }
+}

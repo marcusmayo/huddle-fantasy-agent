@@ -22,6 +22,26 @@ September 2026 · AI-generated narration and an original orchestral score. The a
 
 Watch the second Huddle preview: a 60-second edited replay of the completed Yahoo mock, with Huddle recommendations, synthetic narration and original orchestral music. The animated GIF is silent; click it for the video with sound.
 
+## Huddle's first real draft
+
+[![Watch Huddle's first real draft with narration and orchestral music](docs/assets/huddle-real-draft-preview.gif)](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-real-draft-narrated-landscape-1920x1080.mp4)
+
+**[Watch with sound — 1920 × 1080](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-real-draft-narrated-landscape-1920x1080.mp4)** · **[LinkedIn feed — 1080 × 1350](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-real-draft-narrated-feed-1080x1350.mp4)** · **[X thread — 1280 × 720](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-real-draft-narrated-x-1280x720.mp4)**
+
+Watch Huddle enter the real DR Fantasy Football draft: 60 seconds of recommendations, reconciliation and an audible, using actual recorded footage with the familiar synthetic voice and original orchestral music. The edit includes the failures that shaped the postmortem. The animated GIF is silent; click it for sound.
+
+[Captions](docs/assets/huddle-real-draft-narration-en.srt) · [Media notes](docs/media/real-draft-previews.md#huddle-the-first-real-draft) · [Thumbnail](docs/assets/huddle-real-draft-preview-poster.jpg)
+
+## ChatGPT runs the draft
+
+[![Watch ChatGPT operate the real draft and review its decisions](docs/assets/chatgpt-real-draft-preview.gif)](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/chatgpt-real-draft-narrated-landscape-1920x1080.mp4)
+
+**[Watch with sound — 1920 × 1080](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/chatgpt-real-draft-narrated-landscape-1920x1080.mp4)** · **[LinkedIn feed — 1080 × 1350](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/chatgpt-real-draft-narrated-feed-1080x1350.mp4)** · **[X highlights — 1280 × 720](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/chatgpt-real-draft-narrated-x-1280x720.mp4)**
+
+A 4:10 review of ChatGPT using the computer to draft: when it followed Huddle, why it made five audibles, and where execution failed. A different synthetic voice and original electronic score accompany the actual footage, including the user's Gibbs pick, Yahoo's autopick and the draft-grade comparison. The X highlights run 2:10; the animated GIF is silent.
+
+[Full captions](docs/assets/chatgpt-real-draft-narration-en.srt) · [X captions](docs/assets/chatgpt-real-draft-x-narration-en.srt) · [Media notes](docs/media/real-draft-previews.md#chatgpt-the-draft-through-computer-use) · [Thumbnail](docs/assets/chatgpt-real-draft-preview-poster.jpg)
+
 ## What it does
 
 | Area | Available in the MVP |
