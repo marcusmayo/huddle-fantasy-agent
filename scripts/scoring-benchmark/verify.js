@@ -12,15 +12,16 @@ const hash = file => createHash('sha256').update(fs.readFileSync(file)).digest('
 const evaluationFiles = ['src/domain/league.js', 'src/domain/league-projections.js', 'src/domain/weekly-management.js',
   'src/domain/weekly-context.js', 'src/domain/roster-value.js', 'config/leagues/yahoo-example.json'];
 
-function lockEvaluation(directory) {
+function lockEvaluation(directory, { sourceRoot } = {}) {
   const repo = path.resolve(__dirname, '../..'), destination = path.join(directory, 'evaluation-source-lock.json');
+  sourceRoot ||= repo;
   if (fs.existsSync(destination)) return;
   const files = {}, gitBlobs = {};
   for (const file of evaluationFiles) {
     const expected = execFileSync('git', ['rev-parse', `${manifest.baselineCommit}:${file}`], { cwd: repo, encoding: 'utf8', windowsHide: true }).trim();
-    const actual = execFileSync('git', ['hash-object', '--path', file, file], { cwd: repo, encoding: 'utf8', windowsHide: true }).trim();
+    const actual = execFileSync('git', ['hash-object', '--path', file, path.join(sourceRoot, file)], { cwd: repo, encoding: 'utf8', windowsHide: true }).trim();
     assert.equal(actual, expected, `Cannot establish unchanged evaluation dependency: ${file}`);
-    files[file] = hash(path.join(repo, file)); gitBlobs[file] = expected;
+    files[file] = hash(path.join(sourceRoot, file)); gitBlobs[file] = expected;
   }
   fs.writeFileSync(destination, JSON.stringify({ recordedAt: new Date().toISOString(), commit: manifest.baselineCommit,
     scope: 'Verified current evaluation dependencies against the declared source commit; no independent live-data acceptance implied.', files, gitBlobs }, null, 2));

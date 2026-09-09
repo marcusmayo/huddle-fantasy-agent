@@ -1,5 +1,7 @@
 # Yahoo browser acceptance — September 9, 2026
 
+**Later source preparation:** ten read-only player-list pages now provide 250 distinct candidates with enough positional depth for the standard mock. Their source dates, injury badges and estimated scoring conversions are retained. See [dated candidate preparation and scoring limits](yahoo-season-evidence.md). This was not a second timed draft: no session/controller was started and no Draft/Queue input was made. The earlier failed startup described below remains unaccepted.
+
 **Result: startup failed; clean live acceptance remains open.** This was a free Yahoo standard mock, Crackback Block **11101960**, seat **8**, eight teams, fifteen rounds and 120 total selections. The entry helper verified a 30-second pick clock, half-PPR, four-point passing touchdowns, the standard roster and position caps. This does not test the DR league's six-team, twenty-round scoring configuration.
 
 The maintained controller had not been created, no Huddle rehearsal session had been prepared, and no manual Draft or Queue input was issued. Yahoo's independent automatic selections must not be credited to Huddle or the assistant. The attempt was abandoned after startup failed. Subsequent browser reads inspected the defect; they were not a resumed draft run. No recording was started or required.

@@ -3,6 +3,7 @@ const crypto = require('node:crypto');
 const { yahooId } = require('../services/player-evidence');
 const { pickOwner } = require('./league');
 const { isFreshObservation, CLOCK_SKEW_ALLOWANCE_MS } = require('./observation-time');
+const { projectionDerivationSnapshot } = require('./projection-evidence');
 
 const digest = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const fail = (code, message) => { throw Object.assign(new Error(message), { code }); };
@@ -15,7 +16,10 @@ function rankingPlayer(player) {
     'sleeperTrend', 'sourceDisagreement', 'yahooEvidenceObservedAt', 'yahooEvidenceSeason', 'injuryObservedAt', 'injurySource',
     'injuryUpdatedAt', 'injurySeason', 'injuryStatusKnown', 'draftHealth',
     'byeSource', 'byeObservedAt', 'teamSource', 'teamObservedAt', 'projectionSeason', 'projectionPeriod'];
-  return Object.fromEntries(fields.filter(field => player[field] !== undefined).map(field => [field, structuredClone(player[field])]));
+  const result = Object.fromEntries(fields.filter(field => player[field] !== undefined).map(field => [field, structuredClone(player[field])]));
+  const derivation = projectionDerivationSnapshot(player.projectionDerivation);
+  if (derivation) result.projectionDerivation = derivation;
+  return result;
 }
 
 function choiceSnapshot(choice) {

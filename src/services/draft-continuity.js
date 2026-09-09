@@ -10,7 +10,7 @@ const root = path.resolve(__dirname, '../..');
 const runtimeFiles = [...fs.readdirSync(path.join(root, 'src'), { recursive: true }).filter(file => file.endsWith('.js'))
   .map(file => 'src/' + file.replace(/\\/g, '/')),
   'package.json', 'package-lock.json', 'scripts/local-draft-server.cjs', 'scripts/local-draft-supervisor.cjs',
-  'scripts/live-draft-controller.mjs', 'scripts/yahoo-live-cua-adapter.mjs', 'scripts/huddle-draft-display-cua.mjs',
+  'scripts/live-draft-controller.mjs', 'scripts/yahoo-live-cua-adapter.mjs', 'scripts/yahoo-player-list-cua.mjs', 'scripts/huddle-draft-display-cua.mjs',
   'public/request.js', 'public/draft-view.html', 'public/draft-view.js', 'public/draft-view-model.js', 'public/draft-view.css'].sort();
 const fail = (code, message) => { throw Object.assign(new Error(message), { code }); };
 const clean = value => String(value || '').trim();

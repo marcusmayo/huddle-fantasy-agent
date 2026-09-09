@@ -1,4 +1,5 @@
 'use strict';
+const { projectionDerivationSnapshot } = require('./projection-evidence');
 
 function normalizeTeam(value) {
   const team = String(value || '').trim().toUpperCase();
@@ -27,6 +28,8 @@ function playerSnapshot(player = {}, context = {}) {
     if (player[field] != null) snapshot[field] = String(player[field]).slice(0, 500);
   }
   if (context.observedAt) snapshot.evidenceObservedAt ||= context.observedAt;
+  const derivation = projectionDerivationSnapshot(player.projectionDerivation);
+  if (derivation) snapshot.projectionDerivation = derivation;
   for (const field of ['draftHealth', 'injuryStatusKnown', 'injurySeason']) if (player[field] !== undefined) snapshot[field] = structuredClone(player[field]);
   if (context.source) snapshot.evidenceSource = context.source;
   return snapshot;

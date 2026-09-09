@@ -115,17 +115,35 @@ test('artifact check detects duplicate identities, wrong snake turns and inflate
   }
 });
 
-test('artifact verification can establish a dependency lock against the declared Git source', () => {
+test('artifact verification locks the declared evaluation source and rejects changed dependencies', () => {
   const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+  const { execFileSync } = require('node:child_process');
   const { lockEvaluation } = require('../scripts/scoring-benchmark/verify');
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'huddle-evaluation-lock-'));
   const file = path.join(directory, 'evaluation-source-lock.json');
+  const sourceRoot = path.join(directory, 'source');
+  const files = ['src/domain/league.js', 'src/domain/league-projections.js', 'src/domain/weekly-management.js',
+    'src/domain/weekly-context.js', 'src/domain/roster-value.js', 'config/leagues/yahoo-example.json'];
   try {
-    lockEvaluation(directory);
+    for (const name of files) {
+      const destination = path.join(sourceRoot, name);
+      fs.mkdirSync(path.dirname(destination), { recursive:true });
+      fs.writeFileSync(destination, execFileSync('git', ['show', `${baseline.commit}:${name}`], { cwd:path.resolve(__dirname, '..'), windowsHide:true }));
+    }
+    lockEvaluation(directory, { sourceRoot });
     const before = fs.readFileSync(file, 'utf8'), lock = JSON.parse(before);
     assert.equal(lock.commit, baseline.commit);
     assert.equal(Object.keys(lock.gitBlobs).length, 6);
-    lockEvaluation(directory);
+    lockEvaluation(directory, { sourceRoot });
     assert.equal(fs.readFileSync(file, 'utf8'), before);
-  } finally { if (fs.existsSync(file)) fs.unlinkSync(file); fs.rmdirSync(directory); }
+    fs.unlinkSync(file);
+    fs.appendFileSync(path.join(sourceRoot, files[1]), '\n// Changed evaluation dependency\n');
+    assert.throws(() => lockEvaluation(directory, { sourceRoot }), /Cannot establish unchanged evaluation dependency/);
+    assert.equal(fs.existsSync(file), false);
+  } finally {
+    if (fs.existsSync(file)) fs.unlinkSync(file);
+    for (const name of files) if (fs.existsSync(path.join(sourceRoot, name))) fs.unlinkSync(path.join(sourceRoot, name));
+    for (const name of ['src/domain','src','config/leagues','config','']) if (fs.existsSync(path.join(sourceRoot,name))) fs.rmdirSync(path.join(sourceRoot,name));
+    fs.rmdirSync(directory);
+  }
 });
