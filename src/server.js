@@ -14,6 +14,7 @@ const { SleeperClient } = require('./providers/sleeper');
 const { Tank01Client } = require('./providers/tank01');
 const { createYahooOAuthRuntime } = require('./providers/yahoo-oauth');
 const { DraftService } = require('./services/draft-service');
+const { exportLocalTransfer, importLocalCompletion } = require('./services/draft-continuity');
 const { DraftReadinessService } = require('./services/draft-readiness-service');
 const { FantasyProsRefreshController } = require('./services/fantasypros-refresh');
 const { LeagueOnboardingService } = require('./services/league-onboarding');
@@ -230,6 +231,20 @@ async function handleDraftRoutes(request, response, service, parts, { visionClie
     json(response, 200, service.exportDecisionAudit(sessionId));
     return true;
   }
+  if (parts[2] === 'local-transfer' && request.method === 'POST') {
+    const input = await readBody(request);
+    const existing = service.state.executionTransfers?.[input.transferId];
+    if (!existing) {
+      if (!draftReadiness?.assertReady) throw Object.assign(new Error('Hosted readiness is required before local preparation'), { code: 'DRAFT_PREFLIGHT_REQUIRED' });
+      draftReadiness.assertReady();
+    }
+    json(response, 201, exportLocalTransfer(service, sessionId, input, { readinessPassed: !existing }));
+    return true;
+  }
+  if (parts[2] === 'local-completion' && request.method === 'POST') {
+    json(response, 200, importLocalCompletion(service, sessionId, await readBody(request, 25_000_000)));
+    return true;
+  }
   if (parts[2] === 'mock-snapshot' && request.method === 'POST') {
     const result = service.importMockSnapshot(sessionId, await readBody(request));
     result.card.explanation = deterministicExplanation(result.card);
@@ -241,6 +256,7 @@ async function handleDraftRoutes(request, response, service, parts, { visionClie
     result.card.explanation = deterministicExplanation(result.card);
     result.context = { instance: runtime?.instanceName || 'Huddle', leagueName: service.league.name,
       simulation: runtime?.draftSimulation === true,
+      localDraft: runtime?.localDraft || null,
       teamName: service.league.targetTeam, leagueId: service.league.id, sourceMode: result.session.sourceMode,
       yahooLeagueKey: entry?.yahooLeagueKey || null, yahooTeamKey: entry?.yahooTeamKey || null,
       accountConnected: Boolean(yahooAccount?.status().connected), oauthEnabled: Boolean(runtime?.yahooOAuthEnabled),

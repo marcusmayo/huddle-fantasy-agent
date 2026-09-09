@@ -303,6 +303,9 @@ export function createHuddleDraftClient({ baseUrl, leagueId, sessionId, fetchImp
     return value;
   }
   return { workspace: options => request('/workspace', null, options), controller: (body, options) => request('/controller', body, options),
+    localTransfer: (body, options) => request('/local-transfer', body, options),
+    localCompletion: (body, options) => request('/local-completion', body, options),
+    audit: options => request('/decision-audit', null, options),
     healthReview: (body, options) => request('/health-reviews', body, options),
     decision: (body, options) => request('/decisions', body, options), reconcile: (body, options) => request('/browser-results', body, options) };
 }

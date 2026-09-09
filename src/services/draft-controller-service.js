@@ -3,6 +3,7 @@ const crypto=require('node:crypto');
 const {appendEvent}=require('../domain/decision-audit');
 const {pickOwner}=require('../domain/league');
 const {isFreshObservation}=require('../domain/observation-time');
+const {assertAuthority,authorityBlock}=require('./draft-continuity');
 const TTL=10000;
 const fail=(code,message)=>{throw Object.assign(new Error(message),{code});};
 const text=(value,max=120)=>String(value||'').trim().slice(0,max);
@@ -49,9 +50,10 @@ class DraftControllerService{
     const session=this.drafts.getSession(id),lease=this.leases.get(id),now=this.drafts.now().getTime();
     const heartbeatAgeMs=lease?Math.max(0,now-lease.heartbeatAt):null;
     const ended=session.status==='completed';
-    const active=Boolean(!ended&&lease&&heartbeatAgeMs<TTL&&!['uncertain','handoff','stopped'].includes(lease.stage));
+    const transferred=Boolean(authorityBlock(this.drafts));
+    const active=Boolean(!transferred&&!ended&&lease&&heartbeatAgeMs<TTL&&!['uncertain','handoff','stopped'].includes(lease.stage));
     return {active,instanceId:this.instanceId,controllerId:lease?.controllerId||null,runId:lease?.runId||null,stage:ended?'completed':lease?.stage||'inactive',
-      reason:ended?'Draft completed':active?'Fresh controller observation':lease?.stage==='uncertain'?'Submission uncertain · verify Yahoo before takeover':lease&&heartbeatAgeMs>=TTL?'Controller heartbeat expired · takeover required':'Draft controller not confirmed · takeover required',
+      reason:transferred?'Control transferred to local Huddle':ended?'Draft completed':active?'Fresh controller observation':lease?.stage==='uncertain'?'Submission uncertain · verify Yahoo before takeover':lease&&heartbeatAgeMs>=TTL?'Controller heartbeat expired · takeover required':'Draft controller not confirmed · takeover required',
       heartbeatAgeMs,expiresAfterMs:TTL,observation:lease?.observation||null,prepared:lease?.prepared||[],
       roles:lease?.roles||session.controllerCheckpoint?.roles||[],lastCheckpoint:session.controllerCheckpoint||null};
   }
@@ -60,6 +62,7 @@ class DraftControllerService{
     if(session.status!=='active')fail('DRAFT_SESSION_COMPLETED','Completed drafts cannot activate control');
     let lease=this.leases.get(id);
     const action=input.action;
+    if(action!=='stop')assertAuthority(this.drafts,id);
     if(action==='start'){
       if(this.status(id).active)fail('CONTROLLER_ALREADY_ACTIVE','Another controller already holds this draft');
       const events=this.drafts.state.draftAudit.events[id]||[];
@@ -67,6 +70,8 @@ class DraftControllerService{
         ||(a.type==='input-not-dispatched'&&a.planId===e.planId))))fail('CONTROLLER_PENDING_SUBMISSION','Reconcile the previous submission before another controller can act');
       if(input.handoffAccepted!==true)fail('CONTROLLER_HANDOFF_REQUIRED','An accepted execution handoff is required; readiness alone does not activate control');
       const roles=roleManifest(input.roles,session.sourceMode==='yahoo'?this.drafts.league.provenance?.yahooLeagueKey:null,{simulation:this.drafts.simulation}),observation=this.observation(id,input.observation);
+      const local=session.executionAuthority;
+      if(local?.mode==='local'&&roles.find(role=>role.role==='huddle')?.origin!==local.origin)fail('LOCAL_DRAFT_DISPLAY_REQUIRED','Use the prepared local Huddle display for this controller');
       const prepared=(input.prepared||[]).map(p=>({yahooPlayerId:text(p.yahooPlayerId,24),name:text(p.name),position:text(p.position,8)}));
       if(prepared.length<(session.picks.length===0?2:1)||new Set(prepared.map(p=>p.yahooPlayerId)).size!==prepared.length||prepared.some(p=>!/^\d+$/.test(p.yahooPlayerId)||!p.name||!['QB','RB','WR','TE','K','DEF'].includes(p.position)))fail('CONTROLLER_PREPARED_PICK_REQUIRED','Prepare an identified first choice and distinct fallback before countdown ends');
       const seen=input.availableObservation;
@@ -108,6 +113,7 @@ class DraftControllerService{
     return {...this.status(id),...(action==='start'?{token:lease.token}:{})};
   }
   assertLease(id,token,expected){
+    assertAuthority(this.drafts,id);
     const lease=this.leases.get(id);
     if(!lease||token!==lease.token||!this.status(id).active)fail('CONTROLLER_LEASE_REQUIRED','A fresh active controller lease is required for computer-use submission');
     if(expected&&(lease.controllerId!==expected.controllerId||lease.runId!==expected.controllerRunId))fail('CONTROLLER_RUN_MISMATCH','Create a new decision under this controller run; an old run cannot authorize submission');

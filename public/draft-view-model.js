@@ -30,7 +30,12 @@
     const sync = context.sync;
     const lastSync = Date.parse(sync?.lastSuccessAt);
     const feedAge = Number.isFinite(lastSync) ? Math.max(0,now-lastSync) : null;
-    const feedStale = !completed && session.sourceMode==='yahoo' && (!sync?.recurring || feedAge===null || feedAge>25000);
+    const seen=controller?.observation,seenAge=now-Date.parse(seen?.observedAt);
+    const localFeedFresh=controllerActive && seenAge>=-1000 && seenAge<=5000
+      && seen.completedPicks===session.picks.length && seen.overallPick===current && seen.draftSlot===session.draftSlot
+      && seen.leagueKey===context.yahooLeagueKey && seen.teamKey===context.yahooTeamKey
+      && seen.autodraft===false && seen.manualModeKnown===true && ['waiting','drafting'].includes(seen.phase);
+    const feedStale = !completed && session.sourceMode==='yahoo' && (context.localDraft ? !localFeedFresh : !sync?.recurring || feedAge===null || feedAge>25000);
     const stale = Boolean(error || age>6000 || feedStale);
     const observation = workspace.controller?.observation || plan?.yahooObservation;
     const observationAge = now-Date.parse(observation?.observedAt);

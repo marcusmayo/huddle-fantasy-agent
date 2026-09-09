@@ -5,6 +5,7 @@ const { playerSnapshot } = require('../domain/player-snapshot');
 const { POLICY: HEALTH_POLICY, mergedHealthFields, validateHealthObservations } = require('../domain/draft-health');
 const { yahooId } = require('./player-evidence');
 const { DraftControllerService } = require('./draft-controller-service');
+const { assertAuthority } = require('./draft-continuity');
 const { isFreshObservation } = require('../domain/observation-time');
 const { digest, rankingPlayer, choiceSnapshot, appendEvent, verifyEvents, validatePlan } = require('../domain/decision-audit');
 
@@ -61,13 +62,14 @@ function externalYahooPlayer(input) {
 }
 
 class DraftService {
-  constructor({ league, playerPool, store, evidenceRetentionDays = 30, now = () => new Date(), simulation = false }) {
+  constructor({ league, playerPool, store, evidenceRetentionDays = 30, now = () => new Date(), simulation = false, executionInstanceId = null }) {
     this.league = league;
     this.playerPool = playerPool;
     this.store = store;
     this.evidenceRetentionDays = Math.max(1, Math.min(30, Number(evidenceRetentionDays) || 30));
     this.now = now;
     this.simulation = simulation === true;
+    this.executionInstanceId = executionInstanceId;
     this.state = store.load();
     this.state.sessions ||= {};
     this.state.draftAudit ||= { schemaVersion: 1, recommendations: {}, pools: {}, events: {} };
@@ -668,6 +670,7 @@ class DraftService {
   recordDecision(id, input) {
     const session = this.state.sessions[id];
     if (!session) return this.getSession(id);
+    if (['plan', 'submit-started', 'display-confirmed'].includes(input.type)) assertAuthority(this, id);
     const events = this.state.draftAudit.events[id] ||= [];
     if (!this.decisionSummary(id).integrityVerified) throw Object.assign(new Error('Decision history integrity check failed'), { code: 'DECISION_AUDIT_CORRUPT' });
     const eventId = String(input.eventId || '').trim().slice(0, 120);
@@ -767,7 +770,9 @@ class DraftService {
     const summary = this.decisionSummary(id);
     const recommendations = this.state.draftAudit.recommendations[id] || [];
     return { schemaVersion: 1, session: this.getSession(id), ...summary, recommendations: structuredClone(recommendations),
-      pools: Object.fromEntries([...new Set(recommendations.map(item => item.poolRevision))].map(revision => [revision, structuredClone(this.state.draftAudit.pools[revision])])) };
+      pools: Object.fromEntries([...new Set(recommendations.map(item => item.poolRevision))].map(revision => [revision, structuredClone(this.state.draftAudit.pools[revision])])),
+      continuity: Object.values(this.state.executionTransfers || {}).filter(transfer => transfer.sessionId === id)
+        .map(transfer => ({ transferId: transfer.transferId, target: transfer.target, status: transfer.status, completion: structuredClone(transfer.completion || null) })) };
   }
 
   pruneAuditPools() {

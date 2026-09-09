@@ -60,3 +60,19 @@ test('confirmed pre-input cancellation stays visible and abandonment cannot hide
   w.decisions.events.splice(2,1,{type:'submit-uncertain',planId:'p'},{type:'abandoned',planId:'p'});
   assert.match(viewModel(w,{now,receivedAt:now}).decisionStatus,/uncertain/);
 });
+
+test('local drafts use a fresh matching browser controller observation rather than a hosted poller',()=>{
+  const w=room();w.context={localDraft:{instanceId:'local-instance'},yahooLeagueKey:'nfl.l.1',yahooTeamKey:'nfl.l.1.t.2'};
+  w.session.draftSlot=1;
+  w.controller={active:true,stage:'watching',heartbeatAgeMs:0,expiresAfterMs:10000,
+    observation:{observedAt:new Date(now).toISOString(),overallPick:1,completedPicks:0,draftSlot:1,phase:'waiting',
+      leagueKey:'nfl.l.1',teamKey:'nfl.l.1.t.2',autodraft:false,manualModeKnown:true}};
+  assert.equal(viewModel(w,{now,receivedAt:now}).stale,false);
+  assert.equal(viewModel(w,{now:now+5001,receivedAt:now+5001}).stale,true);
+  for(const patch of [{overallPick:2},{completedPicks:1},{teamKey:'nfl.l.1.t.3'},{leagueKey:'nfl.l.2'},{draftSlot:2},
+    {autodraft:true},{manualModeKnown:false},{observedAt:new Date(now+1001).toISOString()}]){
+    const changed=structuredClone(w);Object.assign(changed.controller.observation,patch);
+    assert.equal(viewModel(changed,{now,receivedAt:now}).stale,true);
+  }
+  w.controller.active=false;assert.equal(viewModel(w,{now,receivedAt:now}).stale,true);
+});

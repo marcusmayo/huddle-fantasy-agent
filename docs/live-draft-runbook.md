@@ -10,6 +10,8 @@ For browser-assisted operation: finish code, authentication and an empty-session
 
 If external recording is wanted, prepare it separately before the live clock. It may document both apps, including Huddle's recommendations and reconciliation, but its state never controls readiness or submission. Do no recording setup, coding, unrelated browsing or long planning during countdown or live turns.
 
+The [prepared local continuity workflow](local-draft-continuity.md) can move draft execution to a durable local Huddle workspace before countdown. It requires matching source, hosted readiness and a confirmed waiting room; it fences hosted control and keeps the original source dates. Prepare and rehearse this path in advance. The older hosted/manual instructions below do not describe its single-authority handoff or restart safeguards.
+
 For the dated Codespaces checklist, in-app readiness checks and optional CLI diagnostics, attended-draft procedure, and weekly handoff, use the [September 8, 2026 operations plan](september-8-operations.md).
 
 ## The day before
