@@ -3,10 +3,10 @@
   const query=new URLSearchParams(location.search),leagueId=query.get('leagueId'),sessionId=query.get('sessionId');
   const $=id=>document.getElementById(id), text=(id,value)=>{$(id).textContent=value||'';};
   const base=`/api/leagues/${encodeURIComponent(leagueId||'')}/draft/sessions/${encodeURIComponent(sessionId||'')}`;
-  let workspace=null,receivedAt=0,error=null,running=false,timer=null;
+  let workspace=null,receivedAt=0,requestedAt=0,error=null,running=false,timer=null;
   const meta=choice=>choice?`${choice.player.position} · ${choice.player.team||'team unknown'} · Bye ${choice.player.byeWeek||'unknown'}${choice.player.injuryStatus?' · '+choice.player.injuryStatus:''}`:'No alternative';
   function render(){
-    const m=HuddleDraftView.viewModel(workspace,{receivedAt,error});if(!m)return;
+    const m=HuddleDraftView.viewModel(workspace,{receivedAt,requestedAt,error});if(!m)return;
     document.body.dataset.complete=String(m.completed);document.body.dataset.stale=String(m.stale);
     document.body.dataset.recommendationId=m.card.recommendationId||'';
     document.body.dataset.decisionPlan=m.decision?.type==='plan'?m.decision.hash:m.decision?.planId||'';
@@ -15,8 +15,7 @@
     text('league',`${m.context.leagueName||leagueId} · ${m.context.teamName||'Team unverified'}`);
     text('identity-detail',`${m.context.instance} · ${location.host} · Seat ${m.session.draftSlot} · ${m.context.accountConnected?'Yahoo connected to this app':m.context.oauthEnabled?'Yahoo not connected to this app':'Yahoo disabled in this app'}`);
     text('feed',m.feed);$('feed').parentElement.dataset.stale=String(m.stale);text('clock',m.clock);
-    const control=workspace.controller;
-    text('controller',m.completed?'Execution finished':control?.active?`Controller active · ${control.stage}`:control?.reason||'Draft controller not confirmed · operator takeover required');
+    text('controller',m.controllerStatus);
     text('turn',m.completed?'DRAFT COMPLETE':`${m.stale?'LAST RECEIVED RECOMMENDATION':'HUDDLE RECOMMENDS'} · PICK ${m.current}`);
     text('revision',m.card.recommendationId?`Saved ${m.card.recommendationId.slice(0,8)}`:'Snapshot unverified');
     text('preferred',m.completed?'All results reconciled':m.card.preferred?.player.name||'Recommendation unavailable');text('score',m.card.preferred?`${m.card.preferred.score} score`:'');
@@ -33,13 +32,13 @@
     $('recent').replaceChildren(...m.recent.map(p=>{const li=document.createElement('li'),name=document.createElement('span'),owner=document.createElement('small');name.textContent=`${p.overallPick}. ${p.playerName}`;owner.textContent=p.isMine?'YOUR PICK':p.position||'';li.append(name,owner);return li;}));
     text('owned-count',`${m.owned.length} players`);$('roster').replaceChildren(...m.owned.map(p=>{const li=document.createElement('li');li.textContent=`${p.overallPick}. ${p.playerName}`;return li;}));
     text('audit-status',m.integrity?`${m.decisions.recommendationSnapshots} saved recommendations · integrity verified`:'Decision history integrity unverified');$('audit-status').dataset.integrity=String(m.integrity);
-    requestAnimationFrame(()=>{const fit=document.documentElement.scrollHeight<=innerHeight+2;text('layout-status',fit?'All panels in frame':'More height needed to record every panel');$('layout-status').dataset.fit=String(fit);});
+    requestAnimationFrame(()=>{const fit=document.documentElement.scrollHeight<=innerHeight+2;text('layout-status',fit?'All panels in frame':'More height needed to show every panel');$('layout-status').dataset.fit=String(fit);});
   }
   async function refresh(){
-    if(running)return;running=true;
+    if(running)return;running=true;const startedAt=Date.now();
     try{const next=await HuddleRequests.requestJSON(base+'/workspace',{timeoutMs:3500});
       if(next.session.id!==sessionId||next.session.leagueId!==leagueId)throw Error('Draft identity mismatch; open the intended session again.');
-      workspace=next;receivedAt=Date.now();error=null;
+      workspace=next;receivedAt=Date.now();requestedAt=startedAt;error=null;
     }catch(e){error=e.message;text('feed',error);}finally{running=false;render();timer=setTimeout(refresh,1000);}
   }
   $('back').href=`/?leagueId=${encodeURIComponent(leagueId||'')}`;$('audit').href=base+'/decision-audit';

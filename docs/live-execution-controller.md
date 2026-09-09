@@ -14,6 +14,16 @@ The controller reserves time for dispatch, result inspection and reconciliation.
 
 A window yields before starting a selection if the remaining invocation budget cannot cover the whole operation. This does not create an uncertain pending selection. Browser and server observation clocks allow up to one second of positive skew; observations more than five seconds old or more than one second ahead remain invalid. Deadline calculations subtract one additional second of clock uncertainty. The tolerance fixes a three-millisecond browser/Node discrepancy reproduced during remediation; it is not evidence of the cause of the original pick-84 failure.
 
+## Interruption and handoff
+
+`runWindow({signal})` now treats an aborted invocation as a terminal stop for that controller instance. `requestStop(reason)` prevents new operations immediately, while `stop(reason)` also attempts bounded evidence persistence and lease revocation. They cannot cancel a browser input already issued. An outstanding operation must settle before cleanup begins; `unsettled`, `stopEvidenceSaved` and `stopConfirmed` distinguish local intent from confirmed service outcomes. Cleanup can be retried without resuming drafting. A fresh controller and verified handoff are required afterward.
+
+Before `room.submit` is invoked, the original authenticated controller run may save `input-not-dispatched`. This allows a new reviewed plan after cancellation, even if dispatch intent had already been saved. The event has a stable ID for lost-response retries and remains authenticated after heartbeat expiry. A service restart loses that in-memory authority; a different run cannot invent the old run's cancellation. Once input was issued, the controller saves acknowledgment or uncertainty instead. Those events cannot be converted to no-input cancellation, and takeover requires the accepted Yahoo result to reconcile. Cancelled plans cannot receive credit for independent user or automatic picks.
+
+Overlapping windows and standalone steps are rejected before they can replace an active window's deadline. Browser-context termination is a terminal handoff condition, not a transient read retry. The draft view ages cached controller heartbeats locally, conservatively includes request latency and removes the active claim on request errors or expiry even while the next request hangs. A confirmed cancellation remains visible alongside the reviewed choice; an uncertain submission retains its warning.
+
+A read-only runtime probe on September 8 evening attempted a delayed DOM snapshot after its CUA tool invocation returned. It failed with `node_repl exec context not found`; it made no browser input. This establishes a limitation of the current runtime: retaining JavaScript state does not keep an executable browser context alive. Browser actions must be awaited inside an active supported tool invocation. The bounded controller is not an unattended background service. Uninterrupted invocation, attention handoff and real Yahoo timing acceptance remain open; no scheduler or unawaited promise is accepted as a workaround.
+
 `scripts/yahoo-live-cua-adapter.mjs` contains the browser adapter. It observes visible DOM, resets collapsed searches through the visible clear control, verifies exact numeric player identities, and activates the matching Draft button once with a fresh turn guard. Queue operations verify the before/after identity sets. If a different identity is added, the adapter removes only the newly added wrong identity, verifies restoration of the prior queue, and fails the attempted enqueue. Queue selectors are explicit and still require acceptance against the real Yahoo room. Local simulation is allowed only when the application is explicitly configured for it and the room origin is loopback. A protected Huddle iframe is treated as a distinct surface from its containing room tab.
 
 The Huddle API routes added for the workflow are scoped under `/api/leagues/:leagueId/draft/sessions/:sessionId`:
@@ -22,7 +32,7 @@ The Huddle API routes added for the workflow are scoped under `/api/leagues/:lea
 | --- | --- |
 | `GET /workspace` | Current recommendation revision, reconciled board, audit summary and controller health |
 | `GET/POST /controller` | Read health; activate, renew or stop a verified controller lease |
-| `POST /decisions` | Save plans, display confirmations, dispatch starts, input acknowledgments, uncertainty and abandonment |
+| `POST /decisions` | Save plans, display confirmations, dispatch starts, input acknowledgments, uncertainty, authenticated pre-input cancellation and abandonment |
 | `POST /browser-results` | Reconcile a freshly observed complete Yahoo Results prefix after identity and ownership checks |
 | `GET /decision-audit` | Export preserved ranking pools, recommendations and chained decision events |
 
@@ -32,7 +42,9 @@ The draft view at `/draft-view.html?leagueId=…&sessionId=…` displays all thr
 
 ## Verification and remaining acceptance
 
-Later evidence-refresh repairs and current **242-test** validation are documented in [player evidence recovery](player-evidence-recovery.md). The browser results below remain the earlier, separately scoped CUA acceptance; the newer unit/integration tests do not replace live Yahoo or production timing acceptance.
+The latest interruption/cancellation batch passed **255/255 application tests**, with zero failures, cancellations or skips, in **54.992 seconds**. Log: `.media-build/controller-interruption-full-suite.log`; fleet-core integrity also passed. Three added regressions failed before the fixes (aborted preparation, overlapping windows and ended browser context). Further checks cover cancellation at planning and dispatch boundaries, authenticated ownership, expiry/restart, failed saves and lost responses, late input settlement, independent-pick attribution and cached status expiry. The original 20-selection/120-result application replay still passes without any recorder role. No new real Yahoo inputs or continuous recording were made in this batch.
+
+The preceding **242-test** evidence-refresh batch is documented in [player evidence recovery](player-evidence-recovery.md). The browser results below remain the earlier, separately scoped CUA acceptance; newer unit/integration tests do not replace live Yahoo or production timing acceptance.
 
 The full local suite passed **234 tests**, zero failures or skips, in 53.9 seconds. Log: `.media-build/postmortem-browser-final-suite.log`. Application-level tests exercise the actual service, leases, audit and browser-results reconciliation using synthetic values and an injected clock. All twenty dispatches follow durable plans; all twenty inputs and accepted identities match; the full audit verifies after restart. Fault cases cover transient browser and Huddle failures, restart and lease expiry, wrong room/turn, insufficient clock reserve, audibles, conflicting accepted results, missing and late input responses, skewed observation clocks, clipped or mismatched displays and short invocation windows. Real wall-clock hangs verify that a timed-out operation cannot overlap a new browser action.
 

@@ -644,11 +644,19 @@ class DraftService {
     } else {
       const plan = events.find(item => item.hash === input.planId && item.type === 'plan');
       if (!plan) throw Object.assign(new Error('A saved decision plan is required'), { code: 'DECISION_PLAN_REQUIRED' });
-      if (!['submit-started', 'submit-uncertain', 'input-acknowledged', 'display-confirmed', 'abandoned'].includes(input.type)) throw Object.assign(new Error('Unsupported decision event type'), { code: 'INVALID_DECISION_EVENT' });
+      if (!['submit-started', 'submit-uncertain', 'input-acknowledged', 'input-not-dispatched', 'display-confirmed', 'abandoned'].includes(input.type)) throw Object.assign(new Error('Unsupported decision event type'), { code: 'INVALID_DECISION_EVENT' });
       const reportingInput = ['submit-uncertain', 'input-acknowledged'].includes(input.type);
       if (!reportingInput && events.some(item => item.type === 'accepted' && item.overallPick === plan.overallPick)) throw Object.assign(new Error('This pick already has an accepted result'), { code: 'DECISION_ALREADY_ACCEPTED' });
       if (reportingInput && !events.some(item => item.type === 'submit-started' && item.planId === plan.hash)) throw Object.assign(new Error('Input acknowledgment requires a previously recorded dispatch'), { code: 'DECISION_DISPATCH_REQUIRED' });
-      if (input.type === 'submit-started' && events.some(item => item.type === 'submit-started' && item.overallPick === plan.overallPick)) throw Object.assign(new Error('A submission was already started; inspect Yahoo before any retry'), { code: 'DECISION_SUBMISSION_ALREADY_STARTED' });
+      const cancelled = hash => events.some(item => item.type === 'input-not-dispatched' && item.planId === hash);
+      if (reportingInput && cancelled(plan.hash)) throw Object.assign(new Error('This plan was cancelled before browser input'), { code: 'DECISION_INPUT_CANCELLED' });
+      if (input.type === 'submit-started' && events.some(item => item.type === 'submit-started' && item.overallPick === plan.overallPick && !cancelled(item.planId))) throw Object.assign(new Error('A submission was already started; inspect Yahoo before any retry'), { code: 'DECISION_SUBMISSION_ALREADY_STARTED' });
+      if (input.type === 'input-not-dispatched') {
+        this.controllers.assertOwner(id, input.controllerToken, plan.executor);
+        if (events.some(item => item.planId === plan.hash && ['submit-uncertain', 'input-acknowledged'].includes(item.type))) {
+          throw Object.assign(new Error('An issued or uncertain input cannot be cancelled as never dispatched'), { code: 'DECISION_INPUT_ALREADY_DISPATCHED' });
+        }
+      }
       let dispatchObservation;
       let viewObservation;
       if (input.type === 'display-confirmed') {
@@ -660,7 +668,7 @@ class DraftService {
           selected: view.selected, preferred: view.preferred, allPanelsInFrame: true, stale: false, width: Number(view.width), height: Number(view.height), source: 'reported-rendered-dom' };
       }
       if (input.type === 'submit-started') {
-        if (events.some(item => item.type === 'abandoned' && item.planId === plan.hash)) throw Object.assign(new Error('An abandoned plan cannot authorize a submission'), { code: 'DECISION_PLAN_ABANDONED' });
+        if (events.some(item => ['abandoned', 'input-not-dispatched'].includes(item.type) && item.planId === plan.hash)) throw Object.assign(new Error('An abandoned plan cannot authorize a submission'), { code: 'DECISION_PLAN_ABANDONED' });
         if (events.findLast(item => item.type === 'plan' && item.overallPick === plan.overallPick)?.hash !== plan.hash) throw Object.assign(new Error('Use the latest reviewed decision plan'), { code: 'DECISION_PLAN_SUPERSEDED' });
         if (plan.executor?.mode === 'computer-use') {
           this.controllers.assertLease(id, input.controllerToken, plan.executor);
@@ -685,9 +693,10 @@ class DraftService {
     if (!pick.isMine) return;
     const events = this.state.draftAudit.events[id] ||= [];
     if (events.some(item => item.type === 'accepted' && item.overallPick === pick.overallPick)) return;
-    const submitted = events.find(item => item.type === 'submit-started' && item.overallPick === pick.overallPick);
+    const cancelled = hash => events.some(item => item.type === 'input-not-dispatched' && item.planId === hash);
+    const submitted = events.findLast(item => item.type === 'submit-started' && item.overallPick === pick.overallPick && !cancelled(item.planId));
     const plan = submitted ? events.find(item => item.type === 'plan' && item.hash === submitted.planId)
-      : [...events].reverse().find(item => item.type === 'plan' && item.overallPick === pick.overallPick && !events.some(e => e.type === 'abandoned' && e.planId === item.hash));
+      : [...events].reverse().find(item => item.type === 'plan' && item.overallPick === pick.overallPick && !events.some(e => ['abandoned', 'input-not-dispatched'].includes(e.type) && e.planId === item.hash));
     const actualYahooId = String(pick.yahooPlayerKey || '').split('.p.').at(-1) || null;
     const matched = Boolean(plan && (plan.yahooPlayerId ? plan.yahooPlayerId === actualYahooId : plan.playerId === pick.playerId));
     appendEvent(events, { type: 'accepted', eventId: `accepted:${pick.eventId}`, overallPick: pick.overallPick,

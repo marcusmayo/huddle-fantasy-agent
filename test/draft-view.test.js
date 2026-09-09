@@ -32,3 +32,31 @@ test('completed screen keeps all twenty owned picks and final acceptance without
   assert.equal(m.current,null);assert.equal(m.owned.length,20);assert.equal(m.recent[0].overallPick,120);
   assert.equal(m.clock,'Draft finished');assert.match(m.feed,/120\/120/);assert.equal(m.decision.playerName,'Final Player');
 });
+
+test('cached active control expires at the server heartbeat deadline even without another response',()=>{
+  const w=room();w.controller={active:true,stage:'watching',heartbeatAgeMs:4000,expiresAfterMs:10000};
+  assert.equal(viewModel(w,{now:now+5999,receivedAt:now}).controllerActive,true);
+  const expired=viewModel(w,{now:now+6000,receivedAt:now});
+  assert.equal(expired.controllerActive,false);assert.match(expired.controllerStatus,/heartbeat expired/);
+  assert.equal(viewModel(w,{now:now+6000,receivedAt:now+3000,requestedAt:now}).controllerActive,false,
+    'A delayed response must not extend the heartbeat deadline');
+  assert.equal(viewModel(w,{now,receivedAt:now,error:'Read timed out'}).controllerActive,false);
+  assert.match(viewModel(w,{now,receivedAt:now,error:'Read timed out'}).controllerStatus,/unverified/);
+  w.controller.heartbeatAgeMs=0;
+  assert.equal(viewModel(w,{now:now+7000,receivedAt:now+7000}).controllerActive,true);
+  for(const invalid of [undefined,null,-1,NaN,'0']){
+    w.controller.heartbeatAgeMs=invalid;
+    assert.equal(viewModel(w,{now,receivedAt:now}).controllerActive,false);
+  }
+  w.controller.heartbeatAgeMs=0;w.session.status='completed';
+  assert.equal(viewModel(w,{now,receivedAt:now}).controllerActive,false);
+});
+
+test('confirmed pre-input cancellation stays visible and abandonment cannot hide uncertain input',()=>{
+  const w=room();w.decisions.events=[{type:'plan',hash:'p',overallPick:1,playerName:'Choice'},
+    {type:'submit-started',planId:'p'},{type:'input-not-dispatched',planId:'p'}];
+  assert.match(viewModel(w,{now,receivedAt:now}).decisionStatus,/Cancelled before input/);
+  assert.equal(viewModel(w,{now,receivedAt:now}).decision.playerName,'Choice');
+  w.decisions.events.splice(2,1,{type:'submit-uncertain',planId:'p'},{type:'abandoned',planId:'p'});
+  assert.match(viewModel(w,{now,receivedAt:now}).decisionStatus,/uncertain/);
+});

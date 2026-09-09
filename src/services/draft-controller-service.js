@@ -63,7 +63,8 @@ class DraftControllerService{
     if(action==='start'){
       if(this.status(id).active)fail('CONTROLLER_ALREADY_ACTIVE','Another controller already holds this draft');
       const events=this.drafts.state.draftAudit.events[id]||[];
-      if(events.some(e=>e.type==='submit-started'&&!events.some(a=>a.type==='accepted'&&a.overallPick===e.overallPick)))fail('CONTROLLER_PENDING_SUBMISSION','Reconcile the previous submission before another controller can act');
+      if(events.some(e=>e.type==='submit-started'&&!events.some(a=>(a.type==='accepted'&&a.overallPick===e.overallPick)
+        ||(a.type==='input-not-dispatched'&&a.planId===e.planId))))fail('CONTROLLER_PENDING_SUBMISSION','Reconcile the previous submission before another controller can act');
       if(input.handoffAccepted!==true)fail('CONTROLLER_HANDOFF_REQUIRED','An accepted execution handoff is required; readiness alone does not activate control');
       const roles=roleManifest(input.roles,session.sourceMode==='yahoo'?this.drafts.league.provenance?.yahooLeagueKey:null,{simulation:this.drafts.simulation}),observation=this.observation(id,input.observation);
       const prepared=(input.prepared||[]).map(p=>({yahooPlayerId:text(p.yahooPlayerId,24),name:text(p.name),position:text(p.position,8)}));
@@ -110,6 +111,14 @@ class DraftControllerService{
     const lease=this.leases.get(id);
     if(!lease||token!==lease.token||!this.status(id).active)fail('CONTROLLER_LEASE_REQUIRED','A fresh active controller lease is required for computer-use submission');
     if(expected&&(lease.controllerId!==expected.controllerId||lease.runId!==expected.controllerRunId))fail('CONTROLLER_RUN_MISMATCH','Create a new decision under this controller run; an old run cannot authorize submission');
+    return lease.controllerId;
+  }
+  assertOwner(id,token,expected){
+    const lease=this.leases.get(id);
+    // Expiry prevents new input but not an authenticated cancellation receipt.
+    if(!lease||token!==lease.token||lease.controllerId!==expected?.controllerId||lease.runId!==expected?.controllerRunId) {
+      fail('CONTROLLER_RUN_MISMATCH','Only the original controller run can attest that it issued no browser input');
+    }
     return lease.controllerId;
   }
 }

@@ -217,3 +217,195 @@ test('a bounded window yields before a new selection when it cannot retain its v
   assert.equal(f.actions.length,0);assert.equal(f.controller.status().pending,null);
   assert.equal((await f.controller.step()).matched,true);
 });
+
+test('abort during preparation prevents any later Yahoo input and revokes active control', async () => {
+  const f = fixture(); await f.controller.step(); f.begin();
+  const abort = new AbortController(), prepare = f.room.prepare;
+  f.room.prepare = async (...args) => { const prepared = await prepare(...args); abort.abort(); return prepared; };
+  await f.controller.runWindow({ durationMs: 40000, signal: abort.signal });
+  assert.equal(f.actions.length, 0);
+  assert.equal(f.drafts.controllers.status(f.session.id).active, false);
+});
+
+test('a rejected overlapping window cannot replace the first window deadline', async () => {
+  const f = fixture(); await f.controller.step(); f.begin();
+  let release, entered; const waiting = new Promise(resolve => { entered = resolve; });
+  const read = f.room.observe; let blocked = true;
+  f.room.observe = async () => {
+    if (blocked) { blocked = false; await new Promise(resolve => { release = resolve; entered(); }); }
+    return read();
+  };
+  const first = f.controller.runWindow({ durationMs: 3000 });
+  await waiting;
+  await assert.rejects(f.controller.runWindow({ durationMs: 40000 }), { code: 'CONTROLLER_BUSY' });
+  release(); await first;
+  assert.equal(f.actions.length, 0, 'The original short window must still yield before drafting');
+  assert.equal((await f.controller.step()).matched, true);
+});
+
+test('an ended browser execution context stops control rather than retrying in a later turn', async () => {
+  const f = fixture(); await f.controller.step(); f.begin(); const read = f.room.observe;
+  f.room.observe = async () => { throw Error('node_repl exec context not found'); };
+  const result = await f.controller.step();
+  assert.equal(result.fault, 'BROWSER_CONTEXT_ENDED');
+  assert.equal(f.drafts.controllers.status(f.session.id).active, false);
+  f.room.observe = read; await f.controller.step(); assert.equal(f.actions.length, 0);
+});
+
+function takeover(f) {
+  return createLiveDraftController({ room: f.room, huddle: f.huddle, display: f.display, identity: f.identity,
+    roles: f.roles, handoffAccepted: true, now: () => Date.parse(f.observation().observedAt), sleep: async ms => f.bump(ms) });
+}
+
+test('pre-input cancellation is durable, authenticated, idempotent and permits a fresh reviewed handoff', async () => {
+  for (const boundary of ['plan', 'submit-started']) {
+    const f = fixture(); await f.controller.step(); f.begin();
+    const decision = f.huddle.decision;
+    f.huddle.decision = async body => {
+      const saved = await decision(body);
+      if (body.type === boundary) {
+        const plan = f.drafts.decisionSummary(f.session.id).latestPlan;
+        assert.throws(() => f.drafts.recordDecision(f.session.id, { type: 'input-not-dispatched', eventId: 'wrong-owner',
+          planId: plan.hash, controllerToken: 'another-controller' }), { code: 'CONTROLLER_RUN_MISMATCH' });
+        f.controller.requestStop('Operator took control before browser input');
+      }
+      return saved;
+    };
+    await f.controller.step();
+    const status = f.controller.status(), events = f.drafts.decisionSummary(f.session.id).events;
+    assert.equal(status.stopConfirmed, true, boundary); assert.equal(status.stopEvidenceSaved, true, boundary);
+    assert.equal(status.pending, null); assert.equal(f.actions.length, 0);
+    const cancelled = events.filter(e => e.type === 'input-not-dispatched');
+    assert.equal(cancelled.length, 1); assert.equal(events.some(e => e.type === 'submit-uncertain'), false);
+    assert.throws(() => f.drafts.recordDecision(f.session.id, { type: 'submit-started', eventId: 'cancelled-retry',
+      planId: cancelled[0].planId }), { code: 'DECISION_PLAN_ABANDONED' });
+    if (boundary === 'submit-started') assert.throws(() => f.drafts.recordDecision(f.session.id, {
+      type: 'input-acknowledged', eventId: 'late-input', planId: cancelled[0].planId }), { code: 'DECISION_INPUT_CANCELLED' });
+    await f.controller.stop(); await f.controller.step();
+    assert.equal(f.drafts.decisionSummary(f.session.id).events.filter(e => e.type === 'input-not-dispatched').length, 1);
+    assert.equal(f.actions.length, 0, 'The stopped controller cannot resume');
+    f.huddle.decision = decision;
+    const fresh = takeover(f); assert.equal((await fresh.step()).matched, true);
+    assert.equal(f.actions.length, 1); assert.notEqual(fresh.status().activeRunId, status.activeRunId);
+    assert.equal(new DraftService(f.args).exportDecisionAudit(f.session.id).integrityVerified, true);
+  }
+});
+
+test('stopping after issued input preserves acknowledgment or uncertainty and requires reconciliation before takeover', async () => {
+  for (const acknowledged of [true, false]) {
+    const f = fixture(); await f.controller.step(); f.begin();
+    const submit = f.room.submit;
+    f.room.submit = async input => {
+      await submit(input); f.controller.requestStop('Operator stopped after browser input');
+      if (!acknowledged) throw Error('Input response was lost');
+    };
+    await f.controller.step();
+    const events = f.drafts.decisionSummary(f.session.id).events, lease = f.drafts.controllers.leases.get(f.session.id);
+    const plan = events.findLast(e => e.type === 'plan');
+    assert.equal(f.actions.length, 1); assert.equal(f.controller.status().stopConfirmed, true);
+    assert.equal(events.some(e => e.type === 'input-not-dispatched'), false);
+    assert.equal(events.some(e => e.type === (acknowledged ? 'input-acknowledged' : 'submit-uncertain')), true);
+    assert.throws(() => f.drafts.controllers.update(f.session.id, { action: 'start' }), { code: 'CONTROLLER_PENDING_SUBMISSION' });
+    assert.throws(() => f.drafts.recordDecision(f.session.id, { type: 'input-not-dispatched', eventId: 'false-cancel',
+      planId: plan.hash, controllerToken: lease.token }), { code: 'DECISION_INPUT_ALREADY_DISPATCHED' });
+    await f.controller.stop(); assert.equal(f.actions.length, 1);
+    await f.huddle.reconcile(await f.room.results());
+    const accepted = f.drafts.decisionSummary(f.session.id).lastAccepted;
+    assert.equal(accepted.inputAcknowledged, acknowledged);
+    assert.throws(() => f.drafts.recordDecision(f.session.id, { type: 'input-not-dispatched', eventId: 'cancel-accepted',
+      planId: plan.hash, controllerToken: lease.token }), { code: 'DECISION_ALREADY_ACCEPTED' });
+    f.room.submit = submit;
+    assert.equal((await takeover(f).step()).matched, true); assert.equal(f.actions.length, 2);
+  }
+});
+
+test('stopping an unsettled input waits for settlement and never relabels a late response as no input', async () => {
+  const f = fixture(); await f.controller.step(); f.begin();
+  const submit = f.room.submit; let release;
+  f.room.submit = async input => { await new Promise(resolve => { release = resolve; }); return submit(input); };
+  assert.equal((await f.controller.step()).pending, true);
+  const stopping = await f.controller.stop('Interrupted while input outcome was pending');
+  assert.equal(stopping.unsettled, true); assert.equal(stopping.stopConfirmed, false);
+  assert.equal(f.drafts.decisionSummary(f.session.id).events.some(e => e.type === 'input-not-dispatched'), false);
+  release(); await new Promise(resolve => setImmediate(resolve));
+  const stopped = await f.controller.stop();
+  assert.equal(stopped.stopConfirmed, true); assert.equal(stopped.pending.inputAcknowledged, false);
+  assert.equal(f.actions.length, 1);
+  assert.equal(f.drafts.decisionSummary(f.session.id).events.some(e => e.type === 'submit-uncertain'), true);
+  await f.controller.step(); assert.equal(f.actions.length, 1);
+});
+
+test('pre-aborted execution performs no browser operations', async () => {
+  const f = fixture(), abort = new AbortController(); abort.abort();
+  let reads = 0; f.room.observe = async () => { reads++; throw Error('Unexpected read'); };
+  const result = await f.controller.runWindow({ signal: abort.signal });
+  assert.equal(reads, 0); assert.equal(result.stage, 'stopped'); assert.equal(result.stopConfirmed, true);
+  assert.equal(result.continuationRequired, false);
+  for (const durationMs of [NaN,Infinity,'40000',99,45001]) {
+    await assert.rejects(f.controller.runWindow({ durationMs }), { code: 'WINDOW_LIMIT' });
+  }
+});
+
+test('failed cancellation persistence cannot silently release a pending submission; cleanup can be retried', async () => {
+  const f = fixture(); await f.controller.step(); f.begin();
+  const decision = f.huddle.decision;
+  f.huddle.decision = async body => {
+    if (body.type === 'input-not-dispatched') throw Error('Evidence service unavailable');
+    const saved = await decision(body);
+    if (body.type === 'submit-started') f.controller.requestStop('Stop before input');
+    return saved;
+  };
+  await f.controller.step();
+  assert.equal(f.controller.status().stopEvidenceSaved, false); assert.equal(f.actions.length, 0);
+  assert.equal(f.controller.status().stopConfirmed, true);
+  assert.throws(() => f.drafts.controllers.update(f.session.id, { action: 'start' }), { code: 'CONTROLLER_PENDING_SUBMISSION' });
+  f.huddle.decision = decision;
+  assert.equal((await f.controller.stop()).stopEvidenceSaved, true);
+  assert.equal((await takeover(f).step()).matched, true);
+});
+
+test('a cancelled plan cannot receive credit for an independently accepted player', async () => {
+  const f = fixture(); await f.controller.step(); f.begin();
+  const confirm = f.display.confirm;
+  f.display.confirm = async expected => { f.controller.requestStop('User taking this pick'); return confirm(expected); };
+  await f.controller.step();
+  const plan = f.drafts.decisionSummary(f.session.id).latestPlan;
+  f.accept(f.players.find(p => p.id === plan.playerId), true); f.opponents();
+  await f.huddle.reconcile(await f.room.results());
+  const accepted = f.drafts.decisionSummary(f.session.id).lastAccepted;
+  assert.equal(accepted.classification, 'unattributed'); assert.equal(accepted.planId, null);
+  assert.equal(accepted.inputAcknowledged, false); assert.equal(f.actions.length, 0);
+});
+
+test('expiry permits a no-input receipt from its original run but never permits old-run submission', async () => {
+  const f = fixture(); await f.controller.step(); f.begin();
+  const confirm = f.display.confirm;
+  f.display.confirm = async expected => {
+    const result = await confirm(expected); f.bump(11000); f.controller.requestStop('Operator interrupted during display'); return result;
+  };
+  await f.controller.step();
+  assert.equal(f.controller.status().stopEvidenceSaved, true); assert.equal(f.actions.length, 0);
+  const lease = f.drafts.controllers.leases.get(f.session.id);
+  assert.throws(() => f.drafts.controllers.assertLease(f.session.id, lease.token), { code: 'CONTROLLER_LEASE_REQUIRED' });
+  const plan = f.drafts.decisionSummary(f.session.id).latestPlan;
+  f.restart();
+  assert.throws(() => f.drafts.recordDecision(f.session.id, { type: 'input-not-dispatched', eventId: 'old-instance-cancel',
+    planId: plan.hash, controllerToken: lease.token }), { code: 'CONTROLLER_RUN_MISMATCH' });
+  f.display.confirm = confirm;
+  assert.equal((await takeover(f).step()).matched, true);
+});
+
+test('a lost cancellation response retries the same durable event without duplicate evidence', async () => {
+  const f = fixture(); await f.controller.step(); f.begin();
+  const decision = f.huddle.decision; let loseResponse = true;
+  f.huddle.decision = async body => {
+    const saved = await decision(body);
+    if (body.type === 'submit-started') f.controller.requestStop('Stop before browser input');
+    if (body.type === 'input-not-dispatched' && loseResponse) { loseResponse = false; throw Error('Saved response lost'); }
+    return saved;
+  };
+  await f.controller.step(); assert.equal(f.controller.status().stopEvidenceSaved, false);
+  await f.controller.stop(); assert.equal(f.controller.status().stopEvidenceSaved, true);
+  assert.equal(f.drafts.decisionSummary(f.session.id).events.filter(e => e.type === 'input-not-dispatched').length, 1);
+  assert.equal(f.actions.length, 0);
+});

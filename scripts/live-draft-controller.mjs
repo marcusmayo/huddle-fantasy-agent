@@ -19,7 +19,8 @@ export function createLiveDraftController({ room, huddle, display, identity, rol
     || !Number.isInteger(identity.draftSlot) || identity.draftSlot < 1 || identity.draftSlot > identity.teamCount
     || !Number.isInteger(identity.totalPicks) || identity.totalPicks % identity.teamCount) throw error('IDENTITY_REQUIRED', 'Verify league, team, seat and complete draft size');
   const state = { stage: 'prepared', completed: false, pending: null, lease: null, prepared: [], receipts: [], timings: {}, events: [],
-    busy: false, inflight: null, fatal: null, windowDeadline: Infinity, controllerId: uuid() };
+    busy: false, inflight: null, fatal: null, windowDeadline: Infinity, windowOwner: null, controllerId: uuid(),
+    plan: null, haltReason: null, stopConfirmed: false, stopEvidenceSaved: false, stopEventId: null, stopping: false };
   const emit = (type, details = {}) => {
     const event = { type, at: new Date(now()).toISOString(), ...details };
     state.events.push(event); onEvent(event); return event;
@@ -37,15 +38,26 @@ export function createLiveDraftController({ room, huddle, display, identity, rol
     if (o.phase === 'drafting' && (o.onClock !== (owner(o.overallPick, identity.teamCount) === identity.draftSlot) || !(remaining(o) > 0))) throw error('TURN_UNVERIFIED', 'The observed turn or clock does not match the draft');
     return o;
   }
-  async function call(name, fn, cap = 4500) {
+  function requestStop(reason = 'Execution stopped by the operator') {
+    if (!state.haltReason) {
+      state.haltReason = String(reason).slice(0, 500); state.stage = 'stopping';
+      emit('stop-requested', { reason: state.haltReason, inputDispatched: Boolean(state.pending?.inputDispatched) });
+    }
+    return status();
+  }
+  async function call(name, fn, cap = 4500, cleanup = false) {
+    if (state.haltReason && !cleanup) throw error('CONTROLLER_STOPPED', state.haltReason);
     if (state.inflight) throw error('OPERATION_UNSETTLED', 'A previous browser or service operation has not settled');
-    const budget = Math.min(cap, state.windowDeadline - now() - 100);
+    const budget = cleanup ? cap : Math.min(cap, state.windowDeadline - now() - 100);
     if (budget < 100) throw error('WINDOW_BOUNDARY', 'Continue the same controller in the next bounded window');
     const started = now(), abort = new AbortController();
     const operation = { name, started };
     state.inflight = operation;
     let timer;
-    const work = Promise.resolve().then(() => fn({ timeoutMs: budget, signal: abort.signal })).finally(() => {
+    const work = Promise.resolve().then(() => {
+      if (state.haltReason && !cleanup) throw error('CONTROLLER_STOPPED', state.haltReason);
+      return fn({ timeoutMs: budget, signal: abort.signal });
+    }).finally(() => {
       if (state.inflight === operation) state.inflight = null;
       (state.timings[name] ||= []).push(now() - started);
     });
@@ -53,8 +65,44 @@ export function createLiveDraftController({ room, huddle, display, identity, rol
       return await Promise.race([work, new Promise((_, reject) => {
         timer = setTimeout(() => { abort.abort(); reject(error('OPERATION_TIMEOUT', `${name} exceeded its deadline`)); }, budget);
       })]);
+    } catch (e) {
+      if (['observe', 'prepare', 'display', 'submit', 'results'].includes(name)
+        && /node_repl exec context not found|turn ended|user stopped computer use/i.test(e.message || '')) {
+        throw error('BROWSER_CONTEXT_ENDED', 'Browser execution context ended; a fresh verified handoff is required');
+      }
+      throw e;
     } finally { clearTimeout(timer); }
   }
+  async function settleStop() {
+    if (!state.haltReason || state.busy || state.inflight || state.stopping) return;
+    state.stopping = true;
+    try {
+      if (state.plan && !state.stopEvidenceSaved) {
+        state.stopEventId ||= uuid();
+        const dispatched = state.pending?.inputDispatched === true;
+        try {
+          await call('decision', options => huddle.decision({ type: dispatched
+            ? state.pending.inputAcknowledged ? 'input-acknowledged' : 'submit-uncertain' : 'input-not-dispatched',
+            eventId: state.stopEventId, planId: state.plan.hash, controllerToken: state.lease?.token,
+            details: dispatched ? 'Stopped after issuing browser input; verify the accepted Yahoo result before any takeover.'
+              : `Controller stopped before invoking browser input: ${state.haltReason}` }, options), 1500, true);
+          state.stopEvidenceSaved = true;
+          if (!dispatched) state.pending = null;
+        } catch (e) { emit('stop-evidence-unconfirmed', { code: e.code || 'SAVE_FAILED' }); }
+      }
+      if (!state.stopConfirmed && !state.inflight) {
+        try {
+          if (state.lease) await call('controller', options => huddle.controller({ action: 'stop', token: state.lease.token }, options), 1500, true);
+          state.stopConfirmed = true;
+        } catch (e) {
+          if (e.code === 'DRAFT_SESSION_COMPLETED') state.stopConfirmed = true;
+          else emit('stop-unconfirmed', { code: e.code || 'STOP_FAILED' });
+        }
+      }
+      state.stage = state.inflight ? 'stopping' : 'stopped';
+    } finally { state.stopping = false; }
+  }
+  async function stop(reason) { requestStop(reason); await settleStop(); return status(); }
   async function readRoom() { return observeValid(await call('observe', options => room.observe(options)), { completed: true }); }
   async function workspace() {
     const w = await call('workspace', options => huddle.workspace(options));
@@ -102,7 +150,7 @@ export function createLiveDraftController({ room, huddle, display, identity, rol
       matched, inputAcknowledged: p.inputAcknowledged, classification: matched ? p.classification : 'unattributed',
       verification: !matched ? 'different-player-accepted' : p.inputAcknowledged ? 'input-acknowledged-and-result-matched' : 'result-matched-input-uncertain',
       acceptedAt: new Date(now()).toISOString(), elapsedMs: now() - p.startedAt };
-    state.receipts.push(receipt); state.pending = null; emit('receipt', receipt);
+    state.receipts.push(receipt); state.pending = null; state.plan = null; emit('receipt', receipt);
     // A different accepted player ends automatic control so a changed roster
     // receives explicit review. A matching uncertain receipt is never a retry.
     if (!matched) state.fatal = error('ACCEPTANCE_MISMATCH', 'Yahoo accepted a different player; review the receipt before takeover');
@@ -146,6 +194,7 @@ export function createLiveDraftController({ room, huddle, display, identity, rol
       classification: decision.classification, reason: decision.reason, recommendationId: w.card.recommendationId,
       playerId: decision.player.id, playerName: decision.player.name, yahooPlayerId: selectedId, yahooObservation,
       controllerToken: state.lease.token, executor: { ...executor, mode: 'computer-use', controllerId: state.lease.controllerId, controllerRunId: state.lease.runId } }, options));
+    state.plan = plan.event; state.stopEventId = null; state.stopEvidenceSaved = false;
     const viewObservation = await call('display', options => display.confirm({ planId: plan.event.hash, recommendationId: w.card.recommendationId,
       overallPick: o.overallPick, preferred: w.card.preferred?.player.name, selected: decision.player.name }, options));
     await call('decision', options => huddle.decision({ type: 'display-confirmed', eventId: uuid(), planId: plan.event.hash, viewObservation }, options));
@@ -153,9 +202,9 @@ export function createLiveDraftController({ room, huddle, display, identity, rol
     if (!fresh.onClock || fresh.overallPick !== o.overallPick || remaining(fresh) < reserve() + estimate('decision')) throw error('TURN_OR_RESERVE_CHANGED', 'Recheck the turn and reserve before dispatch');
     const startedAt = now();
     state.pending = { overallPick: o.overallPick, yahooPlayerId: selectedId, classification: decision.classification,
-      startedAt, deadline: now() + remaining(fresh), inputAcknowledged: false, planId: plan.event.hash };
-    // From this point a lost response is treated as uncertain. No code path
-    // issues a second Draft input until the accepted result is reconciled.
+      startedAt, deadline: now() + remaining(fresh), inputDispatched: false, inputAcknowledged: false, planId: plan.event.hash };
+    // Persist intent before input. Only this run can attest to a cancellation
+    // before room.submit is invoked; once invoked, uncertainty requires a result.
     try {
       await call('decision', options => huddle.decision({ type: 'submit-started', eventId: uuid(), planId: plan.event.hash,
         controllerToken: state.lease.token, yahooObservation: { ...fresh, yahooPlayerId: selectedId } }, options));
@@ -168,10 +217,16 @@ export function createLiveDraftController({ room, huddle, display, identity, rol
     }
     state.stage = 'submitting'; emit('submit-started', { overallPick: o.overallPick, yahooPlayerId: selectedId });
     try {
-      await call('submit', options => room.submit({ yahooPlayerId: selectedId, position: decision.player.position, overallPick: fresh.overallPick,
-        leagueKey: identity.leagueKey, teamKey: identity.teamKey, deadline: state.pending.deadline - 1500 }, options), Math.min(4500, remaining(fresh) - 1500));
+      await call('submit', options => {
+        state.pending.inputDispatched = true;
+        return room.submit({ yahooPlayerId: selectedId, position: decision.player.position, overallPick: fresh.overallPick,
+          leagueKey: identity.leagueKey, teamKey: identity.teamKey, deadline: state.pending.deadline - 1500 }, options);
+      }, Math.min(4500, remaining(fresh) - 1500));
       state.pending.inputAcknowledged = true;
     } catch (e) {
+      if (!state.pending.inputDispatched || e.code === 'BROWSER_CONTEXT_ENDED') {
+        requestStop(e.message); throw e;
+      }
       emit('input-uncertain', { overallPick: o.overallPick, code: e.code || 'INPUT_RESPONSE_ERROR' });
       if (!state.inflight) await call('decision', options => huddle.decision({ type: 'submit-uncertain', eventId: uuid(), planId: plan.event.hash, details: e.message }, options));
     }
@@ -180,8 +235,10 @@ export function createLiveDraftController({ room, huddle, display, identity, rol
     state.stage = 'verifying';
     return state.inflight ? { pending: true } : verifyPending();
   }
-  async function step() {
+  async function step(windowOwner = null) {
+    if (state.windowOwner && windowOwner !== state.windowOwner) throw error('CONTROLLER_BUSY', 'A running window owns this controller');
     if (state.busy) throw error('CONTROLLER_BUSY', 'The controller already has a running step');
+    if (state.haltReason) { await settleStop(); return { ...status(), stopped: true, unsettled: Boolean(state.inflight) }; }
     if (state.fatal || state.completed || state.inflight) return { stage: state.stage, fatal: state.fatal?.message, unsettled: Boolean(state.inflight), completed: state.completed };
     state.busy = true;
     try { return await iteration(); }
@@ -189,36 +246,49 @@ export function createLiveDraftController({ room, huddle, display, identity, rol
       if (e.code === 'WINDOW_BOUNDARY') return { yielded: true };
       state.stage = state.pending ? 'uncertain' : 'recovering';
       emit('fault', { code: e.code || 'OPERATION_FAILED', message: e.message, pending: Boolean(state.pending) });
-      if (['ROOM_MISMATCH', 'HUDDLE_CONTEXT_INVALID', 'ANOTHER_CONTROLLER_ACTIVE', 'MANUAL_MODE_UNVERIFIED', 'CLOCK_RESERVE_REQUIRED', 'ACCEPTANCE_MISMATCH'].includes(e.code)) {
+      if (['ROOM_MISMATCH', 'HUDDLE_CONTEXT_INVALID', 'ANOTHER_CONTROLLER_ACTIVE', 'MANUAL_MODE_UNVERIFIED', 'CLOCK_RESERVE_REQUIRED', 'ACCEPTANCE_MISMATCH', 'BROWSER_CONTEXT_ENDED'].includes(e.code)) {
         state.fatal = e; state.stage = 'handoff';
-        if (state.lease && !state.inflight) {
-          try { await call('controller', options => huddle.controller({ action: 'stop', token: state.lease.token }, options)); }
-          catch (stopError) { emit('stop-unconfirmed', { code: stopError.code || 'STOP_FAILED' }); }
-        }
+        requestStop(e.message);
       }
       return { fault: e.code || 'OPERATION_FAILED', message: e.message, pending: Boolean(state.pending) };
-    } finally { state.busy = false; }
+    } finally {
+      state.busy = false;
+      if (state.fatal && !state.haltReason) requestStop(state.fatal.message);
+      await settleStop();
+    }
   }
   async function runWindow({ durationMs = 40000, signal } = {}) {
-    if (durationMs < 100 || durationMs > 45000) throw error('WINDOW_LIMIT', 'Use windows between 100 ms and 45 seconds');
+    if (!Number.isFinite(durationMs) || durationMs < 100 || durationMs > 45000) throw error('WINDOW_LIMIT', 'Use windows between 100 ms and 45 seconds');
+    if (state.windowOwner || state.busy || state.stopping) throw error('CONTROLLER_BUSY', 'The controller already has an active invocation');
+    const windowOwner = {}; state.windowOwner = windowOwner;
+    const onAbort = () => requestStop('Execution invocation was aborted');
+    signal?.addEventListener('abort', onAbort, { once: true });
+    if (signal?.aborted) onAbort();
     state.windowDeadline = now() + durationMs;
     try {
-      while (!signal?.aborted && now() < state.windowDeadline - 100 && !state.completed && !state.fatal) {
+      while (!state.haltReason && now() < state.windowDeadline - 100 && !state.completed && !state.fatal) {
         if (state.inflight) break;
-        const result = await step();
+        const result = await step(windowOwner);
         if (result.yielded) break;
         if (result.waiting || result.pending || result.fault) await sleep(Math.min(350, Math.max(0, state.windowDeadline - now() - 100)));
       }
-    } finally { state.windowDeadline = Infinity; }
+    } finally {
+      signal?.removeEventListener('abort', onAbort);
+      state.windowDeadline = Infinity; state.windowOwner = null;
+      await settleStop();
+    }
     return status();
   }
   function status() {
     return { stage: state.stage, completed: state.completed, pending: state.pending ? { ...state.pending } : null,
-      fatal: state.fatal?.message || null, activeRunId: state.lease?.runId || null, receipts: structuredClone(state.receipts),
+      fatal: state.fatal?.message || null, haltReason: state.haltReason, stopConfirmed: state.stopConfirmed,
+      stopEvidenceSaved: state.stopEvidenceSaved, unsettled: Boolean(state.inflight), windowActive: Boolean(state.windowOwner),
+      continuationRequired: !state.completed && !state.fatal && !state.haltReason,
+      activeRunId: state.lease?.runId || null, receipts: structuredClone(state.receipts),
       fullyVerified: state.completed && state.receipts.length === identity.totalPicks / identity.teamCount
         && state.receipts.every(r => r.matched && r.inputAcknowledged), timings: structuredClone(state.timings), events: structuredClone(state.events) };
   }
-  return { step, runWindow, status };
+  return { step, runWindow, status, requestStop, stop };
 }
 
 // Purpose-built Huddle API client; it never reads or writes Yahoo. Transport
