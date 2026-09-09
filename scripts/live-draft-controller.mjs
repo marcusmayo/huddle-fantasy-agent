@@ -162,7 +162,9 @@ export function createLiveDraftController({ room, huddle, display, identity, rol
     // receives explicit review. A matching uncertain receipt is never a retry.
     if (!matched) state.fatal = error('ACCEPTANCE_MISMATCH', 'Yahoo accepted a different player; review the receipt before takeover');
     state.stage = matched ? 'watching' : 'handoff';
-    return receipt;
+    return { ...receipt, opponentTurn: results.phase === 'drafting' && results.onClock === false
+      && isFreshObservation(results.observedAt, now()) && owner(p.overallPick + 1, identity.teamCount) !== identity.draftSlot
+      && owner(results.overallPick, identity.teamCount) !== identity.draftSlot };
   }
   async function iteration() {
     const readBudget = state.pending ? estimate('results') + estimate('reconcile')
@@ -283,6 +285,10 @@ export function createLiveDraftController({ room, huddle, display, identity, rol
         if (state.inflight) break;
         const result = await step(windowOwner);
         if (result.yielded) break;
+        if (result.matched && result.inputAcknowledged && result.opponentTurn && !state.haltReason) {
+          emit('window-yield', { reason:'owned-block-complete', afterOverallPick:result.overallPick });
+          break;
+        }
         if (result.waiting || result.pending || result.fault) await sleep(Math.min(350, Math.max(0, state.windowDeadline - now() - 100)));
       }
     } finally {

@@ -78,11 +78,25 @@ test('standard entry blocks changed scoring, clock, roster, and position caps',(
 test('automatic navigation verifies the actual room and starts without looking for the old entry link',async()=>{
   const settings='League Settings\nDraft Pick Time\n30 seconds\nRoster Positions (15)\nQB\nWR\n2\nRB\n2\nTE\nW/R/T\nK\nDEF\nBN\n6\nPass TD - Passing Touchdowns\n4\nRec - Receptions\n0.5\n';
   const calls=[];let reads=0;
-  const locator=()=>({filter(){return this;},async click(){calls.push('click');}});
+  const locator=()=>({filter(){return this;},async click(){calls.push('click');},async press(key){calls.push(key);}});
   const run={roomId:'1234',draftSlot:8,teamCount:8,rounds:15,events:[],rules:{receptionPoints:.5,passingTouchdown:4,roster:{QB:1,WR:2,RB:2,TE:1,'W/R/T':1,K:1,DEF:1,BN:6}},
     yahoo:{playwright:{locator,getByRole(role){assert.notEqual(role,'link');return locator();},evaluate:async()=>reads++===0?{live:true,path:'/draftclient/f1/1234/8'}:settings}},startVerified:async()=>{calls.push('start');return {manualVerified:2};}};
   assert.deepEqual(await enterStandardMock(run,{waitMs:0}),{manualVerified:2});assert.equal(calls.at(-1),'start');
-  reads=0;run.roomId='wrong';await assert.rejects(enterStandardMock(run,{waitMs:0}),/does not match/);
+  assert.deepEqual(calls,['Enter','Enter','Enter','start']);
+  reads=0;await assert.rejects(enterStandardMock({...run,entryStage:undefined,roomId:'wrong'},{waitMs:0}),/does not match/);
+});
+
+test('an entry settings response failure preserves its stage and cannot replay input on another invocation',async()=>{
+  let actions=0,reads=0;
+  const fail=async()=>{actions++;throw Error('Settings transport timeout');};
+  const run={roomId:'1234',draftSlot:8,events:[],yahoo:{playwright:{
+    evaluate:async()=>{reads++;return {live:true,path:'/draftclient/f1/1234/8'};},
+    locator:()=>({click:fail,press:fail})}}};
+  await assert.rejects(enterStandardMock(run,{waitMs:0}),/Settings transport timeout/);
+  assert.equal(run.entryStage,'open-settings');assert.equal(actions,1);
+  const previousReads=reads;
+  await assert.rejects(enterStandardMock(run,{waitMs:0}),/Inspect.*entry.*before/i);
+  assert.equal(actions,1);assert.equal(reads,previousReads);
 });
 test('a transient blank document during automatic entry remains in the waiting loop',async()=>{
   const originalDocument=global.document, originalLocation=global.location;

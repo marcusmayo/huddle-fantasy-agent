@@ -24,6 +24,7 @@ function verifyStandardMockSettings(text, run) {
 
 async function enterStandardMock(run, {waitMs=20000}={}) {
   if(run.info || run.controller)throw Error('Use the existing prepared session/controller; entry cannot restart it');
+  if(run.entryStage)throw Error(`Inspect the current entry state before further input; the previous attempt reached ${run.entryStage}`);
   const tab=run.yahoo;
   const until=Date.now()+Math.min(25000,Math.max(0,waitMs));
   let gate;
@@ -51,15 +52,21 @@ async function enterStandardMock(run, {waitMs=20000}={}) {
   if(gate.live) {
     if(gate.path!==`/draftclient/f1/${run.roomId}/${run.draftSlot}`)throw Error('Auto-entered room or seat does not match');
   } else if(!gate.text.includes(String(run.roomId)) || !gate.text.includes(`You will draft ${run.draftSlot}th`))throw Error('Waiting room or assigned seat does not match');
+  const stage=name=>{run.entryStage=name;run.events?.push({stage:'entry-'+name,at:Date.now()});};
   run.events.push({stage:'enter-room',at:Date.now()});
-  if(!gate.live)await tab.playwright.getByRole('link',{name:'Enter Draft',exact:true}).click({timeoutMs:4000});
-  await tab.playwright.locator('button[title="Settings"]').click({timeoutMs:4000});
-  await tab.playwright.getByRole('button',{name:'League Settings',exact:true}).click({timeoutMs:2000});
+  if(!gate.live){stage('enter-room');await tab.playwright.getByRole('link',{name:'Enter Draft',exact:true}).click({timeoutMs:4000});}
+  stage('open-settings');
+  await tab.playwright.locator('button[title="Settings"]').press('Enter',{timeoutMs:4000});
+  stage('open-league-settings');
+  await tab.playwright.getByRole('button',{name:'League Settings',exact:true}).press('Enter',{timeoutMs:2000});
+  stage('verify-settings');
   const settings=await tab.playwright.evaluate(()=>document.body.innerText.slice(document.body.innerText.lastIndexOf('League Settings')));
   verifyStandardMockSettings(settings,run);
   run.verifiedSettingsText=settings;
   run.events.push({stage:'room-rules-verified',at:Date.now()});
-  await tab.playwright.locator('button').filter({has:tab.playwright.locator('[data-icon="close-default"]')}).click({timeoutMs:2000});
+  stage('close-settings');
+  await tab.playwright.locator('button').filter({has:tab.playwright.locator('[data-icon="close-default"]')}).press('Enter',{timeoutMs:2000});
+  stage('verified');
   // No tool/model handoff, media operation, or separate initial import here.
   return run.startVerified();
 }

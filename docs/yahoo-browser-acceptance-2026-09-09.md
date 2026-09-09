@@ -1,5 +1,32 @@
 # Yahoo browser acceptance — September 9, 2026
 
+## Fifth attempt: two acknowledged picks; continuation still failed
+
+Free standard mock **Power Sweep 11105853**, seat 8, loaded `9d0faca91f203d7b94d9e025259905b2b41e6b89` with the same 250 dated candidates and eight-team/fifteen-round/30-second settings. Huddle was prepared before joining and the extra lobby was closed. The entry tool returned after 18.095 seconds with a Settings-click/CDP timeout. A fresh read verified the correct client, no settings overlay and forty seconds before drafting. An inspected keyboard sequence opened, verified and closed league settings before activating the controller at **06:52:33.992 UTC**. The entry helper was not blindly replayed.
+
+The first invocation returned normally with no unsettled operation. After a **3.894-second** caller gap, both consecutive opening picks completed:
+
+| Pick | Huddle recommendation and submitted player | Alternatives displayed | Saved plan / submission / matching receipt (UTC) |
+| --- | --- | --- | --- |
+| 8 | Jaxon Smith-Njigba, Yahoo ID 40041 | De'Von Achane, both styles | 06:53:14.604 / 06:53:15.536 / 06:53:16.976 |
+| 9 | De'Von Achane, Yahoo ID 40118 | James Cook III, both styles | 06:53:18.422 / 06:53:19.562 / 06:53:21.050 |
+
+Both plans had exact-turn revisions, all recommendation/decision panels visible at **640×720**, display confirmation before input, 27 seconds on the fresh pre-dispatch clock, returned exact-ID keyboard inputs and matching accepted identities. The controller's submission/verification phases took 1.618 and 1.670 seconds, including saving intent before input. The independent saved-evidence verifier passed each of these two pick checks and verified the audit/snapshot hashes. They are the first acknowledged real Yahoo submissions in this acceptance series.
+
+The second invocation kept reconciling opponents, including board-change retries, and yielded at **06:53:34.876** after own pick 24 began because its remaining invocation budget could not cover a complete decision. The next invocation began at **06:53:44.477**, a **9.601-second gap**. A fresh observation at pick 24 showed nineteen seconds; after clock-age/skew allowance the guard reported seventeen seconds against a 24-second reserve. It stopped with no further input. Across the 251 recorded controller operations there were **zero deadline overruns**: observation maximum 376 ms, Results 1.213 seconds, preparation 725 ms, display 860 ms and submission 172 ms. The continuation failure cannot be described as another browser timeout or fixed by crediting Yahoo's automatic picks.
+
+### Repairs and scoped verification
+
+- Entry uses the successfully observed keyboard activation for Settings, League Settings and close. Each entry action records its stage before dispatch. Any later invocation refuses to replay a partially attempted entry; the operator must inspect the current state before further input. Two startup checks failed before this repair and now pass.
+- After an acknowledged matching result, a window now yields while a fresh Results observation shows opponents selecting and the next consecutive pick is not ours. Adjacent owned picks stay in the same window. This gives the caller the opponent interval for continuation instead of consuming it and yielding on the next owned clock. A regression reproduced the previous late return. No clock reserve, operation cap or unsettled-input protection was reduced.
+- A separate regression injects the observed 9.601-second gap and confirms that an undersized thirty-second turn still stops without input. A synthetic 75-second DR replay now includes that gap between windows and completes all twenty acknowledged picks/120 results. These simulations do not convert the failed actual mock into a pass or guarantee future tool timing.
+
+The final focused controller/entry batch passed **45/45**. The final application suite passed **331/331**, zero failures/cancellations/skips, in **71.015 seconds**; core integrity passed. Logs: `.media-build/yahoo-entry-handoff-before.log`, `yahoo-owned-block-before.log`, `yahoo-entry-block-focused.log`, `yahoo-entry-block-full-suite.log` and `yahoo-entry-block-core-check.log`.
+
+After the terminal stop, final reconciliation added 97 results to the 23 already saved. All **120 results and fifteen owned picks** are retained. Exactly two owned picks are acknowledged assistant selections; thirteen are accepted without plans and remain unattributed. Full manual acceptance was **rejected**. The initial completed-view read was 640×774; a separate 640×720 read and screenshot were visually checked with all fifteen owned picks and panels in frame. Neither replaces the two original on-clock display observations.
+
+Evidence: `draft-day/yahoo-browser-acceptance-2026-09-09T06-45-52-908Z/`. The owned lobby/room/display tabs were closed, viewport reset, and temporary server exited with code 0. The independent recorder and unrelated tabs were preserved. No recording was started, no DR roster or published preview changed, and no current model/effort telemetry was invented. Recording remains optional external evidence. These local startup/scheduling repairs need another actual-run verification; uninterrupted manual execution, actual queue recovery, source/news completeness, sourced calibration and production-version acceptance remain open.
+
 ## Fourth attempt: an undersized read deadline and delayed continuation
 
 Free standard mock **Three and Out 11105132**, seat 8, used local commit `38eaafda9699dafffe54a5c619f62847332dc9e0`, 250 previously dated candidates, eight teams, fifteen rounds and a 30-second clock. The explicit local draft-view route opened normally. Four alternating Huddle/Yahoo preflight reads took 13–30 ms and 25–40 ms respectively. These waiting-room measurements do not certify future on-clock timing. The entry helper handled the transition into the actual room and control activated at **06:32:21.407 UTC**.

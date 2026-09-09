@@ -54,7 +54,7 @@ function fixture({ full = false, choose, faults = {} } = {}) {
       assert.ok(p);
       if (faults.noAccept) throw Error('Click response lost before acceptance');
       accept(faults.wrongAccepted ? available().find(a => a.id !== p.id) : p, true);
-      opponents();
+      if(!faults.holdOpponents)opponents();
       if (faults.clickResponseLost) { faults.clickResponseLost = false; throw Error('Input response lost after Yahoo accepted'); }
     },
     async results() { bump(); return { ...observation(), picks: structuredClone(picks) }; }
@@ -87,13 +87,19 @@ test('a mismatched room retains the observed and expected route through controll
   assert.deepEqual(f.actions, []);
 });
 
-test('a complete DR replay runs all twenty owned turns without a recorder, including adjacent turns, through durable plans and receipts', async () => {
+test('a complete DR replay handles the observed invocation gap across all twenty owned turns without a recorder', async () => {
   const f = fixture({ full: true });
   assert.deepEqual(f.roles.map(role => role.role), ['yahoo', 'huddle']);
   assert.equal((await f.controller.step()).waiting, true);
   f.begin();
   let windows = 0;
-  while (!f.controller.status().completed && !f.controller.status().fatal && windows++ < 30) await f.controller.runWindow({ durationMs: 40000 });
+  while (!f.controller.status().completed && !f.controller.status().fatal && windows++ < 30) {
+    await f.controller.runWindow({ durationMs: 40000 });
+    // The fifth actual standard mock measured this caller gap. Its 30-second
+    // failure remains separate from this DR-like 75-second synthetic replay.
+    if(f.controller.status().continuationRequired)f.bump(9601);
+  }
+  assert.ok(windows>1,'Exercise an actual gap between simulated invocations');
   const result = f.controller.status();
   assert.equal(result.fatal, null, JSON.stringify(result.events.slice(-3)));
   assert.equal(result.completed, true); assert.equal(result.fullyVerified, true);
@@ -253,6 +259,31 @@ test('waiting iterations preserve the full observation budget at an invocation b
   await f.controller.runWindow({durationMs:12000});
   assert.ok(budgets.length>0);assert.ok(budgets.every(ms=>ms>=4000),JSON.stringify(budgets));
   assert.equal(f.controller.status().unsettled,false);assert.equal(f.controller.status().fatal,null);assert.equal(f.actions.length,0);
+});
+
+test('the observed 9.601-second invocation gap cannot borrow the clock reserve on a 30-second turn',async()=>{
+  for(const seconds of [30,75]) {
+    const f=fixture();await f.controller.step();f.begin(seconds);
+    await f.controller.runWindow({durationMs:8000});assert.equal(f.actions.length,0);
+    f.bump(9601);const result=await f.controller.step();
+    if(seconds===30) {
+      assert.equal(result.fault,'CLOCK_RESERVE_REQUIRED');assert.equal(f.actions.length,0);
+      assert.equal(f.controller.status().stopConfirmed,true);
+    } else { assert.equal(result.matched,true);assert.equal(f.actions.length,1); }
+  }
+});
+
+test('a window returns during opponents after an acknowledged owned block and keeps consecutive owned picks together',async()=>{
+  const f=fixture({full:true,faults:{holdOpponents:true}});await f.controller.step();f.begin();
+  const firstStart=Date.parse(f.observation().observedAt);
+  await f.controller.runWindow({durationMs:40000});
+  assert.deepEqual(f.actions.map(a=>a.overallPick),[1]);
+  assert.ok(Date.parse(f.observation().observedAt)-firstStart<8000,'Return the available opponent interval to the invoking caller');
+  f.bump(9601);f.opponents();
+  await f.controller.runWindow({durationMs:40000});
+  assert.deepEqual(f.actions.map(a=>a.overallPick),[1,12,13]);
+  assert.deepEqual(f.controller.status().events.filter(e=>e.type==='window-yield').map(e=>e.afterOverallPick),[1,13]);
+  assert.equal(f.controller.status().fatal,null);assert.equal(f.controller.status().receipts.length,3);
 });
 
 test('pending-result verification yields before an undersized invocation without retrying input',async()=>{
