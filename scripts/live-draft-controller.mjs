@@ -26,7 +26,13 @@ export function createLiveDraftController({ room, huddle, display, identity, rol
     state.events.push(event); onEvent(event); return event;
   };
   const estimate = name => Math.max(defaults[name] || 1000, ...(state.timings[name] || []).slice(-30)) * 1.2;
-  const reserve = () => estimate('submit') + estimate('results') + estimate('reconcile') + 1500;
+  // Yahoo's pick deadline applies to input. Receipt verification runs after
+  // acceptance, under the invocation deadline and the pending-input fence.
+  // Keep every operation floor and margin; do not charge post-input work to
+  // the clock of a pick Yahoo has already accepted.
+  const reserve = () => estimate('submit') + 1500;
+  const verificationBudget = () => estimate('decision') + estimate('results') + estimate('reconcile');
+  const preparationBudget = () => estimate('prepare') + 3 * estimate('decision') + estimate('display') + estimate('observe') + estimate('controller');
   const remaining = o => o.phase === 'waiting' ? Infinity : Number(o.secondsLeft) * 1000 - Math.max(0, now() - Date.parse(o.observedAt)) - CLOCK_SKEW_ALLOWANCE_MS;
   function observeValid(o, { completed = false } = {}) {
     const age = now() - Date.parse(o?.observedAt);
@@ -162,6 +168,12 @@ export function createLiveDraftController({ room, huddle, display, identity, rol
     // receives explicit review. A matching uncertain receipt is never a retry.
     if (!matched) state.fatal = error('ACCEPTANCE_MISMATCH', 'Yahoo accepted a different player; review the receipt before takeover');
     state.stage = matched ? 'watching' : 'handoff';
+    // The pre-input heartbeat can be several seconds old by the time Results
+    // settles. Renew from the fresh, reconciled observation before returning
+    // to the caller; expiry and stopped/uncertain lease rules stay unchanged.
+    if (matched && p.inputAcknowledged && !state.haltReason && results.phase === 'drafting'
+      && isFreshObservation(results.observedAt, now())
+      && state.windowDeadline - now() >= estimate('controller') + 100) await heartbeat(observeValid(results), 'watching');
     return { ...receipt, opponentTurn: results.phase === 'drafting' && results.onClock === false
       && isFreshObservation(results.observedAt, now()) && owner(p.overallPick + 1, identity.teamCount) !== identity.draftSlot
       && owner(results.overallPick, identity.teamCount) !== identity.draftSlot };
@@ -189,9 +201,14 @@ export function createLiveDraftController({ room, huddle, display, identity, rol
     } else await heartbeat(o, 'watching');
     if (o.phase === 'waiting' || !o.onClock) { state.stage = 'watching'; return { waiting: true }; }
     if (w.card.currentOverall !== o.overallPick || w.card.reconciledPicks !== o.completedPicks || !w.card.onClock) throw error('RECOMMENDATION_STALE', 'Wait for an exact-turn Huddle recommendation');
-    const minimum = reserve() + estimate('prepare') + 3 * estimate('decision') + estimate('display') + estimate('controller');
-    if (state.windowDeadline - now() < minimum) return { yielded: true };
-    if (remaining(o) < minimum) throw error('CLOCK_RESERVE_REQUIRED', `Only ${Math.floor(remaining(o) / 1000)} seconds remain; the measured execution reserve is ${Math.ceil(minimum / 1000)} seconds`);
+    const minimum = reserve() + preparationBudget();
+    const invocationBudget = minimum + verificationBudget() + estimate('controller');
+    if (state.windowDeadline - now() < invocationBudget) {
+      emit('window-yield', { reason:'selection-budget', overallPick:o.overallPick, clockRemainingMs:remaining(o),
+        windowRemainingMs:state.windowDeadline-now(), submissionBudgetMs:minimum, invocationBudgetMs:invocationBudget });
+      return { yielded: true };
+    }
+    if (remaining(o) < minimum) throw error('CLOCK_RESERVE_REQUIRED', `Only ${Math.floor(remaining(o) / 1000)} seconds remain; the measured submission reserve is ${Math.ceil(minimum / 1000)} seconds`);
     const decision = choose ? choose({ workspace: w, observation: o, prepared: state.prepared, reserveMs: reserve() }) : {
       player: w.card.preferred?.player, classification: 'huddle', reason: ''
     };
@@ -201,7 +218,7 @@ export function createLiveDraftController({ room, huddle, display, identity, rol
     const selectedId = yahooId(decision.player);
     const rows = selected.players.filter(p => String(p.yahooPlayerId) === selectedId && p.available === true && p.position === decision.player.position);
     if (!o.onClock || o.overallPick !== w.card.currentOverall || rows.length !== 1) throw error('PLAYER_OR_TURN_CHANGED', 'The exact available player or owned turn changed');
-    if (remaining(o) < reserve() + 3 * estimate('decision') + estimate('display') + estimate('controller')) throw error('CLOCK_RESERVE_REQUIRED', 'Preparation consumed the deadline reserve');
+    if (remaining(o) < reserve() + 3 * estimate('decision') + estimate('display') + estimate('observe') + estimate('controller')) throw error('CLOCK_RESERVE_REQUIRED', 'Preparation consumed the deadline reserve');
     await heartbeat(o, 'planned');
     const yahooObservation = { ...o, yahooPlayerId: selectedId };
     const plan = await call('decision', options => huddle.decision({ type: 'plan', eventId: uuid(), overallPick: o.overallPick,

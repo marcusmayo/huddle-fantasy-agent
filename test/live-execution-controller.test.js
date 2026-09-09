@@ -8,34 +8,48 @@ const { scoringFingerprint } = require('../src/domain/league-projections');
 let createLiveDraftController;
 test.before(async () => ({ createLiveDraftController } = await import('../scripts/live-draft-controller.mjs')));
 
-function fixture({ full = false, choose, faults = {} } = {}) {
+function fixture({ full = false, choose, faults = {}, cadence } = {}) {
   let time = Date.parse('2026-09-09T00:00:00Z'), sequence = 0;
-  const league = { ...structuredClone(require('../config/leagues/yahoo-example.json')), teamCount: 6,
-    roster: full ? { QB: 2, WR: 4, RB: 3, TE: 1, 'W/T': 1, 'W/R': 1, K: 1, DEF: 2, BN: 5, IR: 2 } : { QB: 1, RB: 1 },
+  const league = { ...structuredClone(require('../config/leagues/yahoo-example.json')), teamCount: cadence ? 8 : 6,
+    roster: cadence ? { QB: 1, RB: 2, WR: 2, TE: 1, 'R/W/T': 1, K: 1, DEF: 1, BN: 6 } : full ? { QB: 2, WR: 4, RB: 3, TE: 1, 'W/T': 1, 'W/R': 1, K: 1, DEF: 2, BN: 5, IR: 2 } : { QB: 1, RB: 1 },
     provenance: { yahooLeagueKey: 'nfl.l.153454', yahooTeamKey: 'nfl.l.153454.t.2' } };
   const positions = ['QB', 'RB', 'WR', 'TE', 'RB', 'WR', 'DEF', 'K'];
-  const players = Array.from({ length: full ? 240 : 40 }, (_, i) => ({ id: `p${i}`, yahooPlayerKey: `nfl.p.${1000 + i}`,
+  const players = Array.from({ length: full || cadence ? 240 : 40 }, (_, i) => ({ id: `p${i}`, yahooPlayerKey: `nfl.p.${1000 + i}`,
     name: `Replay Player ${i}`, position: positions[i % 8], team: 'SEA', byeWeek: 5 + i % 10,
     expertRank: i + 1, adp: i + 1, projectedPoints: 400 - i, floor: 300 - i * .5, ceiling: 450 - i,
     projectionLeagueId: league.id, projectionScoringFingerprint: scoringFingerprint(league), projectionScoringVerified: true, projectionSource: 'synthetic-replay' }));
   const args = { league, playerPool: { players, source: 'synthetic-replay', complete: true, season: 2026 }, store: new MemoryStateStore(), now: () => new Date(time) };
   let drafts = new DraftService(args);
-  const session = drafts.createSession({ draftSlot: 1, sourceMode: 'yahoo' }), picks = [], actions = [], auditReads = [];
+  const slot = cadence ? 8 : 1;
+  const session = drafts.createSession({ draftSlot: slot, sourceMode: 'yahoo' }), picks = [], actions = [], auditReads = [], autopicks = [];
   let phase = 'waiting', expires = Infinity, remainingSeconds = 75;
-  const bump = (ms = 100) => { time += ms; };
+  let opponentDue = Infinity, opponentIndex = 0;
+  const mine = () => pickOwner(picks.length + 1, league.teamCount) === slot;
+  const scheduleOpponent = () => { opponentDue = cadence && phase === 'drafting' && !mine()
+    ? time + cadence[opponentIndex++ % cadence.length] : Infinity; };
+  const bump = (ms = 100) => {
+    const target = time + ms;
+    while (cadence && phase === 'drafting' && Math.min(expires, opponentDue) <= target) {
+      time = Math.min(expires, opponentDue);
+      if (mine()) autopicks.push(picks.length + 1);
+      accept(available()[0], mine());
+    }
+    time = target;
+  };
   const idOf = p => p.yahooPlayerKey.split('.p.').at(-1);
   const available = () => players.filter(p => !picks.some(pick => pick.yahooPlayerId === idOf(p)));
   function accept(player, mine) {
     picks.push({ overallPick: picks.length + 1, name: player.name, position: player.position, team: player.team, yahooPlayerId: idOf(player), isMine: mine });
     expires = time + remainingSeconds * 1000;
     if (picks.length === session.totalPicks) phase = 'completed';
+    scheduleOpponent();
   }
   function opponents() {
-    while (picks.length < session.totalPicks && pickOwner(picks.length + 1, 6) !== 1) accept(available()[0], false);
+    while (picks.length < session.totalPicks && !mine()) accept(available()[0], false);
   }
   const observation = () => ({ observedAt: new Date(time + (faults.clockSkewMs || 0)).toISOString(), phase, overallPick: picks.length + 1, completedPicks: picks.length,
-    leagueKey: league.provenance.yahooLeagueKey, teamKey: league.provenance.yahooTeamKey, draftSlot: 1,
-    autodraft: false, manualModeKnown: true, onClock: phase === 'drafting' && pickOwner(picks.length + 1, 6) === 1,
+    leagueKey: league.provenance.yahooLeagueKey, teamKey: league.provenance.yahooTeamKey, draftSlot: slot,
+    autodraft: false, manualModeKnown: true, onClock: phase === 'drafting' && mine(),
     secondsLeft: phase === 'drafting' ? Math.ceil((expires - time) / 1000) : null });
   const room = {
     async observe() { bump(); if (faults.readOnce) { faults.readOnce = false; throw Error('Transient browser timeout'); } return { ...observation(), ...(faults.wrongRoom ? { teamKey: 'nfl.l.153454.t.4' } : {}) }; },
@@ -54,7 +68,7 @@ function fixture({ full = false, choose, faults = {} } = {}) {
       assert.ok(p);
       if (faults.noAccept) throw Error('Click response lost before acceptance');
       accept(faults.wrongAccepted ? available().find(a => a.id !== p.id) : p, true);
-      if(!faults.holdOpponents)opponents();
+      if(!faults.holdOpponents && !cadence)opponents();
       if (faults.clickResponseLost) { faults.clickResponseLost = false; throw Error('Input response lost after Yahoo accepted'); }
     },
     async results() { bump(); return { ...observation(), picks: structuredClone(picks) }; }
@@ -65,16 +79,44 @@ function fixture({ full = false, choose, faults = {} } = {}) {
     async decision(body) { bump(); return drafts.recordDecision(session.id, body); },
     async reconcile(body) { bump(); return drafts.reconcileBrowserResults(session.id, body); }
   };
-  const identity = { sessionId: session.id, teamCount: 6, draftSlot: 1, totalPicks: session.totalPicks, leagueKey: league.provenance.yahooLeagueKey, teamKey: league.provenance.yahooTeamKey };
+  const identity = { sessionId: session.id, teamCount: league.teamCount, draftSlot: slot, totalPicks: session.totalPicks, leagueKey: league.provenance.yahooLeagueKey, teamKey: league.provenance.yahooTeamKey };
   const roles = [{ role: 'yahoo', browserId: 'edge', tabId: 'yahoo', url: 'https://football.fantasysports.yahoo.com/draftclient/f1/153454/2' },
     { role: 'huddle', browserId: 'edge', tabId: 'huddle', url: 'http://localhost:8787/draft-view.html' }];
   const display = { async confirm(expected) { bump(); return { ...expected, observedAt: new Date(time).toISOString(), allPanelsInFrame: true, stale: false, width: 960, height: 900 }; } };
   const controller = createLiveDraftController({ room, huddle, display, identity, roles, handoffAccepted: true, choose,
     now: () => time, uuid: () => `test-event-${++sequence}`, sleep: async ms => bump(ms), executor: { name: 'Replay operator', model: 'test fixture', effort: 'test fixture' } });
-  return { controller, room, huddle, display, session, picks, actions, auditReads, observation, args, players, identity, roles,
-    get drafts() { return drafts; }, begin(seconds = 75) { remainingSeconds = seconds; phase = 'drafting'; expires = time + seconds * 1000; },
+  return { controller, room, huddle, display, session, picks, actions, auditReads, autopicks, observation, args, players, identity, roles,
+    get drafts() { return drafts; }, begin(seconds = 75) { remainingSeconds = seconds; phase = 'drafting'; expires = time + seconds * 1000; scheduleOpponent(); },
     restart() { drafts = new DraftService(args); }, bump, accept, opponents };
 }
+
+test('all fifteen 30-second mock turns survive delayed opponents and the measured caller gap', async () => {
+  // Fourteen opponents at 2.8 seconds each put pick 24 ~29.6 seconds into
+  // the next window after a 9.601-second caller gap: the real failure shape.
+  const f = fixture({ cadence: [...Array(7).fill(1800), ...Array(98).fill(2800)] });
+  await f.controller.step(); f.begin(30);
+  for (let n = 0; n < 80 && f.controller.status().continuationRequired; n++) {
+    await f.controller.runWindow({ durationMs: 45000 });
+    if (f.controller.status().continuationRequired) f.bump(9601);
+  }
+  const s = f.controller.status();
+  assert.equal(s.fatal, null, JSON.stringify({ events:s.events.slice(-4), inputs:f.actions.map(a=>a.overallPick) }));
+  assert.equal(s.fullyVerified, true);
+  assert.deepEqual(f.actions.map(a=>a.overallPick), [8,9,24,25,40,41,56,57,72,73,88,89,104,105,120]);
+  assert.deepEqual(f.autopicks, []);
+  assert.equal(f.picks.length, 120);
+  const audit = new DraftService(f.args).exportDecisionAudit(f.session.id);
+  assert.equal(audit.integrityVerified, true);
+  for (const type of ['plan','display-confirmed','submit-started','input-acknowledged','accepted'])
+    assert.equal(audit.events.filter(e=>e.type===type).length, 15, type);
+  if (process.env.HUDDLE_CADENCE_REPORT) require('node:fs').writeFileSync(process.env.HUDDLE_CADENCE_REPORT, JSON.stringify({
+    recordedAt:new Date().toISOString(), label:'Synthetic delayed-opponent regression; not actual Yahoo browser acceptance',
+    timing:{turnSeconds:30,windowMs:45000,callerGapMs:9601,opponentsMs:[...Array(7).fill(1800),...Array(98).fill(2800)]},
+    totalPicks:f.picks.length, inputPicks:f.actions.map(a=>a.overallPick), autopicks:f.autopicks, fullyVerified:s.fullyVerified,
+    invocations:s.invocations, events:s.events, auditIntegrityAfterRestart:audit.integrityVerified,
+    auditCounts:Object.fromEntries(['plan','display-confirmed','submit-started','input-acknowledged','accepted'].map(type=>[type,audit.events.filter(e=>e.type===type).length]))
+  }, null, 2));
+});
 
 test('a mismatched room retains the observed and expected route through controller handoff', async () => {
   const f = fixture();
@@ -261,16 +303,55 @@ test('waiting iterations preserve the full observation budget at an invocation b
   assert.equal(f.controller.status().unsettled,false);assert.equal(f.controller.status().fatal,null);assert.equal(f.actions.length,0);
 });
 
-test('the observed 9.601-second invocation gap cannot borrow the clock reserve on a 30-second turn',async()=>{
-  for(const seconds of [30,75]) {
+test('the caller gap uses the submission deadline while genuinely short clocks still stop',async()=>{
+  for(const seconds of [17,30,75]) {
     const f=fixture();await f.controller.step();f.begin(seconds);
     await f.controller.runWindow({durationMs:8000});assert.equal(f.actions.length,0);
     f.bump(9601);const result=await f.controller.step();
-    if(seconds===30) {
+    if(seconds===17) {
       assert.equal(result.fault,'CLOCK_RESERVE_REQUIRED');assert.equal(f.actions.length,0);
       assert.equal(f.controller.status().stopConfirmed,true);
     } else { assert.equal(result.matched,true);assert.equal(f.actions.length,1); }
   }
+});
+
+test('slow verification keeps its full budget after input and cannot authorize a second unverified pick',async()=>{
+  const f=fixture({faults:{holdOpponents:true}});await f.controller.step();f.begin(20);
+  let resultsBudget=0;
+  const results=f.room.results;
+  f.room.results=async options=>{
+    resultsBudget=options.timeoutMs;
+    f.bump(3500);return results(options);
+  };
+  const receipt=await f.controller.step();
+  assert.equal(receipt.matched,true);assert.equal(receipt.inputAcknowledged,true);
+  assert.ok(resultsBudget>=4000,'Verification still receives the full operation watchdog budget');
+  assert.ok(receipt.elapsedMs>=3500);
+  assert.equal(f.actions.length,1);
+  assert.equal(f.controller.status().pending,null);
+  assert.equal(f.drafts.controllers.status(f.session.id).heartbeatAgeMs,0,'Fresh verified Results renews liveness after receipt work');
+});
+
+test('a measured slow pre-input operation increases the clock guard without reducing its floor',async()=>{
+  const f=fixture();await f.controller.step();
+  const prepare=f.room.prepare;
+  f.room.prepare=async(...args)=>{f.bump(3000);return prepare(...args);};
+  // Measure the operation on a long turn, then try a newly owned short turn.
+  f.begin(75);assert.equal((await f.controller.step()).matched,true);
+  f.begin(19);
+  assert.equal((await f.controller.step()).fault,'CLOCK_RESERVE_REQUIRED');
+  assert.equal(f.actions.length,1);
+});
+
+test('an expired controller lease is still rejected after the post-receipt renewal',async()=>{
+  const f=fixture({faults:{holdOpponents:true}});await f.controller.step();f.begin();
+  assert.equal((await f.controller.step()).matched,true);
+  const lease=f.drafts.controllers.leases.get(f.session.id);
+  f.bump(10000);
+  assert.equal(f.drafts.controllers.status(f.session.id).active,false);
+  assert.throws(()=>f.drafts.controllers.update(f.session.id,{action:'heartbeat',token:lease.token,observation:f.observation()}),
+    {code:'CONTROLLER_LEASE_EXPIRED'});
+  assert.equal(f.actions.length,1);
 });
 
 test('a window returns during opponents after an acknowledged owned block and keeps consecutive owned picks together',async()=>{

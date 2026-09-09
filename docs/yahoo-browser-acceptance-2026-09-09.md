@@ -1,5 +1,13 @@
 # Yahoo browser acceptance — September 9, 2026
 
+## Sixth attempt: the same opening-pair failure reproduced
+
+**Third and Long 11154420**, seat 8, loaded `07c16d7b03db863caae29614aeef12755219902f`. Entry and settings verification succeeded through the keyboard helper. It acknowledged Jaxon Smith-Njigba at 8 and De'Von Achane at 9 with exact-turn Huddle displays and returned after the owned block as intended. The next owned turn arrived late in a later invocation. After that window returned and an 8.488-second caller gap, pick 24 stopped with nineteen usable seconds against the old 24-second combined reserve. There were 367 controller operations and zero deadline overruns. The prior early-return repair did not fix this failure.
+
+The [root cause report](draft-continuation-root-cause-2026-09-09.md) traces the invocation budget, incorrect charging of post-acceptance verification to Yahoo's pick clock, expiring pre-input heartbeat, and missing delayed-opponent test coverage. Its deterministic replay failed at 24 after two acknowledged picks before correction and completed all fifteen owned picks afterward. This does not replace actual browser acceptance.
+
+Raw evidence: `draft-day/yahoo-browser-acceptance-2026-09-09T07-06-22-568Z/`. After terminal stop, final reconciliation added 97 results to the 23 retained, for 120 results and fifteen owned picks. Exactly two are acknowledged assistant inputs; thirteen remain unattributed. The independent verifier rejects full manual completion. The completed 640×720 Huddle view was visually checked with all fifteen owned picks and all panels visible. Owned lobby/room/Huddle tabs were closed, viewport reset, server exit 0 confirmed, and original recorder/unrelated tabs preserved. No recording was started, no real DR roster was changed, and no stopped controller was resumed.
+
 ## Fifth attempt: two acknowledged picks; continuation still failed
 
 Free standard mock **Power Sweep 11105853**, seat 8, loaded `9d0faca91f203d7b94d9e025259905b2b41e6b89` with the same 250 dated candidates and eight-team/fifteen-round/30-second settings. Huddle was prepared before joining and the extra lobby was closed. The entry tool returned after 18.095 seconds with a Settings-click/CDP timeout. A fresh read verified the correct client, no settings overlay and forty seconds before drafting. An inspected keyboard sequence opened, verified and closed league settings before activating the controller at **06:52:33.992 UTC**. The entry helper was not blindly replayed.
