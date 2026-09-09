@@ -1,5 +1,7 @@
 # Draft continuation root cause — September 9, 2026
 
+**Final status: user-directed pause after the seventh actual mock failed.** The correction below passed 335 tests and improved actual execution to ten acknowledged picks, but did not produce a clean draft. In Flea Flicker 11155301, the controller returned at 07:40:03.995 UTC and next began at 07:40:35.579, a **31.584-second gap**. Pick 88 then had only four usable seconds after fresh reconciliation/reactivation and control stopped. All 411 operations settled without deadline overrun. The trace identifies the inter-invocation absence, not its precise model/tool/runtime breakdown. Ten exact-ID/display/result chains passed independent review; five owned picks lack assistant input, and full manual acceptance is rejected. All 120 results were preserved, the completed 640×720 view was checked, and the test tabs/service were closed. No stopped controller was resumed, no further fixes or attempts are being pursued, and the app was not deployed. See `draft-day/PAUSED-draft-readiness-review-2026-09-09.md` for completed versus outstanding work.
+
 The repeated opening-pair success followed by autodraft is an execution-controller scheduling and deadline-accounting failure. It is not evidence that Huddle stopped ranking players, that Yahoo rejected a selected player, or that the latest run suffered a browser-operation timeout. The controller voluntarily returned on the next owned clock and subsequently stopped; Yahoo continued without it.
 
 ## Evidence from the sixth actual mock

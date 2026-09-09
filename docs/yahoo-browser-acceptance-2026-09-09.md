@@ -1,5 +1,13 @@
 # Yahoo browser acceptance — September 9, 2026
 
+## Seventh attempt: ten verified picks, then user-directed pause
+
+Flea Flicker **11155301**, seat 8, ran local `e00a9849b29b2bd7a72126715d81692cfc74d1a0`. Entry succeeded. Ten owned picks through 73 had fresh Huddle recommendations, complete decision displays at 640×720, returned exact-ID inputs and matching Yahoo receipts. The independent verifier passed all ten pick checks. It rejected full manual completion because 88, 89, 104, 105 and 120 have no assistant input.
+
+The sixth execution window returned at **07:40:03.995 UTC** after pick 73. The next began at **07:40:35.579**, a **31.584-second caller gap**. Reconciliation/reactivation found four usable seconds at 88 against a nineteen-second submission reserve and stopped. All 411 controller operations settled without a deadline overrun. The tested deadline correction did not solve the longer inter-invocation absence. Its precise model/tool/runtime breakdown remains unproven.
+
+The user directed a pause if this next mock failed. Pursuit is paused: no further fixes or mock attempts. Final read-only reconciliation retained all 120 results and fifteen owned players; five automatic owned selections remain unattributed to assistant input. The completed Huddle view was visually checked at 640×720. Owned test tabs were closed, viewport reset and service exit 0 confirmed; recorder/unrelated tabs were preserved. No new recording, app deployment, published-video change or DR roster change occurred. Evidence is `draft-day/yahoo-browser-acceptance-2026-09-09T07-31-27-355Z/`; `terminal-completed.json` supplements the preserved initial 119-result pause snapshot. The [root cause report](draft-continuation-root-cause-2026-09-09.md) and `draft-day/PAUSED-draft-readiness-review-2026-09-09.md` describe completed versus outstanding work.
+
 ## Sixth attempt: the same opening-pair failure reproduced
 
 **Third and Long 11154420**, seat 8, loaded `07c16d7b03db863caae29614aeef12755219902f`. Entry and settings verification succeeded through the keyboard helper. It acknowledged Jaxon Smith-Njigba at 8 and De'Von Achane at 9 with exact-turn Huddle displays and returned after the owned block as intended. The next owned turn arrived late in a later invocation. After that window returned and an 8.488-second caller gap, pick 24 stopped with nineteen usable seconds against the old 24-second combined reserve. There were 367 controller operations and zero deadline overruns. The prior early-return repair did not fix this failure.
