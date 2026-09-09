@@ -1,6 +1,6 @@
 // Browser actions use only the documented CUA Playwright surface. Evaluation
 // reads rendered DOM; it never calls page functions, fetches Yahoo, or changes UI.
-const fail = (code, message) => { throw Object.assign(new Error(message), { code }); };
+const fail = (code, message, details) => { throw Object.assign(new Error(message), { code, ...(details ? { details } : {}) }); };
 const yahooId = p => String(p?.yahooPlayerId || p?.yahooPlayerKey?.split('.p.').at(-1) || '');
 const teamCode = value => String(value || '').trim().toUpperCase().replace(/^JAX$/, 'JAC').replace(/^WSH$/, 'WAS').replace(/^LAR$/, 'LA');
 
@@ -10,10 +10,13 @@ export function readYahooDocument() {
   const buttons = [...document.querySelectorAll('button')].filter(visible);
   const tab = name => buttons.find(b => b.textContent.trim() === name);
   const tables = [...document.querySelectorAll('table')].filter(visible).map(t => {
-    const headers = [...t.querySelectorAll('th')].map(e => e.innerText.trim());
+    // Yahoo also uses TH-only "Your Turn" separators inside TBODY. Native
+    // table collections keep those out of the columns and exclude nested tables.
+    const headers = [...(t.tHead?.rows || [])].flatMap(r => [...r.cells].map(e => e.innerText.trim()));
     const kind = headers[0] === 'Pick' && headers[1] === 'Player' ? 'results' : headers.includes('XRank') && headers.includes('Proj Pts') ? 'players' : 'other';
-    return { kind, headers, rows: [...t.querySelectorAll('tbody tr')].filter(visible).map(r => ({
-      cells: [...r.querySelectorAll('td')].map(c => c.innerText), yahooPlayerId: r.querySelector('.ys-player[data-id]')?.getAttribute('data-id'),
+    const dataRows = [...t.tBodies].flatMap(body => [...body.rows]).filter(r => visible(r) && [...r.cells].some(c => c.tagName === 'TD'));
+    return { kind, headers, rows: dataRows.map(r => ({
+      cells: [...r.cells].map(c => c.innerText), yahooPlayerId: r.querySelector('.ys-player[data-id]')?.getAttribute('data-id'),
       title: r.querySelector('.ys-player [title]')?.getAttribute('title') || null,
       buttons: [...r.querySelectorAll('button')].filter(visible).map(b => ({ text: b.innerText.trim(), title: b.title, disabled: b.disabled }))
     })) };
@@ -34,7 +37,9 @@ export function readYahooDocument() {
 }
 
 export function parseYahooObservation(raw, identity) {
-  if (raw.origin !== identity.origin || raw.path !== identity.path) fail('ROOM_MISMATCH', 'The browser is no longer on the verified Yahoo room route');
+  if (raw.origin !== identity.origin || raw.path !== identity.path) fail('ROOM_MISMATCH', 'The browser is no longer on the verified Yahoo room route', {
+    expected: { origin: identity.origin, path: identity.path }, observed: { origin: raw.origin, path: raw.path }
+  });
   const completed = /Draft Complete/i.test(raw.header);
   const waiting = /Draft Starting Soon|Waiting room/i.test(raw.header);
   const phase = completed ? 'completed' : waiting ? 'waiting' : 'drafting';
@@ -57,6 +62,13 @@ export function parseYahooRow(row, kind) {
     team: teamCode(parts[positionAt + 1]), injuryStatus: parts.slice(1, positionAt).join(' ') };
   if (kind === 'results') return { ...player, overallPick: Number(row.cells[0]), isMine: row.cells[2]?.trim() === 'Your Team' };
   return { ...player, available: true, draftEnabled: row.buttons.filter(b => b.text === 'Draft' && !b.disabled).length === 1 };
+}
+
+export function parseYahooRows(raw, kind) {
+  // Retained snapshots from the earlier reader may still contain TH-only rows.
+  // A nonempty data row without an identity remains an error, never a silent skip.
+  return raw.tables.filter(t => t.kind === kind).flatMap(t => t.rows)
+    .filter(row => row.cells.length || row.yahooPlayerId).map(row => parseYahooRow(row, kind));
 }
 
 export function createYahooLiveRoom({ tab, identity, simulation = false, now = Date.now, queueContainerSelector, queueItemSelector = 'li' }) {
@@ -84,7 +96,7 @@ export function createYahooLiveRoom({ tab, identity, simulation = false, now = D
     if (!raw.tables.some(t => t.kind === kind)) fail('ROOM_TABLE_UNAVAILABLE', `The ${name} table has not rendered`);
     return raw;
   }
-  const rows = (raw, kind) => raw.tables.filter(t => t.kind === kind).flatMap(t => t.rows).map(r => parseYahooRow(r, kind));
+  const rows = parseYahooRows;
   async function resetSearch(raw, b) {
     if (raw.searches.length !== 1) fail('ROOM_SEARCH_AMBIGUOUS', 'Identify a unique player-search input');
     const search = raw.searches[0];
@@ -162,7 +174,8 @@ export function createYahooLiveRoom({ tab, identity, simulation = false, now = D
     const before = await readQueue(b), priorIds = before.map(p => p.yahooPlayerId);
     if (priorIds.includes(id)) return { verified: true, alreadyQueued: true, yahooPlayerId: id };
     const target = tab.playwright.locator('table tbody tr').filter({ visible: true })
-      .filter({ has: tab.playwright.locator(`.ys-player[data-id="${id}"]`) }).getByRole('button', { name: 'Queue', exact: true });
+      .filter({ has: tab.playwright.locator(`.ys-player[data-id="${id}"]`) })
+      .locator(`.ys-addqueue[data-id="${id}"]`).getByRole('button');
     let responseError;
     try { await target.press('Enter', { timeoutMs: left(b) }); } catch (e) { responseError = e; }
     const after = await readQueue(b), afterIds = after.map(p => p.yahooPlayerId), added = afterIds.filter(value => !priorIds.includes(value));

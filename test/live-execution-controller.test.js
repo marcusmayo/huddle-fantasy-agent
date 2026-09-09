@@ -76,6 +76,17 @@ function fixture({ full = false, choose, faults = {} } = {}) {
     restart() { drafts = new DraftService(args); }, bump, accept, opponents };
 }
 
+test('a mismatched room retains the observed and expected route through controller handoff', async () => {
+  const f = fixture();
+  const details = { expected: { origin: 'https://football.fantasysports.yahoo.com', path: '/draftclient/f1/153454/2' },
+    observed: { origin: 'https://football.fantasysports.yahoo.com', path: '/draftclient/f1/999999/2' } };
+  f.room.observe = async () => { throw Object.assign(Error('Room changed'), { code: 'ROOM_MISMATCH', details }); };
+  const result = await f.controller.step();
+  assert.deepEqual(result.room, details);
+  assert.deepEqual(f.controller.status().events.find(e => e.type === 'fault').room, details);
+  assert.deepEqual(f.actions, []);
+});
+
 test('a complete DR replay runs all twenty owned turns without a recorder, including adjacent turns, through durable plans and receipts', async () => {
   const f = fixture({ full: true });
   assert.deepEqual(f.roles.map(role => role.role), ['yahoo', 'huddle']);

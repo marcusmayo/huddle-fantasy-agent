@@ -245,12 +245,13 @@ export function createLiveDraftController({ room, huddle, display, identity, rol
     catch (e) {
       if (e.code === 'WINDOW_BOUNDARY') return { yielded: true };
       state.stage = state.pending ? 'uncertain' : 'recovering';
-      emit('fault', { code: e.code || 'OPERATION_FAILED', message: e.message, pending: Boolean(state.pending) });
+      const room = e.code === 'ROOM_MISMATCH' && e.details ? e.details : undefined;
+      emit('fault', { code: e.code || 'OPERATION_FAILED', message: e.message, pending: Boolean(state.pending), ...(room ? { room } : {}) });
       if (['ROOM_MISMATCH', 'HUDDLE_CONTEXT_INVALID', 'ANOTHER_CONTROLLER_ACTIVE', 'MANUAL_MODE_UNVERIFIED', 'CLOCK_RESERVE_REQUIRED', 'ACCEPTANCE_MISMATCH', 'BROWSER_CONTEXT_ENDED'].includes(e.code)) {
         state.fatal = e; state.stage = 'handoff';
         requestStop(e.message);
       }
-      return { fault: e.code || 'OPERATION_FAILED', message: e.message, pending: Boolean(state.pending) };
+      return { fault: e.code || 'OPERATION_FAILED', message: e.message, pending: Boolean(state.pending), ...(room ? { room } : {}) };
     } finally {
       state.busy = false;
       if (state.fatal && !state.haltReason) requestStop(state.fatal.message);
