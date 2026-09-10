@@ -1,0 +1,9 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Huddle · Yahoo clock validation</title>
+<style>body{background:#0c1915;color:#edf4ef;font:18px system-ui;max-width:800px;margin:40px auto;padding:24px}button{font:inherit;padding:12px;background:#b9f643;border:0;border-radius:8px}output{display:block;white-space:pre-wrap;margin-top:20px}small{display:block;margin:20px 0;color:#b6c9c0}</style>
+<h1>Yahoo clock validation</h1><p>Choose the Yahoo draft tab once. Huddle reads its countdown and current pick automatically.</p><button id="connect">Connect Yahoo clock</button> <button id="stop" disabled>Stop</button>
+<small>This validation view does not record video, submit picks, or certify draft readiness. Recognition runs locally.</small><output id="state" role="status">Not connected</output><output id="reading"></output>
+<script src="/yahoo-clock-model.js"></script><script src="/yahoo-clock-reader.js"></script><script>
+let reader;const state=document.querySelector('#state'),reading=document.querySelector('#reading');
+document.querySelector('#connect').onclick=async()=>{try{reader=await HuddleYahooClockReader.start({onState:s=>state.textContent=s,onError:e=>{state.textContent=e.message;reading.textContent='Reading unverified';},onObservation:o=>{state.textContent='Yahoo display read · not yet integrated with the draft';reading.textContent=`Pick ${o.overallPick} · ${o.secondsLeft}s · ${o.onClock?'Your turn':'Other team'}\nRecognition: ${Math.round(o.recognitionMs)} ms`;}});document.querySelector('#stop').disabled=false;document.querySelector('#connect').disabled=true;}catch(e){state.textContent=e.message;}};
+document.querySelector('#stop').onclick=async()=>{await reader?.stop();document.querySelector('#connect').disabled=false;document.querySelector('#stop').disabled=true;};
+</script></html>

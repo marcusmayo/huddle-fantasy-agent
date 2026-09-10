@@ -9,9 +9,11 @@ const { yahooId } = require('./player-evidence');
 const root = path.resolve(__dirname, '../..');
 const runtimeFiles = [...fs.readdirSync(path.join(root, 'src'), { recursive: true }).filter(file => file.endsWith('.js'))
   .map(file => 'src/' + file.replace(/\\/g, '/')),
-  'package.json', 'package-lock.json', 'scripts/local-draft-server.cjs', 'scripts/local-draft-supervisor.cjs',
+  'package.json', 'package-lock.json', 'scripts/hosted-draft-server.cjs', 'scripts/local-draft-server.cjs', 'scripts/local-draft-supervisor.cjs',
   'scripts/live-draft-controller.mjs', 'scripts/yahoo-live-cua-adapter.mjs', 'scripts/yahoo-player-list-cua.mjs', 'scripts/huddle-draft-display-cua.mjs',
-  'public/request.js', 'public/draft-view.html', 'public/draft-view.js', 'public/draft-view-model.js', 'public/draft-view.css'].sort();
+  'public/yahoo-clock-reader.js', 'public/yahoo-clock-model.js', 'public/visual-clock-connection.js', 'public/clock-time-bounds.js',
+  'public/presentation-fit.js', 'public/presentation-capture.js', 'public/draft-presentation.html', 'public/draft-presentation.js', 'public/draft-presentation-layout.js', 'public/draft-presentation.css',
+  'public/turn-evidence.js', 'public/request.js', 'public/draft-workspace-connection.js', 'public/display-time-calibration.js', 'public/display-receipt-routing.js', 'public/draft-display-delivery.js', 'public/draft-view.html', 'public/draft-view.js', 'public/draft-view-model.js', 'public/draft-view.css'].sort();
 const fail = (code, message) => { throw Object.assign(new Error(message), { code }); };
 const clean = value => String(value || '').trim();
 function codeIdentity() {

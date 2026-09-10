@@ -19,6 +19,22 @@ function fixture() {
   } } });
   return { raw, room, actions };
 }
+
+test('collapsed unnamed clear control restores rows even when search remains zero width',async()=>{
+ const raw=fixture().raw;raw.tables[0].rows=[];raw.searches=[{placeholder:'Search for a player',value:'Old Player',width:0,height:21,visible:true,actionable:false}];raw.resets=[{name:'',type:'submit',searchIcon:true}];raw.positionFilters=[];
+ let cleared=0,typed=0;const chain={locator(){return this;},filter(){return this;},press:async()=>{cleared++;raw.searches[0].value='';raw.tables[0].rows=[structuredClone(row)];}};
+ const room=createYahooLiveRoom({identity,tab:{playwright:{evaluate:async()=>structuredClone(raw),locator:()=>chain,getByPlaceholder:()=>({...chain,fill:async()=>{typed++;throw Error('Zero-width field must never be typed into');}})}}});
+ assert.equal((await room.prepare([{yahooPlayerId:'12345',position:'RB',team:'DET'}])).players[0].yahooPlayerId,'12345');assert.equal(cleared,1);assert.equal(typed,0);
+ raw.tables[0].rows=[];await assert.rejects(room.prepare([{yahooPlayerId:'55555',position:'RB',name:'Absent'}]),{code:'ROOM_SEARCH_UNAVAILABLE'});assert.equal(typed,0);
+});
+
+test('manual recovery dismisses the notice and toggles once, verifying state before another call',async()=>{
+ const raw=fixture().raw;Object.assign(raw,{inactivityNotice:true,noticeClosers:1,autodraft:true});let toggles=0,dismissals=0;
+ const locator=selector=>({filter({hasText}={}){if(hasText&&String(hasText)==='/^Autodraft$/')this.toggle=true;return this;},press:async function(){if(this.toggle){toggles++;raw.autodraft=false;}else{dismissals++;raw.inactivityNotice=false;}}});
+ const room=createYahooLiveRoom({identity,tab:{playwright:{evaluate:async()=>structuredClone(raw),locator}}});
+ assert.equal((await room.recoverManual()).autodraft,false);await room.recoverManual();assert.equal(toggles,1);assert.equal(dismissals,1);
+ raw.autoKnown=false;await assert.rejects(room.recoverManual(),{code:'RECOVERY_TOGGLE_AMBIGUOUS'});assert.equal(toggles,1);
+});
 test('actual Yahoo turn separators do not become candidate players', async () => {
   const f = fixture();
   const result = await f.room.prepare([{ yahooPlayerId: '12345', position: 'RB', team: 'DET' }]);

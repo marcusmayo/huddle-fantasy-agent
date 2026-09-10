@@ -14,6 +14,7 @@ const { SleeperClient } = require('./providers/sleeper');
 const { Tank01Client } = require('./providers/tank01');
 const { createYahooOAuthRuntime } = require('./providers/yahoo-oauth');
 const { DraftService } = require('./services/draft-service');
+const { openDraftStream } = require('./services/draft-stream');
 const { exportLocalTransfer, importLocalCompletion } = require('./services/draft-continuity');
 const { DraftReadinessService } = require('./services/draft-readiness-service');
 const { FantasyProsRefreshController } = require('./services/fantasypros-refresh');
@@ -30,6 +31,7 @@ const CONTENT_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  '.wasm': 'application/wasm',
   '.svg': 'image/svg+xml'
 };
 
@@ -207,6 +209,44 @@ async function handleDraftRoutes(request, response, service, parts, { visionClie
     json(response, 200, service.reconcileBrowserResults(sessionId, await readBody(request)));
     return true;
   }
+  if(parts[2]==='display-trace'&&request.method==='POST'){
+    const origin=request.headers.origin;
+    if(!origin||new URL(origin).host!==request.headers.host)throw Object.assign(Error('Use the Huddle page to save display diagnostics'),{code:'DISPLAY_ORIGIN'});
+    json(response,200,service.recordDisplayTrace(sessionId,await readBody(request,65000)));return true;
+  }
+  if(parts[2]==='display-receipt'&&request.method==='POST'){
+    const origin=request.headers.origin;
+    if(!origin||new URL(origin).host!==request.headers.host)throw Object.assign(Error('Use the Huddle page to save display evidence'),{code:'DISPLAY_ORIGIN'});
+    json(response,200,service.recordDisplay(sessionId,await readBody(request)));return true;
+  }
+  if (['human-feed', 'human-delivery'].includes(parts[2]) && request.method === 'POST') {
+    if (runtime?.draftSimulation !== true) throw Object.assign(new Error('Browser companion routes are development-only; use the built-in Yahoo connection'), { code: 'DEVELOPMENT_FEED_ONLY' });
+    const body = await readBody(request);
+    const token = String(request.headers.authorization || '').replace(/^Bearer /, '');
+    // Pairing and render receipts come from Huddle; only scoped observations
+    // may arrive from the read-only extension's origin.
+    if (parts[2] === 'human-delivery' || body.action === 'pair') {
+      const origin = request.headers.origin;
+      if (origin && new URL(origin).host !== request.headers.host) throw Object.assign(new Error('Use the Huddle page for this action'), { code: 'HUMAN_FEED_ORIGIN' });
+    }
+    json(response, 200, parts[2] === 'human-delivery' ? service.humanFeed.delivered(sessionId, body)
+      : body.action === 'pair' ? service.humanFeed.pair(sessionId, body) : service.humanFeed.observe(sessionId, body, token));
+    return true;
+  }
+  if (['visual-clock','clock-delivery'].includes(parts[2]) && request.method === 'POST') {
+    if(runtime?.visualClockEnabled!==true)throw Object.assign(Error('The Yahoo clock reader is not enabled for this build'),{code:'VISUAL_CLOCK_DISABLED'});
+    const origin=request.headers.origin;
+    if(!origin||new URL(origin).host!==request.headers.host)throw Object.assign(Error('Use the Huddle page to connect the clock'),{code:'CLOCK_ORIGIN'});
+    const body=await readBody(request);
+    const token=String(request.headers.authorization||'').replace(/^Bearer /,'');
+    if(parts[2]==='clock-delivery'){
+      const sync=yahooOperations?.draftStatus(entry?.id||service.league.id,sessionId);
+      const age=Date.now()-Date.parse(sync?.lastSuccessAt);
+      if((!sync?.recurring&&service.getSession(sessionId).status!=='completed')||['blocked','degraded','unavailable'].includes(sync?.state)||!Number.isFinite(age)||age<0||age>15000)throw Object.assign(Error('Fresh Yahoo results are required to verify delivery'),{code:'CLOCK_RESULTS_STALE'});
+    }
+    json(response,200,parts[2]==='clock-delivery'?service.visualClock.delivered(sessionId,body):body.action==='pair'?service.visualClock.pair(sessionId):body.action==='trace'?service.visualClock.trace(sessionId,body,token):service.visualClock.observe(sessionId,body,token));
+    return true;
+  }
   if (parts[2] === 'decisions' && request.method === 'GET') {
     json(response, 200, service.decisionSummary(sessionId));
     return true;
@@ -228,7 +268,24 @@ async function handleDraftRoutes(request, response, service, parts, { visionClie
     return true;
   }
   if (parts[2] === 'decision-audit' && request.method === 'GET') {
+    if(new URL(request.url,'http://localhost').searchParams.get('download')==='1'){
+      const artifact=require('./services/draft-report').saveDraftReport(service,sessionId);
+      const body=JSON.stringify(artifact,null,2);
+      response.writeHead(200,{'content-type':'application/json; charset=utf-8','cache-control':'no-store',
+        'content-disposition':'attachment; filename="huddle-draft-report-'+artifact.artifactId.slice(0,12)+'.json"',
+        'content-length':Buffer.byteLength(body),'x-content-type-options':'nosniff'});response.end(body);return true;
+    }
     json(response, 200, service.exportDecisionAudit(sessionId));
+    return true;
+  }
+  if (parts[2] === 'clock-evidence' && request.method === 'GET') {
+    service.getSession(sessionId);
+    json(response,200,service.state.sessions[sessionId].clockEvidence||null);
+    return true;
+  }
+  if (parts[2] === 'timing-evidence' && request.method === 'GET') {
+    service.getSession(sessionId);
+    json(response,200,service.state.sessions[sessionId].timingEvidence||null);
     return true;
   }
   if (parts[2] === 'local-transfer' && request.method === 'POST') {
@@ -251,17 +308,33 @@ async function handleDraftRoutes(request, response, service, parts, { visionClie
     json(response, 200, result);
     return true;
   }
-  if (parts[2] === 'workspace' && request.method === 'GET') {
+  if (['workspace', 'workspace-stream'].includes(parts[2]) && request.method === 'GET') {
+    const readWorkspace = () => {
     const result = service.workspace(sessionId);
     result.card.explanation = deterministicExplanation(result.card);
     result.context = { instance: runtime?.instanceName || 'Huddle', leagueName: service.league.name,
+      visualClockEnabled:runtime?.visualClockEnabled===true,
       simulation: runtime?.draftSimulation === true,
       localDraft: runtime?.localDraft || null,
       teamName: service.league.targetTeam, leagueId: service.league.id, sourceMode: result.session.sourceMode,
-      yahooLeagueKey: entry?.yahooLeagueKey || null, yahooTeamKey: entry?.yahooTeamKey || null,
+      yahooLeagueKey: entry?.yahooLeagueKey || service.league.provenance?.yahooLeagueKey || null, yahooTeamKey: entry?.yahooTeamKey || service.league.provenance?.yahooTeamKey || null,
       accountConnected: Boolean(yahooAccount?.status().connected), oauthEnabled: Boolean(runtime?.yahooOAuthEnabled),
       sync: result.session.sourceMode === 'yahoo' && yahooOperations && entry ? yahooOperations.draftStatus(entry.id, sessionId) : null };
-    json(response, 200, result);
+    if (runtime?.draftSimulation !== true) {
+      result.humanFeed = null;
+      if(runtime?.visualClockEnabled!==true)result.screenClock=null;
+    }
+    if(runtime?.draftSimulation!==true||runtime?.visualClockEnabled===true){
+      if (result.session.sourceMode === 'yahoo') result.apiFeed = {
+        enabled: true, source: 'yahoo-api', ...(result.context.sync || { state: 'unavailable', recurring: false }),
+        clockAvailable: false, publicationDelayKnown: false, selectionWindowVerified: false,
+        minimumSelectionSeconds: 10
+      };
+    }
+    return result;
+    };
+    if (parts[2] === 'workspace-stream') openDraftStream(response, service, readWorkspace);
+    else json(response, 200, readWorkspace());
     return true;
   }
   if (parts[2] === 'evidence-reviews' && request.method === 'POST') {
@@ -669,6 +742,7 @@ function createHandler({ runtime, draftServices, weeklyServices, weeklyFleetRunn
         const body = await readBody(request);
         return json(response, 200, await fantasyProsRefresh.trigger(body, 'manual'));
       }
+      if(request.method==='GET'&&url.pathname==='/api/clock-time')return json(response,200,{serverWallMs:Date.now()});
       if (request.method === 'GET' && serveStatic(url.pathname, response)) return;
       return json(response, 404, { error: 'NOT_FOUND', message: 'Route not found' });
     } catch (error) {

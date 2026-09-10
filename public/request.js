@@ -22,8 +22,16 @@
           ...requestOptions, signal: controller.signal,
           headers: { 'content-type': 'application/json', ...(requestOptions.headers || {}) }
         });
-        const body = await response.json();
-        if (!response.ok) throw Object.assign(new Error(body.message || 'Request failed'), { code: body.code || body.error, status: response.status });
+        const contentType=String(response.headers?.get?.('content-type')||'').split(';')[0].slice(0,80);
+        const rawId=String(response.headers?.get?.('x-request-id')||'');
+        const diagnostics={contentType:/^[a-z0-9.+/-]*$/i.test(contentType)?contentType:'other',
+          requestId:/^[a-z0-9-]{1,80}$/i.test(rawId)?rawId:null,redirected:response.redirected===true,receivedAt:new Date().toISOString()};
+        let body;
+        try { body = await response.json(); }
+        catch { throw Object.assign(new Error([401,403].includes(response.status)
+          ? 'Draft connection could not be verified.' : 'Draft service returned an unreadable response.'),
+          { code: 'INVALID_RESPONSE', status: response.status, diagnostics }); }
+        if (!response.ok) throw Object.assign(new Error(body.message || 'Request failed'), { code: body.code || body.error, status: response.status, details: body.details });
         return body;
       })]);
     } finally {

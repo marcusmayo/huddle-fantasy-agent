@@ -6,7 +6,10 @@ export function readHuddleDraftDocument(body = document.body) {
       const selectors = ['#preferred', '#safe', '#upside', '#selected', '#decision-reason', '#recent', '#roster', '#audit-status'];
       const allPanelsInFrame = selectors.every(selector => { const element = doc.querySelector(selector), box = element?.getBoundingClientRect();
         return box && element.getClientRects().length && box.left >= -1 && box.top >= -1 && box.right <= width + 2 && box.bottom <= height + 2; });
-      return { observedAt: new Date().toISOString(), planId: body.dataset.decisionPlan || '', recommendationId: body.dataset.recommendationId || '',
+      return { observedAt: new Date().toISOString(), sessionId:body.dataset.sessionId,leagueId:body.dataset.leagueId,completed:body.dataset.complete==='true',turnAgreement:body.dataset.turnAgreement,
+        choices:['preferred','safe','upside'].map(id=>({name:text(id),yahooPlayerId:(get(id)?.dataset.playerId||'').split('.p.').at(-1),position:get(id)?.dataset.position,team:get(id)?.dataset.team})),
+        accepted:[...(get('roster')?.children||[])].map(e=>({overallPick:Number(e.dataset.overallPick),yahooPlayerId:(e.dataset.playerId||'').split('.p.').at(-1)})),
+        planId: body.dataset.decisionPlan || '', recommendationId: body.dataset.recommendationId || '',
         overallPick: Number(body.dataset.currentPick), selected: text('selected'), preferred: text('preferred'), safe: text('safe'), upside: text('upside'),
         reason: text('decision-reason'), allPanelsInFrame, stale: body.dataset.stale !== 'false', width, height,
         owned: [...(get('roster')?.children || [])].map(e => e.textContent), recent: [...(get('recent')?.children || [])].map(e => e.textContent) };

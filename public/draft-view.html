@@ -1,15 +1,17 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Huddle · Draft view</title><link rel="stylesheet" href="/draft-view.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Huddle · Draft view</title><link rel="stylesheet" href="/draft-view.css"><link rel="stylesheet" href="/draft-presentation.css"></head>
 <body>
   <main class="stage" aria-label="Draft view">
     <header class="identity"><div><p class="eyebrow" id="environment">HUDDLE / DRAFT VIEW</p><h1 id="league">Loading this draft…</h1><p id="identity-detail"></p></div><a id="back" href="/">Full workspace</a></header>
-    <section class="health" aria-live="polite"><strong id="feed">Waiting for a board update</strong><span id="controller">Draft controller not confirmed</span><span id="clock">Yahoo clock not observed</span></section>
+    <section class="health" aria-live="polite"><strong id="feed">Waiting for a board update</strong><span id="controller">Draft controller not confirmed</span><span id="clock">Yahoo clock not observed</span><strong id="human-delivery"></strong><button id="connect-clock" hidden>Connect Yahoo clock</button><span id="clock-reader-status"></span><span id="receipt-status"></span><span id="connection-status"></span><button id="reconnect-display" hidden>Reconnect view</button><details id="clock-preview-panel" hidden><summary>Clock source preview</summary><canvas id="clock-preview" style="max-width:100%;height:auto"></canvas></details></section>
     <section class="recommendation panel" aria-labelledby="preferred"><div class="row"><p class="eyebrow" id="turn">HUDDLE RECOMMENDS</p><span id="revision"></span></div><div class="row"><h2 id="preferred">Waiting for player evidence</h2><strong id="score"></strong></div><p class="meta" id="preferred-meta"></p><ul id="reasons"></ul><p class="quality" id="quality"></p></section>
     <section class="alternatives" aria-label="All recommendation alternatives"><article class="panel"><p class="eyebrow">SAFER BUILD</p><h3 id="safe">—</h3><p class="meta" id="safe-meta"></p></article><article class="panel"><p class="eyebrow">UPSIDE SWING</p><h3 id="upside">—</h3><p class="meta" id="upside-meta"></p></article></section>
     <section class="decision panel" aria-labelledby="selected"><div class="row"><p class="eyebrow" id="decision-type">OPERATOR DECISION</p><span id="decision-status"></span></div><h2 id="selected">No decision recorded for this turn</h2><p id="comparison"></p><p id="decision-reason"></p></section>
     <section class="receipts"><article class="panel"><div class="row"><p class="eyebrow">YAHOO RECONCILIATION</p><strong id="reconciled">0 picks</strong></div><p id="receipt-detail"></p><ol id="recent"></ol></article><article class="panel"><div class="row"><p class="eyebrow">YOUR ACCEPTED PICKS</p><strong id="owned-count">0</strong></div><ol id="roster"></ol></article></section>
-    <footer><span id="audit-status">Decision history loading</span><a id="audit" href="#">Saved decision history</a><span id="layout-status"></span></footer>
+    <footer><span id="audit-status">Decision history loading</span><a id="audit" href="#" target="_blank" rel="noopener">Saved decision history</a><a id="download-report" href="#" target="_blank" rel="noopener">Download draft report</a><span id="layout-status"></span></footer>
   </main>
-  <script src="/request.js"></script><script src="/draft-view-model.js"></script><script src="/draft-view.js"></script>
+  <script src="/request.js"></script><script src="/yahoo-clock-model.js"></script><script src="/clock-time-bounds.js"></script><script src="/display-time-calibration.js"></script>
+  <script src="/display-receipt-routing.js"></script><script src="/yahoo-clock-reader.js"></script><script src="/visual-clock-connection.js"></script><script src="/turn-evidence.js"></script>
+  <script src="/draft-view-model.js"></script><script src="/draft-display-delivery.js"></script><script src="/draft-workspace-connection.js"></script><script src="/draft-presentation-layout.js"></script><script src="/draft-view.js"></script>
 </body></html>

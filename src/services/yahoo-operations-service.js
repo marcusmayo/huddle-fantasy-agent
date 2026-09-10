@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { YahooDraftPoller, qualifyYahooPlayerKey } = require('../providers/yahoo');
+const { DraftTimingEvidence } = require('./draft-timing-evidence');
 const { YahooTransientWeeklyAdapter } = require('../providers/yahoo-transient-weekly');
 const { extractPlayers, normalizeYahooWeeklyBundle } = require('../providers/yahoo-weekly-normalizer');
 const { draftedRosterSize, positionTargets } = require('../domain/league');
@@ -224,6 +225,7 @@ class YahooOperationsService {
     const poller = this.draftPollers.get(key);
     return status ? {
       ...structuredClone(status),
+      timingEvidence: poller?.timingEvidence?.health() || status.timingEvidence || null,
       recurring: Boolean(poller?.running),
       readInFlight: Boolean(poller?.syncInFlight),
       state: ['completed', 'degraded', 'blocked', 'recovering'].includes(status.state) ? status.state
@@ -272,6 +274,8 @@ class YahooOperationsService {
       lastError: null
     };
     this.draftStatuses.set(key, status);
+    const timing = new DraftTimingEvidence({session:()=>service.state.sessions[sessionId],persist:()=>service.store.save(service.state),now:()=>this.now().getTime(),intervalMs:this.runtime.yahooDraftPollIntervalMs});
+    timing.start();
     const poller = this.pollerFactory({
       client: this.yahooAccount.readClient(),
       leagueKey: entry.yahooLeagueKey,
@@ -282,11 +286,21 @@ class YahooOperationsService {
       intervalMs: this.runtime.yahooDraftPollIntervalMs,
       onStatus: (event) => {
         const current = this.draftStatuses.get(key) || status;
+        if(event.code==='READ_STARTED')timing.readStarted();
+        else if(event.code==='RESULTS_RECEIVED')timing.result(event);
+        else if(event.code==='SYNCED')timing.record('board-reconciled',{pickCount:event.observedPicks,boardChanged:event.boardChanged});
+        else if(event.code==='DRAFT_COMPLETED')timing.record('completed',{pickCount:event.observedPicks});
+        else if(event.level==='error')timing.record('read-error',{code:event.code,message:event.message});
+        current.timingEvidence=timing.health();
         if (event.code === 'READ_STARTED') current.lastAttemptAt = this.iso();
         if (event.code === 'SYNCED') {
           current.state = event.unresolvedPicks?.length ? 'degraded'
             : this.draftPollers.get(key)?.running ? 'running' : 'idle';
           current.lastSuccessAt = this.iso();
+          current.lastReadDurationMs = Math.max(0, Date.parse(current.lastSuccessAt) - Date.parse(current.lastAttemptAt));
+          if (event.boardChanged) current.lastBoardChangeObservedAt = current.lastSuccessAt;
+          current.clockAvailable = false;
+          current.publicationDelayKnown = false;
           current.observedPicks = event.observedPicks;
           current.draftSlot = service.getSession(sessionId).draftSlot;
           current.lastError = event.unresolvedPicks?.length ? {
@@ -309,8 +323,15 @@ class YahooOperationsService {
           current.lastError = { code: event.code, message: event.message };
         }
         this.draftStatuses.set(key, current);
+        service.notifyUpdate();
       }
     });
+    service.visualClock.onBoardAdvance=(id)=>{
+      const active=this.draftPollers.get(this.key(entry.id,id));
+      const requested=Boolean(active?.wakeForBoardAdvance?.());
+      service.visualClock.evidence(id,'board-refresh-dispatched',{requested});
+    };
+    poller.timingEvidence = timing;
     this.draftPollers.set(key, poller);
     return poller;
   }

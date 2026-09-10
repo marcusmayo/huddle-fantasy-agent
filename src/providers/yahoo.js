@@ -40,7 +40,12 @@ function recursivelyFindDraftResults(value, output = []) {
 
 function extractDraftResults(payload) {
   const unique = new Map();
-  for (const result of recursivelyFindDraftResults(payload)) unique.set(result.overallPick, result);
+  for (const result of recursivelyFindDraftResults(payload)) {
+    const previous = unique.get(result.overallPick);
+    if (previous && (previous.yahooPlayerKey !== result.yahooPlayerKey || previous.teamKey !== result.teamKey))
+      throw Object.assign(new Error('Yahoo returned conflicting draft results'), { code: 'YAHOO_DRAFT_CONFLICT' });
+    unique.set(result.overallPick, result);
+  }
   return [...unique.values()].sort((a, b) => a.overallPick - b.overallPick);
 }
 
@@ -123,12 +128,13 @@ class YahooReadOnlyClient {
   }
 
   async draftResults(leagueKey) {
-    const payload = await this.get(`/league/${encodeURIComponent(leagueKey)}/draftresults`);
-    return { payload, picks: extractDraftResults(payload) };
+    const requestStartedAt = new Date().toISOString();
+    const payload = await this.get(`/league/${encodeURIComponent(leagueKey)}/draftresults`, { maxAttempts: 1, requestTimeoutMs: 4000 });
+    return { payload, picks: extractDraftResults(payload), requestStartedAt, receivedAt: new Date().toISOString() };
   }
 
-  async player(playerKey) {
-    const payload = await this.get(`/player/${encodeURIComponent(playerKey)}`);
+  async player(playerKey, options) {
+    const payload = await this.get(`/player/${encodeURIComponent(playerKey)}`, options);
     return extractYahooPlayer(payload, playerKey);
   }
 
@@ -157,45 +163,45 @@ class YahooReadOnlyClient {
     return this.get(`/league/${encodeURIComponent(leagueKey)}/players;${filters.join(';')}`);
   }
 
-  async get(endpoint) {
+  async get(endpoint, { maxAttempts = this.maxAttempts, requestTimeoutMs = this.requestTimeoutMs } = {}) {
     const separator = endpoint.includes('?') ? '&' : '?';
     const url = `${this.baseUrl}${endpoint}${separator}format=json`;
     let lastError;
     let attempts = 0;
-    for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       attempts = attempt;
-      const token = this.tokenProvider ? await this.tokenProvider() : this.accessToken;
-      if (!token) {
-        const error = new Error('Yahoo access token is not configured');
-        error.code = 'YAHOO_TOKEN_MISSING';
-        throw error;
-      }
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
-      let response;
+      let timeout, response, body;
+      lastError = null;
       try {
-        response = await this.fetch(url, {
-          method: 'GET',
-          headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
-          signal: controller.signal
-        });
+        body = await Promise.race([(async () => {
+          const token = this.tokenProvider ? await this.tokenProvider() : this.accessToken;
+          if (controller.signal.aborted) throw Object.assign(new Error('Yahoo request timed out'), { name: 'AbortError' });
+          if (!token) throw Object.assign(new Error('Yahoo access token is not configured'), { code: 'YAHOO_TOKEN_MISSING' });
+          response = await this.fetch(url, { method: 'GET', headers: { authorization: `Bearer ${token}`, accept: 'application/json' }, signal: controller.signal });
+          // The deadline includes response-body decoding, not just headers.
+          return response.ok ? await response.json() : null;
+        })(), new Promise((_, reject) => { timeout = setTimeout(() => { controller.abort(); reject(Object.assign(new Error('Yahoo request timed out'), { name: 'AbortError' })); }, requestTimeoutMs); })]);
       } catch (cause) {
+        if (cause.code === 'YAHOO_TOKEN_MISSING') throw cause;
         lastError = new Error(cause?.name === 'AbortError' ? 'Yahoo request timed out' : 'Yahoo request failed');
         lastError.code = cause?.name === 'AbortError' ? 'YAHOO_REQUEST_TIMEOUT' : 'YAHOO_REQUEST_FAILED';
         lastError.cause = cause;
       } finally {
         clearTimeout(timeout);
       }
-      if (response?.ok) return response.json();
-      if (response) {
+      if (response?.ok && !lastError) return body;
+      if (response && !response.ok) {
         lastError = new Error(`Yahoo request failed (${response.status})`);
         lastError.code = response.status === 429 ? 'YAHOO_RATE_LIMITED' : 'YAHOO_REQUEST_FAILED';
         lastError.status = response.status;
-        const retryAfter = Number(response.headers?.get?.('retry-after'));
-        lastError.retryAfterMs = Number.isFinite(retryAfter) ? Math.max(0, retryAfter * 1_000) : null;
+        const raw = response.headers?.get?.('retry-after');
+        const retryAfter = raw == null ? NaN : Number(raw);
+        lastError.retryAfterMs = Number.isFinite(retryAfter) ? Math.max(0, retryAfter * 1_000)
+          : raw && Number.isFinite(Date.parse(raw)) ? Math.max(0, Date.parse(raw) - Date.now()) : null;
       }
       const retryable = !response || response.status === 429 || response.status >= 500;
-      if (!retryable || attempt === this.maxAttempts) break;
+      if (!retryable || attempt === maxAttempts) break;
       const backoff = lastError.retryAfterMs ?? this.baseDelayMs * (2 ** (attempt - 1));
       await this.sleep(backoff);
     }
@@ -205,7 +211,10 @@ class YahooReadOnlyClient {
 }
 
 class YahooDraftPoller {
-  constructor({ client, leagueKey, sessionId, draftService, playerPool, targetTeamKey, intervalMs = 5000, onStatus = () => {} }) {
+  constructor({ client, leagueKey, sessionId, draftService, playerPool, targetTeamKey, intervalMs = 5000, onStatus = () => {}, now = Date.now, setTimer = setTimeout, clearTimer = clearTimeout }) {
+    this.now = now;
+    this.setTimer = setTimer;
+    this.clearTimer = clearTimer;
     this.client = client;
     this.leagueKey = leagueKey;
     this.sessionId = sessionId;
@@ -243,17 +252,32 @@ class YahooDraftPoller {
 
   async readAndReconcile() {
     this.onStatus({ level: 'info', code: 'READ_STARTED' });
-    const { picks } = await this.client.draftResults(this.leagueKey);
+    const { picks, requestStartedAt, receivedAt } = await this.client.draftResults(this.leagueKey);
+    this.onStatus({level:'info',code:'RESULTS_RECEIVED',pickCount:picks?.length,requestStartedAt,receivedAt});
     const session = this.draftService.getSession(this.sessionId);
+    const beforePickCount = session.picks.length;
+    const ids = new Set();
+    if (!Array.isArray(picks) || picks.length < session.picks.length || picks.length > session.totalPicks)
+      throw Object.assign(new Error('Yahoo returned an incomplete draft board'), { code: 'YAHOO_DRAFT_INCOMPLETE' });
+    for (const [index, pick] of picks.entries()) {
+      if (pick.overallPick !== index + 1 || !pick.yahooPlayerKey || ids.has(pick.yahooPlayerKey) || !pick.teamKey
+        || !pick.teamKey.startsWith(this.leagueKey + '.t.'))
+        throw Object.assign(new Error('Yahoo draft results are not a complete consecutive board'), { code: 'YAHOO_DRAFT_INVALID' });
+      ids.add(pick.yahooPlayerKey);
+      const saved = session.picks[index];
+      if (saved && saved.yahooPlayerKey !== pick.yahooPlayerKey)
+        throw Object.assign(new Error('Yahoo draft results conflict with accepted picks'), { code: 'YAHOO_DRAFT_CONFLICT' });
+    }
     const unresolvedPicks = [];
+    const enrichmentDeadline = Date.now() + 2000;
     for (const pick of picks.filter((item) => item.overallPick > session.picks.length)) {
       let player = this.playerByYahooKey.get(pick.yahooPlayerKey)
         || this.playerByYahooId.get(String(pick.yahooPlayerKey).split('.p.').at(-1));
       let externalPlayer = null;
       if (!player) {
         try {
-          externalPlayer = typeof this.client.player === 'function'
-            ? await this.client.player(pick.yahooPlayerKey)
+          externalPlayer = typeof this.client.player === 'function' && Date.now() < enrichmentDeadline
+            ? await this.client.player(pick.yahooPlayerKey, { maxAttempts: 1, requestTimeoutMs: Math.max(1, enrichmentDeadline - Date.now()) })
             : null;
           const identity = externalPlayer?.name && externalPlayer?.position
             ? `${externalPlayer.name.toLowerCase().replace(/[^a-z0-9]/g, '')}|${externalPlayer.position}`
@@ -306,6 +330,7 @@ class YahooDraftPoller {
       level: 'info',
       code: 'SYNCED',
       observedPicks: picks.length,
+      boardChanged: saved.picks.length !== beforePickCount,
       unresolvedPicks: [...new Set([...persistentUnresolvedPicks, ...unresolvedPicks])].sort((a, b) => a - b)
     });
     if (saved.status === 'completed') {
@@ -315,6 +340,11 @@ class YahooDraftPoller {
     return saved;
   }
 
+  wakeForBoardAdvance() {
+    if(!this.running||this.syncInFlight||this.now()<(this.retryNotBefore||0)||!this.tick)return false;
+    this.clearTimer(this.timer);this.timer=null;this.tick();return true;
+  }
+
   start() {
     if (this.running) return;
     this.running = true;
@@ -322,21 +352,28 @@ class YahooDraftPoller {
     const tick = async () => {
       if (!this.running || generation !== this.runGeneration) return;
       this.timer = null;
+      const startedAt = this.now();
+      let retryDelay = 0;
       try {
         await this.syncOnce();
       } catch (error) {
+        retryDelay = error.retryAfterMs || (error.status === 429 ? 30000 : 0);
         this.onStatus({ level: 'error', code: error.code || 'SYNC_FAILED', message: error.message });
       } finally {
-        if (this.running && generation === this.runGeneration) this.timer = setTimeout(tick, this.intervalMs);
+        // Start-to-start cadence without overlapping a slow read. Provider
+        // backoff is measured from the response, never shortened by read time.
+        this.retryNotBefore=this.now()+retryDelay;
+        const delay = Math.max(100, this.intervalMs - Math.max(0, this.now() - startedAt), retryDelay);
+        if (this.running && generation === this.runGeneration) this.timer = this.setTimer(tick, delay);
       }
     };
-    tick();
+    this.tick=tick;tick();
   }
 
   stop() {
     this.running = false;
     this.runGeneration += 1;
-    clearTimeout(this.timer);
+    this.clearTimer(this.timer);
     this.timer = null;
   }
 }

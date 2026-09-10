@@ -5,6 +5,8 @@ const { playerSnapshot } = require('../domain/player-snapshot');
 const { POLICY: HEALTH_POLICY, mergedHealthFields, validateHealthObservations } = require('../domain/draft-health');
 const { yahooId } = require('./player-evidence');
 const { DraftControllerService } = require('./draft-controller-service');
+const { HumanDraftFeed } = require('./human-draft-feed');
+const { VisualDraftClock } = require('./visual-draft-clock');
 const { assertAuthority } = require('./draft-continuity');
 const { isFreshObservation } = require('../domain/observation-time');
 const { digest, rankingPlayer, choiceSnapshot, appendEvent, verifyEvents, validatePlan } = require('../domain/decision-audit');
@@ -68,12 +70,15 @@ class DraftService {
     this.store = store;
     this.evidenceRetentionDays = Math.max(1, Math.min(30, Number(evidenceRetentionDays) || 30));
     this.now = now;
+    this.updateListeners = new Set();
     this.simulation = simulation === true;
     this.executionInstanceId = executionInstanceId;
     this.state = store.load();
     this.state.sessions ||= {};
     this.state.draftAudit ||= { schemaVersion: 1, recommendations: {}, pools: {}, events: {} };
     this.controllers = new DraftControllerService(this);
+    this.humanFeed = new HumanDraftFeed(this);
+    this.visualClock = new VisualDraftClock(this);
     const pruned = this.pruneExpiredEvidence({ persist: false });
     if (pruned.deletedReviews || pruned.deletedSessions || pruned.deletedAuditSessions) this.persist();
   }
@@ -82,7 +87,7 @@ class DraftService {
     return this.now().toISOString();
   }
 
-  createSession({ draftSlot, sourceMode = 'manual', playerSource = this.playerPool.source }) {
+  createSession({ draftSlot, sourceMode = 'manual', playerSource = this.playerPool.source }, { hostedIdentity = null } = {}) {
     if (!Number.isInteger(draftSlot) || draftSlot < 1 || draftSlot > this.league.teamCount) {
       const error = new Error(`draftSlot must be between 1 and ${this.league.teamCount}`);
       error.code = 'INVALID_DRAFT_SLOT';
@@ -112,8 +117,10 @@ class DraftService {
       createdAt: now,
       updatedAt: now
     };
+    const oldIdentity=this.state.hostedDraftIdentity;
+    if(hostedIdentity){session.buildIdentity=hostedIdentity.buildIdentity;session.poolIdentity=hostedIdentity.poolIdentity;this.state.hostedDraftIdentity={...hostedIdentity,sessionId:id};}
     this.state.sessions[id] = session;
-    this.persist();
+    try{this.persist();}catch(e){delete this.state.sessions[id];if(oldIdentity===undefined)delete this.state.hostedDraftIdentity;else this.state.hostedDraftIdentity=oldIdentity;throw e;}
     return this.decorate(session);
   }
 
@@ -535,6 +542,50 @@ class DraftService {
     return { applied: true, review: structuredClone(saved) };
   }
 
+  recordDisplayTrace(id, input) {
+    this.getSession(id);
+    const session=this.state.sessions[id];
+    if(!Array.isArray(input.events)||input.events.length>50)throw Object.assign(Error('Invalid display trace batch'),{code:'DISPLAY_TRACE_INVALID'});
+    const previous=structuredClone(session.displayDiagnostics);
+    const state=session.displayDiagnostics||={version:1,events:[],lost:0,incomplete:false};
+    const known=new Set(state.events.map(e=>e.id));
+    const types=new Set(['receipt-skipped','receipt-rendered','receipt-send','receipt-error','receipt-acknowledged','receipt-terminal','receipt-expired','render-scheduled','render-frame','render-superseded','workspace-received','stream-error','connection-error','page-hidden','page-visible']);
+    for(const event of input.events){
+      if(typeof event.id!=='string'||event.id.length>100||!types.has(event.type)||!Number.isFinite(event.wallMs)||!Number.isFinite(event.monoMs))continue;
+      if(known.has(event.id))continue;
+      if(state.events.length>=20000){state.incomplete=true;state.lost++;continue;}
+      const clean={id:event.id,type:event.type,wallMs:event.wallMs,monoMs:event.monoMs,receivedAt:this.currentIso()};
+      for(const key of ['recommendationId','currentRecommendationId','receiptId','reason','streamId','sourceReadAt','transport'])if(typeof event[key]==='string')clean[key]=event[key].slice(0,160);
+      for(const key of ['overallPick','attempt','sequence','serverSentAt','workspaceBuildMs','status'])if(Number.isFinite(event[key])&&event[key]>=0)clean[key]=event[key];
+      state.events.push(clean);known.add(clean.id);
+    }
+    state.lost=Math.max(state.lost,Number.isSafeInteger(input.lost)&&input.lost>=0?input.lost:0);
+    if(state.lost)state.incomplete=true;
+    // Diagnostics must not trigger recommendation streams and recursively trace themselves.
+    try{this.store.save(this.state);}catch(error){session.displayDiagnostics=previous;throw error;}
+    return {saved:true,incomplete:state.incomplete,count:state.events.length};
+  }
+
+  recordDisplay(id, input) {
+    const session=this.getSession(id), events=this.state.draftAudit.events[id]||=[];
+    const fail=message=>{throw Object.assign(new Error(message),{code:'DISPLAY_RECEIPT_INVALID'});};
+    if(typeof input.receiptId!=='string'||!input.receiptId.length||input.receiptId.length>100)fail('A display receipt ID is required');
+    const previous=events.find(e=>e.type==='recommendation-displayed'&&e.receiptId===input.receiptId);
+    if(previous){
+      if(previous.recommendationId!==input.recommendationId||previous.overallPick!==input.overallPick||JSON.stringify(previous.playerIds)!==JSON.stringify(input.playerIds)||previous.renderedAt!==input.renderedAt)throw Object.assign(Error('Receipt ID belongs to different display evidence'),{code:'DISPLAY_RECEIPT_INVALID',details:{reason:'receipt-id-conflict'}});
+      return {applied:false,timing:'unknown',receiptId:input.receiptId};
+    }
+    const snapshot=this.state.draftAudit.recommendations[id]?.find(x=>x.id===input.recommendationId);
+    const ids=[snapshot?.preferred,snapshot?.alternatives?.safe,snapshot?.alternatives?.upside].map(x=>x?.player?.id);
+    const panels=['preferred','safe','upside','reasons','recent','roster'];
+    const visibility=require('./display-receipt-validation').validateDisplayReceipt({input,snapshot,session,now:this.now().getTime()});
+    if(!this.decisionSummary(id).integrityVerified)fail('Decision history integrity could not be verified');
+    const length=events.length;
+    appendEvent(events,{type:'recommendation-displayed',eventId:crypto.randomUUID(),receiptId:input.receiptId,observedAt:this.currentIso(),renderedAt:input.renderedAt,overallPick:input.overallPick,recommendationId:snapshot.id,playerIds:ids,...visibility,panels:input.panels.filter(x=>panels.includes(x.id)).map(x=>({id:x.id,visible:true})),timing:'unknown',source:'huddle-visible-page'});
+    try{this.persist();}catch(e){events.splice(length);throw e;}
+    return {applied:true,timing:'unknown',...visibility,receiptId:input.receiptId};
+  }
+
   workspace(id, { saveRecommendation = true } = {}) {
     const card = this.recommendation(id, { saveSnapshot: saveRecommendation });
     return {
@@ -542,6 +593,8 @@ class DraftService {
       card,
       decisions: this.decisionSummary(id),
       controller: this.controllers.status(id),
+      humanFeed: this.humanFeed.status(id),
+      screenClock: this.visualClock.status(id),
       pool: { source: this.state.sessions[id].sourceMode === 'mock' ? 'yahoo-browser-observation' : this.playerPool.source, players: this.sessionPlayers(id) },
       unresolved: { players: this.unresolvedPlayers() }
     };
@@ -769,7 +822,7 @@ class DraftService {
   exportDecisionAudit(id) {
     const summary = this.decisionSummary(id);
     const recommendations = this.state.draftAudit.recommendations[id] || [];
-    return { schemaVersion: 1, session: this.getSession(id), ...summary, recommendations: structuredClone(recommendations),
+    return { schemaVersion: 1, session: this.getSession(id), displayDiagnostics:structuredClone(this.state.sessions[id].displayDiagnostics||null), ...summary, recommendations: structuredClone(recommendations),
       pools: Object.fromEntries([...new Set(recommendations.map(item => item.poolRevision))].map(revision => [revision, structuredClone(this.state.draftAudit.pools[revision])])),
       continuity: Object.values(this.state.executionTransfers || {}).filter(transfer => transfer.sessionId === id)
         .map(transfer => ({ transferId: transfer.transferId, target: transfer.target, status: transfer.status, completion: structuredClone(transfer.completion || null) })) };
@@ -785,8 +838,12 @@ class DraftService {
     session.appliedEvidenceEventIds ||= [];
     const poolIds = new Set(this.playerPool.players.map((player) => player.id));
     const draftedFromPool = session.picks.filter((pick) => poolIds.has(pick.playerId)).length;
+    const { timingEvidence, clockEvidence, displayDiagnostics, ...displaySession } = session;
     return {
-      ...structuredClone(session),
+      ...structuredClone(displaySession),
+      ...(timingEvidence ? {timingEvidence:{version:timingEvidence.version,incomplete:timingEvidence.incomplete,sequence:timingEvidence.events.length}} : {}),
+      ...(clockEvidence ? {clockEvidence:{version:clockEvidence.version,sequence:clockEvidence.events.length}} : {}),
+      ...(displayDiagnostics ? {displayDiagnostics:{version:displayDiagnostics.version,sequence:displayDiagnostics.events.length,lost:displayDiagnostics.lost,incomplete:displayDiagnostics.incomplete}} : {}),
       currentOverall: session.status === 'completed' ? null : session.picks.length + 1,
       availableCount: session.sourceMode === 'mock' ? session.mockRoom?.players.length || 0 : this.playerPool.players.length - draftedFromPool,
       totalPicks: draftedRosterSize(this.league.roster) * this.league.teamCount
@@ -795,6 +852,17 @@ class DraftService {
 
   persist() {
     this.store.save(this.state);
+    this.notifyUpdate();
+  }
+
+  subscribe(listener) {
+    this.updateListeners.add(listener);
+    return () => this.updateListeners.delete(listener);
+  }
+
+  notifyUpdate() {
+    // A disconnected display must never invalidate a durable draft save.
+    for (const listener of this.updateListeners) { try { listener(); } catch { /* transport owns recovery */ } }
   }
 }
 

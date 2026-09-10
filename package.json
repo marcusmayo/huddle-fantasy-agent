@@ -8,6 +8,9 @@
     "node": ">=22"
   },
   "scripts": {
+    "prestart": "node scripts/build-clock-assets.cjs",
+    "prestart:live": "node scripts/build-clock-assets.cjs",
+    "build:clock": "node scripts/build-clock-assets.cjs",
     "start": "node src/server.js",
     "start:live": "node src/server.js",
     "draft:local": "node scripts/local-draft-supervisor.cjs",
@@ -19,7 +22,9 @@
     "check": "npm run verify:core && npm test"
   },
   "dependencies": {
+    "@tesseract.js-data/eng": "1.0.0",
     "js-yaml": "^4.1.0",
+    "tesseract.js": "6.0.1",
     "ws": "^8.18.3"
   }
 }

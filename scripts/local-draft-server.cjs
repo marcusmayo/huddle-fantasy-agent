@@ -34,7 +34,7 @@ function buildLocalDraftServer({ bundle, stateDir, now = () => new Date() }) {
   const entry = { id: league.id, config: league, yahooLeagueKey: league.provenance.yahooLeagueKey, yahooTeamKey: league.provenance.yahooTeamKey };
   const base = `/api/leagues/${encodeURIComponent(league.id)}/draft/sessions/${encodeURIComponent(id)}`;
   const reads = new Set(['workspace', 'controller', 'decisions', 'decision-audit']);
-  const writes = new Set(['controller', 'decisions', 'browser-results', 'health-reviews']);
+  const writes = new Set(['controller', 'decisions', 'browser-results', 'health-reviews', 'human-feed', 'human-delivery']);
   const server = http.createServer(async (req, res) => {
     try {
       if (req.headers.host !== target.host) return send(res, 403, { error: 'LOCAL_HOST_REQUIRED', message: 'Use the prepared local Huddle origin' });
@@ -53,7 +53,7 @@ function buildLocalDraftServer({ bundle, stateDir, now = () => new Date() }) {
         return send(res, 405, { error: 'LOCAL_DRAFT_ROUTE_DISABLED', message: 'This local workspace cannot create, delete or reopen drafts' });
       }
       if (req.method === 'POST' && (!String(req.headers['content-type'] || '').startsWith('application/json')
-        || (req.headers.origin && req.headers.origin !== target.origin))) {
+        || (req.headers.origin && req.headers.origin !== target.origin && !(action === 'human-feed' && /^chrome-extension:\/\/[a-p]{32}$/.test(req.headers.origin))))) {
         return send(res, 403, { error: 'LOCAL_ORIGIN_REQUIRED', message: 'Use same-origin JSON draft requests' });
       }
       await handleDraftRoutes(req, res, service, ['sessions', id, action], { league, leagueEntry: entry, runtime,

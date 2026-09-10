@@ -3,6 +3,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { requestJSON } = require('../public/request');
 
+test('HTML sign-in responses preserve authorization status without exposing response content', async () => {
+  await assert.rejects(requestJSON('/board', {}, async () => ({ok:false,status:401,json:async()=>{throw Error('private HTML');}})), {status:401,code:'INVALID_RESPONSE',message:'Draft connection could not be verified.'});
+});
+
 test('a hung response or JSON body releases the request deadline and a later read succeeds', async () => {
   for (const fetchImpl of [() => new Promise(() => {}), async () => ({ ok: true, json: () => new Promise(() => {}) })]) {
     await assert.rejects(requestJSON('/board', { timeoutMs: 15 }, fetchImpl), { code: 'REQUEST_TIMEOUT' });

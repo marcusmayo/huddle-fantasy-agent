@@ -1,45 +1,28 @@
 'use strict';
+import { readYahooDocument, parseYahooRows, parseYahooRow, parseYahooMockSnapshot, parseYahooObservation } from './yahoo-live-cua-adapter.mjs';
+export const RUNNER_BUILD = '2026-09-09-frozen-parser-v1';
 
 // Load this function definition into the persistent CUA REPL, then pass already
 // verified Yahoo and Huddle tab handles. All browser actions use documented CUA
 // APIs; page evaluation only reads rendered DOM. This file never joins a room.
-function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules, teamCount = 8 }) {
+function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules, teamCount = 8, sessionId, simulation = false }) {
   const rounds = Object.entries(rules.roster || {}).filter(([slot])=>!['IR','IL','NA'].includes(slot)).reduce((sum,[,count])=>sum+Number(count),0);
   if (!Number.isInteger(teamCount) || teamCount < 2 || !Number.isInteger(rounds) || rounds < 1
     || !Number.isInteger(draftSlot) || draftSlot < 1 || draftSlot > teamCount) throw Error('Verified team count, roster size and assigned seat are required');
+  if (!simulation && !sessionId) throw Error('A verified Huddle sessionId is required');
   const expectedPicks = teamCount * rounds;
-  const state = { version: '2026-09-08-single-source-startup', yahoo, huddle, roomId, draftSlot, rules, teamCount, rounds, expectedPicks, stage: 'prepared', log: [], events: [], pending: null, lastSnapshot: null, completedPicks: null };
-  const defenses = { Cardinals:'ARI', Falcons:'ATL', Ravens:'BAL', Bills:'BUF', Panthers:'CAR', Bears:'CHI', Bengals:'CIN', Browns:'CLE', Cowboys:'DAL', Broncos:'DEN', Lions:'DET', Packers:'GB', Texans:'HOU', Colts:'IND', Jaguars:'JAC', Chiefs:'KC', Raiders:'LV', Chargers:'LAC', Rams:'LAR', Dolphins:'MIA', Vikings:'MIN', Patriots:'NE', Saints:'NO', Giants:'NYG', Jets:'NYJ', Eagles:'PHI', Steelers:'PIT', '49ers':'SF', Seahawks:'SEA', Buccaneers:'TB', Titans:'TEN', Commanders:'WAS' };
-  const teamKey = value => String(value).toUpperCase().replace(/^JAX$/, 'JAC');
-  const ownPick = header => Number(header.match(/YOUR TURN\s*•\s*ROUND\s+\d+,\s*PICK\s+(\d+)/i)?.[1] || 0);
+  const roomIdentity = Object.freeze({origin:'https://football.fantasysports.yahoo.com',path:`/draftclient/f1/${roomId}/${draftSlot}`,leagueKey:`nfl.l.${roomId}`,teamKey:`nfl.l.${roomId}.t.${draftSlot}`,draftSlot,totalPicks:expectedPicks});
+  const state = { version: RUNNER_BUILD, sessionId, deliverySource: 'browser-assisted', independentDelivery: false, yahoo, huddle, roomId, draftSlot, rules, teamCount, rounds, expectedPicks, stage: 'prepared', log: [], events: [], pending: null, lastSnapshot: null, completedPicks: null };
+  const teamKey = value => String(value).toUpperCase().replace(/^JAX$/, 'JAC').replace(/^LAR$/, 'LA').replace(/^WSH$/, 'WAS');
+  const ownPick = header => Number(header.match(/YOUR TURN\s*\u2022\s*ROUND\s+\d+,\s*PICK\s+(\d+)/i)?.[1] || 0);
   const stage = name => { state.stage = name; state.events.push({ stage: name, at: Date.now() }); };
-  const player = row => {
-    const parts = row.cells[1].split('\n').map(s => s.trim()).filter(Boolean);
-    const i = parts.findIndex(s => /^(QB|RB|WR|TE|K|DEF)$/.test(s));
-    if (i < 1 || !/^[1-9]\d{0,9}$/.test(row.yahooPlayerId || '')) throw Error('Player row lacks a verified identity');
-    return { name: parts[0], position: parts[i], team: teamKey(parts[i] === 'DEF' ? defenses[parts[0]] || parts[i + 1] : parts[i + 1]), injuryStatus: parts.slice(1, i).join(' '), yahooPlayerId: row.yahooPlayerId };
-  };
+  const player = row => parseYahooRow(row, 'players');
   const button = name => state.yahoo.playwright.locator('button').filter({ hasText: new RegExp(`^${name}$`) });
 
   state.inspect = async function () {
-    return state.yahoo.playwright.evaluate(() => {
-      const visible = element => element.getClientRects().length > 0;
-      const buttons = [...document.querySelectorAll('button')].filter(visible);
-      const tab = name => buttons.find(b => b.textContent.trim() === name);
-      const tables = [...document.querySelectorAll('table')].filter(visible);
-      const table = tables.find(t => [...t.querySelectorAll('th')].some(h => h.innerText.trim() === 'Player'));
-      return {
-        header: document.body.innerText.slice(0, 260),
-        inactivityNotice: document.body.innerText.includes('You have been put into autopick mode due to inactivity.'),
-        autodraft: Boolean(tab('Autodraft')?.querySelector('[data-icon="checkmark-default"]')),
-        autoKnown: Boolean(tab('Autodraft')),
-        playersSelected: tab('Players')?.getAttribute('aria-selected') === 'true',
-        resultsSelected: tab('Results')?.getAttribute('aria-selected') === 'true',
-        roundsSelected: tab('Round by Round')?.getAttribute('aria-selected') === 'true',
-        headers: table ? [...table.querySelectorAll('th')].slice(0, 6).map(h => h.innerText.trim()) : [],
-        rows: table ? [...table.querySelectorAll('tbody tr')].map(r => ({ cells: [...r.querySelectorAll('td')].map(c => c.innerText), yahooPlayerId: r.querySelector('.ys-player')?.getAttribute('data-id') })).filter(r => r.cells.length) : []
-      };
-    }, undefined, { timeoutMs: 6000 });
+    const raw = await state.yahoo.playwright.evaluate(readYahooDocument, undefined, { timeoutMs: 6000 });
+    const table = raw.tables.find(t => t.kind === (raw.playersSelected ? 'players' : 'results'));
+    return {...raw, headers:table?.headers || [], rows:table?.rows || []};
   };
 
   state.recoverManual = async function () {
@@ -107,10 +90,8 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules, teamCoun
 
   state.results = async function () {
     const data = await state.grid('Results');
-    const picks = data.rows.filter(r => r.cells.length === 3 && /^\d+$/.test(r.cells[0]))
-      .map(r => ({ overallPick: Number(r.cells[0]), ...player(r), isMine: r.cells[2].trim() === 'Your Team' }))
-      .sort((a, b) => a.overallPick - b.overallPick);
-    if (picks.some((p, i) => p.overallPick !== i + 1)) throw Error('Yahoo results contain a pick gap');
+    const picks = parseYahooRows(data,'results').sort((a,b)=>a.overallPick-b.overallPick);
+    if (picks.some((p,i)=>p.overallPick!==i+1)) throw Error('Yahoo results contain a pick gap');
     state.resultPicks = picks;
     if (picks.length > expectedPicks) throw Error('Observed board exceeds the verified league draft size');
     if (picks.length === expectedPicks) state.completedPicks = picks;
@@ -118,17 +99,16 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules, teamCoun
   };
 
   state.capture = async function () {
-    const results = await state.results();
-    const picks = results.picks;
-    const data = picks.length === expectedPicks ? results.data : await state.grid('Players');
-    const phase = picks.length === expectedPicks ? 'completed' : /Draft Starting Soon|Waiting room/i.test(data.header) ? 'waiting' : 'drafting';
-    const current = Number(data.header.match(/ROUND\s+\d+,\s*PICK\s+(\d+)/i)?.[1] || 0);
-    if (phase === 'drafting' && current !== picks.length + 1) return { retry: true, header: data.header, count: picks.length };
-    if (phase !== 'completed' && !data.autoKnown) throw Error('Yahoo Autodraft state is not visible');
-    const snapshot = { roomId: state.roomId, draftSlot: state.draftSlot, teamCount: state.teamCount, rules: state.rules, phase, autodraft: data.autodraft, observedAt: new Date().toISOString(), currentOverall: picks.length + 1, picks,
-      availablePlayers: phase === 'completed' ? [] : data.rows.filter(r => r.cells.length > 5).map(r => ({ ...player(r), expertRank: Number(r.cells[2]), adp: Number(r.cells[3]), byeWeek: Number(r.cells[4]) || null, projectedPoints: Number(r.cells[5].replaceAll(',', '')) })) };
-    state.lastSnapshot = snapshot;
-    return { snapshot, header: data.header };
+    const results = await state.grid('Results');
+    const players = /Draft Complete/i.test(results.header) ? null : await state.grid('Players');
+    try {
+      const snapshot = parseYahooMockSnapshot({results,players,identity:roomIdentity,rules,teamCount});
+      state.lastSnapshot=snapshot;
+      return {snapshot,header:(players||results).header};
+    } catch(error) {
+      if (['ROOM_TURN_CHANGED','RESULTS_PREFIX_INCOMPLETE'].includes(error.code)) return {retry:true,code:error.code,header:(players||results).header};
+      stage('blocked'); throw error;
+    }
   };
 
   state.sync = async function (snapshot, { requireRecommendation = true } = {}) {
@@ -141,6 +121,9 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules, teamCoun
     let card;
     do {
       card = await state.huddle.playwright.evaluate(() => ({
+        sessionId: document.querySelector('#mock-sync-status')?.dataset.sessionId,
+        phase: document.querySelector('#mock-sync-status')?.dataset.phase,
+        reconciled: Number(document.querySelector('#mock-sync-status')?.dataset.reconciled),
         pick: Number(document.querySelector('#current-pick')?.textContent),
         ready: document.querySelector('#mock-sync-status')?.getAttribute('data-ready') === 'true',
         status: document.querySelector('#mock-sync-status')?.textContent,
@@ -155,7 +138,7 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules, teamCoun
         why: document.querySelector('#preferred-why')?.innerText
       }), undefined, { timeoutMs: 6000 });
       if (!card.pending && /^Import stopped:/.test(card.error || '')) throw Error(card.error);
-      if (!card.pending && card.inputEmpty && card.pick === snapshot.currentOverall) {
+      if (importAcknowledged(card, snapshot, sessionId, expectedPicks)) {
         state.card = card;
         if (requireRecommendation && snapshot.phase === 'drafting' && !snapshot.autodraft && !card.ready) throw Error(`Huddle not ready: ${card.status}`);
         return card;
@@ -166,13 +149,14 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules, teamCoun
   };
 
   state.cycle = async function () {
+    if (state.pending) return {blocked:'An earlier submission is uncertain; reconcile it before another input'};
     const started = Date.now();
     const initial = await state.inspect();
     const pick = ownPick(initial.header);
     if (!pick) return { waiting: true, header: initial.header };
     if (initial.inactivityNotice || !initial.autoKnown || initial.autodraft) return { blocked: 'Autodraft must be visibly OFF with no inactivity notice', header: initial.header };
-    const secondsAtStart = Number(initial.header.match(/(?:^|\n)(?:00:)?(\d{1,2})(?:\n|$)/)?.[1] || 0);
-    if (!secondsAtStart) return { blocked: 'The pick countdown is not readable', header: initial.header };
+    const secondsAtStart = parseYahooObservation(initial,roomIdentity).secondsLeft;
+    if (secondsAtStart < 12) return { blocked: 'Less than ten seconds plus the two-second safety allowance remains', header: initial.header };
     const captured = await state.capture();
     if (captured.retry) return captured;
     const snapshot = captured.snapshot;
@@ -184,6 +168,8 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules, teamCoun
     const rows = fresh.rows.filter(r => r.yahooPlayerId === card.yahooPlayerId && r.cells.length > 5);
     const position = card.meta.split('·')[0].trim();
     if (ownPick(fresh.header) !== pick || fresh.inactivityNotice || fresh.autodraft || !fresh.playersSelected || rows.length !== 1) return { blocked: 'Live turn or available player changed', header: fresh.header };
+    const observedTurn = parseYahooObservation(fresh,roomIdentity);
+    if (!observedTurn.manualModeKnown || observedTurn.secondsLeft*1000-Math.max(0,Date.now()-Date.parse(fresh.observedAt))-2000 < 10000) return {blocked:'Selection window is too short or manual mode is unverified'};
     const identity = player(rows[0]);
     if (identity.name !== card.observedName || identity.position !== position || identity.team !== teamKey(card.meta.split('·')[1].trim())) throw Error('Preferred player identity disagrees with the visible Yahoo row');
     state.pending = { pick, ...identity, started, submittedAt: null };
@@ -209,7 +195,7 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules, teamCoun
     if (accepted.picks.length === expectedPicks || current === accepted.picks.length + 1) {
       const receipt = { ...snapshot, phase: accepted.picks.length === expectedPicks ? 'completed' : 'drafting',
         picks: accepted.picks, currentOverall: accepted.picks.length + 1, availablePlayers: [],
-        autodraft: accepted.data.autodraft, observedAt: new Date().toISOString() };
+        autodraft: accepted.data.autodraft, observedAt: accepted.data.observedAt };
       try {
         const receiptCard = await state.sync(receipt, { requireRecommendation: false });
         entry.reconciledAfterPick = receipt.picks.length;
@@ -230,7 +216,11 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules, teamCoun
         const result = await state.cycle();
         return { manualVerified: state.log.length, result, stage: state.stage };
       }
-      if (/Draft Complete/.test(data.header) || data.autodraft) break;
+      if (!/Draft Complete/i.test(data.header) && (data.autodraft || data.inactivityNotice || !data.autoKnown)) {
+        stage('blocked');
+        return {manualVerified:state.log.length,result:{blocked:'Yahoo manual mode requires attention',autodraft:data.autodraft},header:data.header};
+      }
+      if (/Draft Complete/i.test(data.header)) break;
       if (Date.now() < deadline) await state.yahoo.playwright.waitForTimeout(600);
     } while (Date.now() < deadline);
     return { manualVerified: state.log.length, waiting: true, autodraft: data.autodraft, header: data.header };
@@ -271,7 +261,17 @@ function createYahooMockLoop({ yahoo, huddle, roomId, draftSlot, rules, teamCoun
     // submitting anything. Do not attach media capture to sync or cycle.
     return state.window({ maxPicks: 1, waitMs: 10000 });
   };
+  if (!simulation) {
+    for (const key of Object.keys(state).filter(key=>typeof state[key]==='function').concat(['version','sessionId','roomId','draftSlot','rules','teamCount','expectedPicks'])) Object.defineProperty(state,key,{writable:false,configurable:false});
+    Object.freeze(rules);
+  }
   return state;
 }
 
 export { createYahooMockLoop };
+
+export function importAcknowledged(card,snapshot,sessionId,expectedPicks) {
+  if (card.pending || !card.inputEmpty || card.sessionId!==sessionId) return false;
+  if (snapshot.phase==='completed') return card.phase==='completed' && card.reconciled===expectedPicks && snapshot.picks.length===expectedPicks;
+  return card.phase!=='completed' && card.pick===snapshot.currentOverall && card.reconciled===snapshot.picks.length;
+}

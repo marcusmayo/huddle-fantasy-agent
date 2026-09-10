@@ -5,6 +5,8 @@ const { draftedRosterSize, pickOwner } = require('./league');
 
 const POSITIONS = new Set(['QB', 'RB', 'WR', 'TE', 'K', 'DEF']);
 const MAX_AGE_MS = 30_000;
+// Historical imports may be older than actionable recommendations.
+const RECOMMENDATION_MAX_AGE_MS = 5000;
 const fail = (code, message) => { throw Object.assign(new Error(message), { code }); };
 const nameKey = (name) => String(name).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 const teamKey = (team) => ({ JAX: 'JAC', WAS: 'WAS', WSH: 'WAS' }[String(team).toUpperCase()] || String(team || 'FA').toUpperCase());
@@ -198,12 +200,14 @@ function mockReadiness(session, now) {
   const reasons = [];
   if (!room) reasons.push('Import a fresh Yahoo room observation.');
   else {
-    if (now.getTime() - Date.parse(room.observedAt) > MAX_AGE_MS) reasons.push('Room observation is stale; read Yahoo again.');
+    const age = now.getTime() - Date.parse(room.observedAt);
+    if (!Number.isFinite(age) || age < -1000 || age > RECOMMENDATION_MAX_AGE_MS) reasons.push('Room observation is stale; read Yahoo again.');
     if (room.autodraft) reasons.push('Yahoo Autodraft is on; turn it off before selecting.');
     if (room.phase !== 'drafting') reasons.push(room.phase === 'completed' ? 'Draft completed.' : 'Yahoo has not started drafting.');
     if (!room.players.length && room.phase !== 'completed') reasons.push('No available candidates were observed.');
   }
-  return { ready: reasons.length === 0, reasons, roomId: room?.roomId || null, observedAt: room?.observedAt || null, currentOverall: session.picks.length + 1 };
+  return { ready: reasons.length === 0, reasons, roomId: room?.roomId || null, observedAt: room?.observedAt || null, currentOverall: session.picks.length + 1,
+    maxAgeMs: RECOMMENDATION_MAX_AGE_MS, deliverySource: 'browser-assisted', readyForTimedHumanDraft: false };
 }
 
 module.exports = { MAX_AGE_MS, mockReadiness, prepareMockSnapshot, resolvePlayer, samePlayer };

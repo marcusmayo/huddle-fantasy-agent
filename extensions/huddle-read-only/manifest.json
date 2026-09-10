@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Huddle read-only draft companion",
+  "version": "0.1.0",
+  "description": "Reads your Yahoo draft board and clock for Huddle. Never selects or queues players.",
+  "permissions": ["storage"],
+  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html" },
+  "content_scripts": [{ "matches": ["https://football.fantasysports.yahoo.com/draftclient/f1/*"], "js": ["human-room-reader.js", "content.js"], "run_at": "document_idle" }]
+}

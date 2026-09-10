@@ -76,3 +76,10 @@ test('local drafts use a fresh matching browser controller observation rather th
   }
   w.controller.active=false;assert.equal(viewModel(w,{now,receivedAt:now}).stale,true);
 });
+
+test('saved calculations do not imply a verified timely recommendation',()=>{
+  const w=room();w.decisions.recommendationSnapshots=2;
+  assert.match(viewModel(w,{now,receivedAt:now}).auditStatus,/2 saved calculations · 0 turns/);
+  w.decisions.events=[{type:'human-recommendation-visible',overallPick:1,timely:true},{type:'human-recommendation-visible',overallPick:1,timely:true},{type:'human-recommendation-visible',overallPick:2,timely:false}];
+  assert.match(viewModel(w,{now,receivedAt:now}).auditStatus,/1 turns with verified timely display/);
+});

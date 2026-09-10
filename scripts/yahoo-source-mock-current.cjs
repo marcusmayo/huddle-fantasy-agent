@@ -1,0 +1,10 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path');
+const {buildApp}=require('../src/server');
+const {JsonStateStore}=require('../src/storage/json-state-store');
+const league={...require('../config/leagues/yahoo-example.json'),id:'yahoo-source-20260909',platform:'manual',name:'Yahoo mock · current local build',targetTeam:'Blitzkrieg',teamCount:8,roster:{QB:1,WR:2,RB:2,TE:1,'R/W/T':1,K:1,DEF:1,BN:6}};
+league.scoring.offense.reception=.5;league.scoring.offense.passingTouchdown=4;
+const dir=path.resolve(__dirname,'../.media-build/yahoo-source-20260909');fs.mkdirSync(dir,{recursive:true});
+const app=buildApp({host:'127.0.0.1',port:0,instanceName:'SOURCE TIMING TEST · browser observations; API measured separately',league,playerPool:{players:[],source:'Yahoo browser observations',complete:false},yahooOAuthEnabled:false,yahooDraftAutoSyncEnabled:false,fantasyProsSyncEnabled:false},{storeFactory:()=>new JsonStateStore(path.join(dir,'state.json')),yahooAccount:{status:()=>({connected:false})},yahooOAuth:{enabled:false,tokenStore:{configured:false}}});
+const s=app.draftService.createSession({draftSlot:8,sourceMode:'mock'});
+app.server.listen(0,'127.0.0.1',()=>{const origin='http://127.0.0.1:'+app.server.address().port;const info={origin,base:origin+'/api/leagues/'+league.id+'/draft/sessions/'+s.id,url:origin+'/draft-view.html?leagueId='+league.id+'&sessionId='+s.id};fs.writeFileSync(path.join(dir,'connection.json'),JSON.stringify(info));console.log(JSON.stringify(info));});

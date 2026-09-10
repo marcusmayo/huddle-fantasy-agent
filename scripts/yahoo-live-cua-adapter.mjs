@@ -3,12 +3,14 @@
 const fail = (code, message, details) => { throw Object.assign(new Error(message), { code, ...(details ? { details } : {}) }); };
 const yahooId = p => String(p?.yahooPlayerId || p?.yahooPlayerKey?.split('.p.').at(-1) || '');
 const teamCode = value => String(value || '').trim().toUpperCase().replace(/^JAX$/, 'JAC').replace(/^WSH$/, 'WAS').replace(/^LAR$/, 'LA');
+const defenseTeams = { Cardinals:'ARI', Falcons:'ATL', Ravens:'BAL', Bills:'BUF', Panthers:'CAR', Bears:'CHI', Bengals:'CIN', Browns:'CLE', Cowboys:'DAL', Broncos:'DEN', Lions:'DET', Packers:'GB', Texans:'HOU', Colts:'IND', Jaguars:'JAC', Chiefs:'KC', Raiders:'LV', Chargers:'LAC', Rams:'LA', Dolphins:'MIA', Vikings:'MIN', Patriots:'NE', Saints:'NO', Giants:'NYG', Jets:'NYJ', Eagles:'PHI', Steelers:'PIT', '49ers':'SF', Seahawks:'SEA', Buccaneers:'TB', Titans:'TEN', Commanders:'WAS' };
 
 export function readYahooDocument({ turnOnly = false } = {}) {
   const visible = e => e && e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden';
   const rect = e => { const r = e.getBoundingClientRect(); return { width: r.width, height: r.height }; };
   const candidates = [...document.querySelectorAll('button')];
-  const auto = candidates.find(b => b.textContent.trim() === 'Autodraft' && visible(b));
+  const autos = candidates.filter(b => b.textContent.trim() === 'Autodraft' && visible(b));
+  const auto = autos.length===1?autos[0]:null;
   const bodyText = document.body?.innerText || '';
   const observation = { observedAt: new Date().toISOString(), origin: location.origin, path: location.pathname,
     header: bodyText.slice(0,1500), inactivityNotice: bodyText.includes('You have been put into autopick mode due to inactivity.'),
@@ -28,16 +30,21 @@ export function readYahooDocument({ turnOnly = false } = {}) {
       buttons: [...r.querySelectorAll('button')].filter(visible).map(b => ({ text: b.innerText.trim(), title: b.title, disabled: b.disabled }))
     })) };
   });
-  const searches = [...document.querySelectorAll('input')].filter(e => /search.*player/i.test(e.placeholder || '')).map(e => ({
-    placeholder: e.placeholder, value: e.value, ...rect(e), visible: Boolean(visible(e)), disabled: e.disabled
-  }));
-  const resets = buttons.filter(b => b.type === 'reset' || /^(clear|reset)( search)?$/i.test(b.getAttribute('aria-label') || b.title || b.innerText.trim()))
-    .map(b => ({ type: b.type, name: b.getAttribute('aria-label') || b.title || b.innerText.trim() }));
+  const searchElements = [...document.querySelectorAll('input')].filter(e => /search.*player/i.test(e.placeholder || ''));
+  const searches = searchElements.map(e => {
+    const r=e.getBoundingClientRect(),hit=r.width>0&&r.height>0?document.elementFromPoint(r.x+r.width/2,r.y+r.height/2):null;
+    return {placeholder:e.placeholder,value:e.value,...rect(e),visible:Boolean(visible(e)),disabled:e.disabled,
+      actionable:Boolean(r.width>=8&&r.height>=8&&hit===e)};
+  });
+  const resets = buttons.filter(b => b.type === 'reset' || /^(clear|reset)( search)?$/i.test(b.getAttribute('aria-label') || b.title || b.innerText.trim())
+    || b.querySelector('[data-icon="close-circle-filled"]')&&searchElements.some(e=>e.parentElement===b.parentElement))
+    .map(b => ({ type: b.type, name: b.getAttribute('aria-label') || b.title || b.innerText.trim(), searchIcon:Boolean(b.querySelector('[data-icon="close-circle-filled"]')) }));
+  const noticeClosers=buttons.filter(b=>b.querySelector('[data-icon="close-default"]')&&b.parentElement?.parentElement?.innerText?.includes('You have been put into autopick mode due to inactivity.')).length;
   const positionFilters = [...document.querySelectorAll('select')].filter(visible).filter(s => [...s.options].some(o => o.text.trim() === 'All Positions'))
     .map(s => ({ value: s.value, label: s.selectedOptions[0]?.text.trim(), options: [...s.options].map(o => ({ value: o.value, label: o.text.trim() })) }));
   return { ...observation,
     playersSelected: tab('Players')?.getAttribute('aria-selected') === 'true', resultsSelected: tab('Results')?.getAttribute('aria-selected') === 'true',
-    roundsSelected: tab('Round by Round')?.getAttribute('aria-selected') === 'true', tables, searches, resets, positionFilters,
+    roundsSelected: tab('Round by Round')?.getAttribute('aria-selected') === 'true', tables, searches, resets, positionFilters, noticeClosers,
     buttons: buttons.map(b => ({ name: b.getAttribute('aria-label') || b.title || b.innerText.trim(), text: b.innerText.trim(), role: b.getAttribute('role') || 'button' })) };
 }
 
@@ -59,7 +66,7 @@ export function parseYahooObservation(raw, identity) {
   const secondsLeft = matches.length === 1 && Number(matches[0][2]) < 60 && short === null
     ? Number(matches[0][1]) * 60 + Number(matches[0][2]) : matches.length === 0 ? short : null;
   if (phase === 'drafting' && secondsLeft === null) fail('ROOM_CLOCK_UNREADABLE', 'Yahoo clock is missing or ambiguous');
-  return { observedAt: raw.observedAt, phase, overallPick, completedPicks: overallPick - 1, secondsLeft,
+  return { observedAt: raw.observedAt, phase, overallPick, completedPicks: overallPick - 1, secondsLeft: completed ? null : secondsLeft,
     onClock: phase === 'drafting' && /YOUR TURN\s*•\s*ROUND/i.test(raw.header),
     manualModeKnown: raw.autoKnown && !raw.inactivityNotice, autodraft: raw.autodraft,
     leagueKey: identity.leagueKey, teamKey: identity.teamKey, draftSlot: identity.draftSlot };
@@ -70,16 +77,48 @@ export function parseYahooRow(row, kind) {
   const positionAt = parts.findIndex(s => /^(QB|RB|WR|TE|K|DEF)$/.test(s));
   if (!/^[1-9]\d*$/.test(row.yahooPlayerId || '') || positionAt < 1) fail('PLAYER_IDENTITY_UNREADABLE', 'The visible row lacks a unique Yahoo ID, name or position');
   const player = { yahooPlayerId: row.yahooPlayerId, name: row.title || parts[0], observedName: parts[0], position: parts[positionAt],
-    team: teamCode(parts[positionAt + 1]), injuryStatus: parts.slice(1, positionAt).join(' ') };
+    team: teamCode(parts[positionAt] === 'DEF' ? defenseTeams[row.title || parts[0]] || defenseTeams[parts[0]] || parts[positionAt + 1] : parts[positionAt + 1]), injuryStatus: parts.slice(1, positionAt).join(' ') };
+  if (!/^[A-Z]{2,4}$/.test(player.team)) fail('PLAYER_TEAM_UNREADABLE', 'The player team is unreadable; a bye-week label is not team evidence');
   if (kind === 'results') return { ...player, overallPick: Number(row.cells[0]), isMine: row.cells[2]?.trim() === 'Your Team' };
   return { ...player, available: true, draftEnabled: row.buttons.filter(b => b.text === 'Draft' && !b.disabled).length === 1 };
 }
 
 export function parseYahooRows(raw, kind) {
+  if (!['players', 'results'].includes(kind)) fail('ROOM_TABLE_UNVERIFIED', 'Unknown table type');
+  const tables = raw.tables.filter(t => t.kind === kind);
+  const selected = kind === 'players' ? raw.playersSelected : raw.resultsSelected;
+  const header = tables[0]?.headers || [];
+  const correct = kind === 'results' ? header.slice(0,3).join('|') === 'Pick|Player|Team'
+    : ['Queue', 'Draft'].includes(header[0]) && header.slice(1,6).join('|') === 'Player|XRank|ADP|Bye|Proj Pts';
+  if (!selected || tables.length !== 1 || !correct) fail('ROOM_TABLE_UNVERIFIED', 'Verify the selected tab and exact table columns before reading rows');
   // Retained snapshots from the earlier reader may still contain TH-only rows.
   // A nonempty data row without an identity remains an error, never a silent skip.
-  return raw.tables.filter(t => t.kind === kind).flatMap(t => t.rows)
+  return tables.flatMap(t => t.rows)
     .filter(row => row.cells.length || row.yahooPlayerId).map(row => parseYahooRow(row, kind));
+}
+
+// Test/browser-assisted import only. This does not provide an independent feed.
+// Preserve the oldest source read; building an envelope must not renew its age.
+export function parseYahooMockSnapshot({ results, players, identity, rules, teamCount, now = Date.now() }) {
+  const board = parseYahooObservation(results, identity);
+  const picks = parseYahooRows(results, 'results').sort((a,b) => a.overallPick-b.overallPick);
+  if (picks.length !== board.completedPicks || picks.some((p,i) => p.overallPick !== i+1)
+      || new Set(picks.map(p=>p.yahooPlayerId)).size !== picks.length) fail('RESULTS_PREFIX_INCOMPLETE', 'The complete board must match the observed turn');
+  const complete = board.phase === 'completed';
+  const current = complete ? board : parseYahooObservation(players, identity);
+  if (!complete && (current.overallPick !== board.overallPick || current.phase !== board.phase)) fail('ROOM_TURN_CHANGED', 'The draft advanced between results and player reads');
+  if (!complete && !current.manualModeKnown) fail('ROOM_MANUAL_MODE_UNVERIFIED', 'Observe manual mode and dismiss inactivity notices before importing recommendations');
+  const sourceTimes = [Date.parse(results.observedAt), ...(!complete ? [Date.parse(players.observedAt)] : [])];
+  if (sourceTimes.some(t=>!Number.isFinite(t)||t>now+1000||now-t>5000)) fail('ROOM_OBSERVATION_STALE', 'The source observation is too old; reread the room');
+  const availablePlayers = complete ? [] : parseYahooRows(players, 'players').map((p,i)=>{
+    const row=players.tables.find(t=>t.kind==='players').rows.filter(r=>r.cells.length||r.yahooPlayerId)[i];
+    return {...p,expertRank:Number(row.cells[2]),adp:Number(row.cells[3]),byeWeek:Number(row.cells[4])||null,projectedPoints:Number(row.cells[5].replaceAll(',',''))};
+  });
+  if (availablePlayers.some(p=>picks.some(pick=>pick.yahooPlayerId===p.yahooPlayerId))) fail('ROOM_AVAILABILITY_CONFLICT', 'A drafted player is still listed as available');
+  return {roomId:identity.path.split('/')[3],draftSlot:identity.draftSlot,teamCount,rules,
+    phase:current.phase,autodraft:current.autodraft,observedAt:new Date(Math.min(...sourceTimes)).toISOString(),currentOverall:current.overallPick,picks,availablePlayers,
+    observationEvidence:{resultsObservedAt:results.observedAt,playersObservedAt:complete?null:players.observedAt,clockObservedAt:current.observedAt,secondsLeft:current.secondsLeft,onClock:current.onClock},
+    deliverySource:'browser-assisted',independentDelivery:false};
 }
 
 export function createYahooLiveRoom({ tab, identity, simulation = false, now = Date.now, queueContainerSelector, queueItemSelector = 'li' }) {
@@ -149,12 +188,14 @@ export function createYahooLiveRoom({ tab, identity, simulation = false, now = D
     if (search.value && (search.width < 8 || !search.visible)) {
       if (raw.resets.length !== 1) fail('ROOM_SEARCH_RESET_UNAVAILABLE', 'The collapsed search needs its visible reset control');
       const reset = raw.resets[0];
-      const control = reset.type === 'reset' ? tab.playwright.locator('button[type="reset"]').filter({ visible: true }) : namedButton(reset.name);
+      const control = reset.searchIcon ? tab.playwright.getByPlaceholder(search.placeholder,{exact:true})
+        .locator('..').locator('button').filter({has:tab.playwright.locator('[data-icon="close-circle-filled"]')})
+        : reset.type === 'reset' ? tab.playwright.locator('button[type="reset"]').filter({ visible: true }) : namedButton(reset.name);
       await control.press('Enter', { timeoutMs: left(b) }); raw = await inspect(b);
       events.push({ type: 'collapsed-search-reset', at: new Date(now()).toISOString() });
     }
-    if (raw.searches[0]?.width < 8 || !raw.searches[0]?.visible || raw.searches[0]?.disabled) fail('ROOM_SEARCH_UNUSABLE', 'Player search remains collapsed after reset');
     if (raw.searches[0].value) {
+      if(raw.searches[0].width<8||!raw.searches[0].visible||raw.searches[0].disabled||raw.searches[0].actionable===false)fail('ROOM_SEARCH_UNUSABLE','Player search is not interactive');
       await tab.playwright.getByPlaceholder(raw.searches[0].placeholder, { exact: true }).fill('', { timeoutMs: left(b) }); raw = await inspect(b);
     }
     if (raw.positionFilters.length === 1 && raw.positionFilters[0].label !== 'All Positions') {
@@ -174,7 +215,7 @@ export function createYahooLiveRoom({ tab, identity, simulation = false, now = D
         matches = rows(raw, 'players').filter(p => p.yahooPlayerId === id);
       }
       if (!matches.length) {
-        if (raw.searches.length !== 1 || !choice.name) fail('ROOM_SEARCH_UNAVAILABLE', 'The preferred player is outside the visible rows and search is unavailable');
+        if (raw.searches.length !== 1 || !choice.name || raw.searches[0].width<8 || !raw.searches[0].visible || raw.searches[0].disabled || raw.searches[0].actionable===false) fail('ROOM_SEARCH_UNAVAILABLE', 'The preferred player is outside the visible rows and search is unavailable');
         await tab.playwright.getByPlaceholder(raw.searches[0].placeholder, { exact: true }).fill(choice.name, { timeoutMs: left(b) });
         raw = await inspect(b); matches = rows(raw, 'players').filter(p => p.yahooPlayerId === id);
       }
@@ -241,6 +282,27 @@ export function createYahooLiveRoom({ tab, identity, simulation = false, now = D
     events.push({ type: 'queue-mismatch', intended: id, added, restored: JSON.stringify(restoredIds) === JSON.stringify(priorIds), at: new Date(now()).toISOString() });
     fail('QUEUE_VERIFICATION_FAILED', 'The actual queue did not match the requested player; no draft input was sent');
   }
-  return { observe: async options => parseYahooObservation(await inspect(budget(options), true), identity), prepare, submit, results,
-    enqueue, queue: options => readQueue(budget(options)), inspect: options => inspect(budget(options)), events: () => structuredClone(events) };
+  async function recoverManual(options){
+    const b=budget(options);let raw=await inspect(b);parseYahooObservation(raw,identity);
+    const phase=name=>events.push({type:'manual-recovery-phase',phase:name,at:new Date(now()).toISOString()});
+    phase('observed');
+    if(raw.inactivityNotice){
+      if(raw.noticeClosers!==1)fail('RECOVERY_NOTICE_AMBIGUOUS','Identify the exact inactivity notice before dismissal');
+      await tab.playwright.locator('button:visible').filter({has:tab.playwright.locator('[data-icon="close-default"]')})
+        .filter({has:tab.playwright.locator('xpath=../..').filter({hasText:'You have been put into autopick mode due to inactivity.'})}).press('Enter',{timeoutMs:left(b)});
+      raw=await inspect(b);parseYahooObservation(raw,identity);
+      raw=await waitForView(raw,r=>!r.inactivityNotice,b);
+      phase('notice-dismissed');
+    }
+    if(!raw.autoKnown)fail('RECOVERY_TOGGLE_AMBIGUOUS','Manual mode control is not uniquely known');
+    if(raw.autodraft){
+      await tab.playwright.locator('button:visible').filter({hasText:/^Autodraft$/}).press('Enter',{timeoutMs:left(b)});
+      phase('manual-toggle-sent');
+      raw=await inspect(b);parseYahooObservation(raw,identity);
+    }
+    raw=await waitForView(raw,r=>r.autoKnown&&!r.autodraft&&!r.inactivityNotice,b);
+    events.push({type:'manual-mode-verified',at:new Date(now()).toISOString()});return parseYahooObservation(raw,identity);
+  }
+  return Object.freeze({ version:'selector-2026-09-09-v2', recoverManual, observe: async options => parseYahooObservation(await inspect(budget(options), true), identity), prepare, submit, results,
+    enqueue, queue: options => readQueue(budget(options)), inspect: options => inspect(budget(options)), events: () => structuredClone(events) });
 }

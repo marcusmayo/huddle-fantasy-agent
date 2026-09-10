@@ -12,3 +12,4 @@ coverage/
 .DS_Store
 npm-debug.log*
 .media-build/
+public/vendor/yahoo-clock/

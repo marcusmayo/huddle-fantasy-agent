@@ -1,0 +1,1204 @@
+{
+  "schemaVersion": 1,
+  "scope": "Actual Yahoo mock; desktop computer use; browser-assisted Huddle recommendations",
+  "roomId": "11197752",
+  "team": "Blitzkrieg",
+  "clockSeconds": 30,
+  "totalResults": 120,
+  "ownedPicks": 15,
+  "manuallyVerified": 15,
+  "fullyManual": true,
+  "unverifiedPicks": [],
+  "independentDeliveryVerified": false,
+  "videoRecorded": false,
+  "visibleTimingReceiptsVerified": false,
+  "selections": [
+    {
+      "pick": 8,
+      "player": "J. Smith-Njigba",
+      "yahooPlayerId": "40041",
+      "position": "WR",
+      "team": "SEA",
+      "reason": "WR #1: +126.5 starting-lineup projection; 126.5 roster-value estimate after bench depth.\nWR fills an uncovered legal starting slot, including eligible Flex.\nStrong value above the currently available replacement level.",
+      "followedHuddle": true,
+      "accepted": true,
+      "secondsAtCycleStart": 21,
+      "cycleToVerifiedAcceptanceMs": 2637,
+      "cycleWithReconciliationMs": 2938,
+      "submittedAt": "2026-09-10T03:43:24.419Z",
+      "estimatedReserveSeconds": 17.363
+    },
+    {
+      "pick": 9,
+      "player": "D. Achane",
+      "yahooPlayerId": "40118",
+      "position": "RB",
+      "team": "MIA",
+      "reason": "RB #1: +125.5 starting-lineup projection; 125.5 roster-value estimate after bench depth.\nRB fills an uncovered legal starting slot, including eligible Flex.\nStrong value above the currently available replacement level.",
+      "followedHuddle": true,
+      "accepted": true,
+      "secondsAtCycleStart": 21,
+      "cycleToVerifiedAcceptanceMs": 2604,
+      "cycleWithReconciliationMs": 2935,
+      "submittedAt": "2026-09-10T03:43:35.054Z",
+      "estimatedReserveSeconds": 17.396
+    },
+    {
+      "pick": 24,
+      "player": "T. McBride",
+      "yahooPlayerId": "34010",
+      "position": "TE",
+      "team": "ARI",
+      "reason": "TE #1: +79.5 starting-lineup projection; 79.5 roster-value estimate after bench depth.\nTE fills an uncovered legal starting slot, including eligible Flex.\nStrong value above the currently available replacement level.",
+      "followedHuddle": true,
+      "accepted": true,
+      "secondsAtCycleStart": 30,
+      "cycleToVerifiedAcceptanceMs": 2132,
+      "cycleWithReconciliationMs": 2443,
+      "submittedAt": "2026-09-10T03:43:50.388Z",
+      "estimatedReserveSeconds": 26.868
+    },
+    {
+      "pick": 25,
+      "player": "B. Hall",
+      "yahooPlayerId": "33991",
+      "position": "RB",
+      "team": "NYJ",
+      "reason": "RB #2: +85.2 starting-lineup projection; 85.2 roster-value estimate after bench depth.\nRB fills an uncovered legal starting slot, including eligible Flex.\nStrong value above the currently available replacement level.",
+      "followedHuddle": true,
+      "accepted": true,
+      "secondsAtCycleStart": 21,
+      "cycleToVerifiedAcceptanceMs": 2972,
+      "cycleWithReconciliationMs": 3322,
+      "submittedAt": "2026-09-10T03:44:01.237Z",
+      "estimatedReserveSeconds": 17.028
+    },
+    {
+      "pick": 40,
+      "player": "R. Rice",
+      "yahooPlayerId": "40084",
+      "position": "WR",
+      "team": "KC",
+      "reason": "WR #2: +62.8 starting-lineup projection; 62.8 roster-value estimate after bench depth.\nWR fills an uncovered legal starting slot, including eligible Flex.\nStrong value above the currently available replacement level.",
+      "followedHuddle": true,
+      "accepted": true,
+      "secondsAtCycleStart": 24,
+      "cycleToVerifiedAcceptanceMs": 2818,
+      "cycleWithReconciliationMs": 3000,
+      "submittedAt": "2026-09-10T03:44:26.822Z",
+      "estimatedReserveSeconds": 20.182
+    },
+    {
+      "pick": 41,
+      "player": "C. Skattebo",
+      "yahooPlayerId": "41922",
+      "position": "RB",
+      "team": "NYG",
+      "reason": "RB #3: +57.5 starting-lineup projection; 57.5 roster-value estimate after bench depth.\nRB fills an uncovered legal starting slot, including eligible Flex.\nStrong value above the currently available replacement level.",
+      "followedHuddle": true,
+      "accepted": true,
+      "secondsAtCycleStart": 18,
+      "cycleToVerifiedAcceptanceMs": 2905,
+      "cycleWithReconciliationMs": 3243,
+      "submittedAt": "2026-09-10T03:44:40.740Z",
+      "estimatedReserveSeconds": 14.095
+    },
+    {
+      "pick": 56,
+      "player": "L. Burden III",
+      "yahooPlayerId": "41824",
+      "position": "WR",
+      "team": "CHI",
+      "reason": "WR #3: +0.0 starting-lineup projection; 61.6 roster-value estimate after bench depth.\nOwned bye-week coverage adds 51.1 estimated points; future waivers are unverified.\nBest blended projection, roster-fit, scarcity, and next-turn value.",
+      "followedHuddle": true,
+      "accepted": true,
+      "secondsAtCycleStart": 30,
+      "cycleToVerifiedAcceptanceMs": 2754,
+      "cycleWithReconciliationMs": 2936,
+      "submittedAt": "2026-09-10T03:45:00.908Z",
+      "estimatedReserveSeconds": 26.246
+    },
+    {
+      "pick": 57,
+      "player": "D. Prescott",
+      "yahooPlayerId": "29369",
+      "position": "QB",
+      "team": "DAL",
+      "reason": "QB #1: +12.5 starting-lineup projection; 12.5 roster-value estimate after bench depth.\nComplete the league-required offensive lineup before adding more bench depth.\nQB fills an uncovered legal starting slot, including eligible Flex.",
+      "followedHuddle": true,
+      "accepted": true,
+      "secondsAtCycleStart": 20,
+      "cycleToVerifiedAcceptanceMs": 3077,
+      "cycleWithReconciliationMs": 3333,
+      "submittedAt": "2026-09-10T03:45:12.632Z",
+      "estimatedReserveSeconds": 15.923
+    },
+    {
+      "pick": 72,
+      "player": "J. Dart",
+      "yahooPlayerId": "41810",
+      "position": "QB",
+      "team": "NYG",
+      "reason": "QB #2: +0.0 starting-lineup projection; 20.3 roster-value estimate after bench depth.\nOwned bye-week coverage adds 16.9 estimated points; future waivers are unverified.\nBest blended projection, roster-fit, scarcity, and next-turn value.",
+      "followedHuddle": true,
+      "accepted": true,
+      "secondsAtCycleStart": 30,
+      "cycleToVerifiedAcceptanceMs": 2314,
+      "cycleWithReconciliationMs": 2499,
+      "submittedAt": "2026-09-10T03:45:27.571Z",
+      "estimatedReserveSeconds": 26.686
+    },
+    {
+      "pick": 73,
+      "player": "J. Warren",
+      "yahooPlayerId": "34447",
+      "position": "RB",
+      "team": "PIT",
+      "reason": "RB #4: +0.0 starting-lineup projection; 14.5 roster-value estimate after bench depth.\nOwned bye-week coverage adds 1.3 estimated points; future waivers are unverified.\nStrong value above the currently available replacement level.",
+      "followedHuddle": true,
+      "accepted": true,
+      "secondsAtCycleStart": 20,
+      "cycleToVerifiedAcceptanceMs": 2486,
+      "cycleWithReconciliationMs": 2668,
+      "submittedAt": "2026-09-10T03:45:38.537Z",
+      "estimatedReserveSeconds": 16.514
+    },
+    {
+      "pick": 88,
+      "player": "Rams",
+      "yahooPlayerId": "100014",
+      "position": "DEF",
+      "team": "LA",
+      "reason": "DEF #1: +18.7 starting-lineup projection; 18.7 roster-value estimate after bench depth.\nDEF fills an uncovered legal starting slot, including eligible Flex.",
+      "followedHuddle": true,
+      "accepted": true,
+      "secondsAtCycleStart": 30,
+      "cycleToVerifiedAcceptanceMs": 2442,
+      "cycleWithReconciliationMs": 2774,
+      "submittedAt": "2026-09-10T03:45:53.919Z",
+      "estimatedReserveSeconds": 26.558
+    },
+    {
+      "pick": 89,
+      "player": "B. Aubrey",
+      "yahooPlayerId": "40819",
+      "position": "K",
+      "team": "DAL",
+      "reason": "K #1: +4.5 starting-lineup projection; 4.5 roster-value estimate after bench depth.\nK fills an uncovered legal starting slot, including eligible Flex.\nThe ADP heuristic flags waiting risk; it is uncalibrated for this room.",
+      "followedHuddle": true,
+      "accepted": true,
+      "secondsAtCycleStart": 20,
+      "cycleToVerifiedAcceptanceMs": 3216,
+      "cycleWithReconciliationMs": 3554,
+      "submittedAt": "2026-09-10T03:46:05.054Z",
+      "estimatedReserveSeconds": 15.783999999999999
+    },
+    {
+      "pick": 104,
+      "player": "H. Henry",
+      "yahooPlayerId": "29269",
+      "position": "TE",
+      "team": "NE",
+      "reason": "TE #2: +0.0 starting-lineup projection; 9.6 roster-value estimate after bench depth.\nOwned bye-week coverage adds 7.4 estimated points; future waivers are unverified.\nBest blended projection, roster-fit, scarcity, and next-turn value.",
+      "followedHuddle": true,
+      "accepted": true,
+      "secondsAtCycleStart": 30,
+      "cycleToVerifiedAcceptanceMs": 2747,
+      "cycleWithReconciliationMs": 3078,
+      "submittedAt": "2026-09-10T03:46:21.084Z",
+      "estimatedReserveSeconds": 26.253
+    },
+    {
+      "pick": 105,
+      "player": "J. Mason",
+      "yahooPlayerId": "34320",
+      "position": "RB",
+      "team": "MIN",
+      "reason": "RB #5: +0.0 starting-lineup projection; 1.9 roster-value estimate after bench depth.\nThe ADP heuristic flags waiting risk; it is uncalibrated for this room.",
+      "followedHuddle": true,
+      "accepted": true,
+      "secondsAtCycleStart": 22,
+      "cycleToVerifiedAcceptanceMs": 3036,
+      "cycleWithReconciliationMs": 3479,
+      "submittedAt": "2026-09-10T03:46:31.567Z",
+      "estimatedReserveSeconds": 17.964
+    },
+    {
+      "pick": 120,
+      "player": "J. Reed",
+      "yahooPlayerId": "40063",
+      "position": "WR",
+      "team": "GB",
+      "reason": "WR #4: +0.0 starting-lineup projection; 1.9 roster-value estimate after bench depth.\nBest blended projection, roster-fit, scarcity, and next-turn value.",
+      "followedHuddle": true,
+      "accepted": true,
+      "secondsAtCycleStart": 15,
+      "cycleToVerifiedAcceptanceMs": 2613,
+      "cycleWithReconciliationMs": 2929,
+      "submittedAt": "2026-09-10T03:47:02.536Z",
+      "estimatedReserveSeconds": 11.387
+    }
+  ],
+  "completedBoard": [
+    {
+      "pick": 1,
+      "player": "J. Gibbs",
+      "yahooPlayerId": "40059",
+      "position": "RB",
+      "team": "DET",
+      "owned": false
+    },
+    {
+      "pick": 2,
+      "player": "B. Robinson",
+      "yahooPlayerId": "40055",
+      "position": "RB",
+      "team": "ATL",
+      "owned": false
+    },
+    {
+      "pick": 3,
+      "player": "J. Chase",
+      "yahooPlayerId": "33393",
+      "position": "WR",
+      "team": "CIN",
+      "owned": false
+    },
+    {
+      "pick": 4,
+      "player": "P. Nacua",
+      "yahooPlayerId": "40168",
+      "position": "WR",
+      "team": "LA",
+      "owned": false
+    },
+    {
+      "pick": 5,
+      "player": "J. Taylor",
+      "yahooPlayerId": "32711",
+      "position": "RB",
+      "team": "IND",
+      "owned": false
+    },
+    {
+      "pick": 6,
+      "player": "C. McCaffrey",
+      "yahooPlayerId": "30121",
+      "position": "RB",
+      "team": "SF",
+      "owned": false
+    },
+    {
+      "pick": 7,
+      "player": "A. St. Brown",
+      "yahooPlayerId": "33500",
+      "position": "WR",
+      "team": "DET",
+      "owned": false
+    },
+    {
+      "pick": 8,
+      "player": "J. Smith-Njigba",
+      "yahooPlayerId": "40041",
+      "position": "WR",
+      "team": "SEA",
+      "owned": true
+    },
+    {
+      "pick": 9,
+      "player": "D. Achane",
+      "yahooPlayerId": "40118",
+      "position": "RB",
+      "team": "MIA",
+      "owned": true
+    },
+    {
+      "pick": 10,
+      "player": "J. Cook III",
+      "yahooPlayerId": "34019",
+      "position": "RB",
+      "team": "BUF",
+      "owned": false
+    },
+    {
+      "pick": 11,
+      "player": "S. Barkley",
+      "yahooPlayerId": "30972",
+      "position": "RB",
+      "team": "PHI",
+      "owned": false
+    },
+    {
+      "pick": 12,
+      "player": "K. Walker III",
+      "yahooPlayerId": "33996",
+      "position": "RB",
+      "team": "KC",
+      "owned": false
+    },
+    {
+      "pick": 13,
+      "player": "C. Lamb",
+      "yahooPlayerId": "32687",
+      "position": "WR",
+      "team": "DAL",
+      "owned": false
+    },
+    {
+      "pick": 14,
+      "player": "J. Jefferson",
+      "yahooPlayerId": "32692",
+      "position": "WR",
+      "team": "MIN",
+      "owned": false
+    },
+    {
+      "pick": 15,
+      "player": "C. Brown",
+      "yahooPlayerId": "40196",
+      "position": "RB",
+      "team": "CIN",
+      "owned": false
+    },
+    {
+      "pick": 16,
+      "player": "D. Henry",
+      "yahooPlayerId": "29279",
+      "position": "RB",
+      "team": "BAL",
+      "owned": false
+    },
+    {
+      "pick": 17,
+      "player": "O. Hampton",
+      "yahooPlayerId": "41807",
+      "position": "RB",
+      "team": "LAC",
+      "owned": false
+    },
+    {
+      "pick": 18,
+      "player": "N. Collins",
+      "yahooPlayerId": "33477",
+      "position": "WR",
+      "team": "HOU",
+      "owned": false
+    },
+    {
+      "pick": 19,
+      "player": "B. Bowers",
+      "yahooPlayerId": "40878",
+      "position": "TE",
+      "team": "LV",
+      "owned": false
+    },
+    {
+      "pick": 20,
+      "player": "D. London",
+      "yahooPlayerId": "33963",
+      "position": "WR",
+      "team": "ATL",
+      "owned": false
+    },
+    {
+      "pick": 21,
+      "player": "A. Jeanty",
+      "yahooPlayerId": "41791",
+      "position": "RB",
+      "team": "LV",
+      "owned": false
+    },
+    {
+      "pick": 22,
+      "player": "G. Pickens",
+      "yahooPlayerId": "34007",
+      "position": "WR",
+      "team": "DAL",
+      "owned": false
+    },
+    {
+      "pick": 23,
+      "player": "A. Brown",
+      "yahooPlayerId": "31883",
+      "position": "WR",
+      "team": "NE",
+      "owned": false
+    },
+    {
+      "pick": 24,
+      "player": "T. McBride",
+      "yahooPlayerId": "34010",
+      "position": "TE",
+      "team": "ARI",
+      "owned": true
+    },
+    {
+      "pick": 25,
+      "player": "B. Hall",
+      "yahooPlayerId": "33991",
+      "position": "RB",
+      "team": "NYJ",
+      "owned": true
+    },
+    {
+      "pick": 26,
+      "player": "C. Olave",
+      "yahooPlayerId": "33966",
+      "position": "WR",
+      "team": "NO",
+      "owned": false
+    },
+    {
+      "pick": 27,
+      "player": "M. Nabers",
+      "yahooPlayerId": "40899",
+      "position": "WR",
+      "team": "NYG",
+      "owned": false
+    },
+    {
+      "pick": 28,
+      "player": "D. Smith",
+      "yahooPlayerId": "33398",
+      "position": "WR",
+      "team": "PHI",
+      "owned": false
+    },
+    {
+      "pick": 29,
+      "player": "K. Williams",
+      "yahooPlayerId": "34120",
+      "position": "RB",
+      "team": "LA",
+      "owned": false
+    },
+    {
+      "pick": 30,
+      "player": "J. Love",
+      "yahooPlayerId": "42625",
+      "position": "RB",
+      "team": "ARI",
+      "owned": false
+    },
+    {
+      "pick": 31,
+      "player": "J. Williams",
+      "yahooPlayerId": "33423",
+      "position": "RB",
+      "team": "DAL",
+      "owned": false
+    },
+    {
+      "pick": 32,
+      "player": "T. Higgins",
+      "yahooPlayerId": "32703",
+      "position": "WR",
+      "team": "CIN",
+      "owned": false
+    },
+    {
+      "pick": 33,
+      "player": "Z. Flowers",
+      "yahooPlayerId": "40039",
+      "position": "WR",
+      "team": "BAL",
+      "owned": false
+    },
+    {
+      "pick": 34,
+      "player": "J. Allen",
+      "yahooPlayerId": "30977",
+      "position": "QB",
+      "team": "BUF",
+      "owned": false
+    },
+    {
+      "pick": 35,
+      "player": "J. Waddle",
+      "yahooPlayerId": "33394",
+      "position": "WR",
+      "team": "DEN",
+      "owned": false
+    },
+    {
+      "pick": 36,
+      "player": "C. Loveland",
+      "yahooPlayerId": "41795",
+      "position": "TE",
+      "team": "CHI",
+      "owned": false
+    },
+    {
+      "pick": 37,
+      "player": "G. Wilson",
+      "yahooPlayerId": "33965",
+      "position": "WR",
+      "team": "NYJ",
+      "owned": false
+    },
+    {
+      "pick": 38,
+      "player": "T. Etienne Jr.",
+      "yahooPlayerId": "33413",
+      "position": "RB",
+      "team": "NO",
+      "owned": false
+    },
+    {
+      "pick": 39,
+      "player": "D. Swift",
+      "yahooPlayerId": "32705",
+      "position": "RB",
+      "team": "CHI",
+      "owned": false
+    },
+    {
+      "pick": 40,
+      "player": "R. Rice",
+      "yahooPlayerId": "40084",
+      "position": "WR",
+      "team": "KC",
+      "owned": true
+    },
+    {
+      "pick": 41,
+      "player": "C. Skattebo",
+      "yahooPlayerId": "41922",
+      "position": "RB",
+      "team": "NYG",
+      "owned": true
+    },
+    {
+      "pick": 42,
+      "player": "T. Warren",
+      "yahooPlayerId": "41799",
+      "position": "TE",
+      "team": "IND",
+      "owned": false
+    },
+    {
+      "pick": 43,
+      "player": "L. Jackson",
+      "yahooPlayerId": "31002",
+      "position": "QB",
+      "team": "BAL",
+      "owned": false
+    },
+    {
+      "pick": 44,
+      "player": "D. Maye",
+      "yahooPlayerId": "40881",
+      "position": "QB",
+      "team": "NE",
+      "owned": false
+    },
+    {
+      "pick": 45,
+      "player": "B. Irving",
+      "yahooPlayerId": "40993",
+      "position": "RB",
+      "team": "TB",
+      "owned": false
+    },
+    {
+      "pick": 46,
+      "player": "Q. Judkins",
+      "yahooPlayerId": "41821",
+      "position": "RB",
+      "team": "CLE",
+      "owned": false
+    },
+    {
+      "pick": 47,
+      "player": "L. McConkey",
+      "yahooPlayerId": "40908",
+      "position": "WR",
+      "team": "LAC",
+      "owned": false
+    },
+    {
+      "pick": 48,
+      "player": "J. Hurts",
+      "yahooPlayerId": "32723",
+      "position": "QB",
+      "team": "PHI",
+      "owned": false
+    },
+    {
+      "pick": 49,
+      "player": "T. Kraft",
+      "yahooPlayerId": "40102",
+      "position": "TE",
+      "team": "GB",
+      "owned": false
+    },
+    {
+      "pick": 50,
+      "player": "T. McMillan",
+      "yahooPlayerId": "41793",
+      "position": "WR",
+      "team": "CAR",
+      "owned": false
+    },
+    {
+      "pick": 51,
+      "player": "J. Burrow",
+      "yahooPlayerId": "32671",
+      "position": "QB",
+      "team": "CIN",
+      "owned": false
+    },
+    {
+      "pick": 52,
+      "player": "J. Daniels",
+      "yahooPlayerId": "40896",
+      "position": "QB",
+      "team": "WAS",
+      "owned": false
+    },
+    {
+      "pick": 53,
+      "player": "S. LaPorta",
+      "yahooPlayerId": "40064",
+      "position": "TE",
+      "team": "DET",
+      "owned": false
+    },
+    {
+      "pick": 54,
+      "player": "H. Fannin Jr.",
+      "yahooPlayerId": "41877",
+      "position": "TE",
+      "team": "CLE",
+      "owned": false
+    },
+    {
+      "pick": 55,
+      "player": "C. Williams",
+      "yahooPlayerId": "40900",
+      "position": "QB",
+      "team": "CHI",
+      "owned": false
+    },
+    {
+      "pick": 56,
+      "player": "L. Burden III",
+      "yahooPlayerId": "41824",
+      "position": "WR",
+      "team": "CHI",
+      "owned": true
+    },
+    {
+      "pick": 57,
+      "player": "D. Prescott",
+      "yahooPlayerId": "29369",
+      "position": "QB",
+      "team": "DAL",
+      "owned": true
+    },
+    {
+      "pick": 58,
+      "player": "E. Egbuka",
+      "yahooPlayerId": "41804",
+      "position": "WR",
+      "team": "TB",
+      "owned": false
+    },
+    {
+      "pick": 59,
+      "player": "D. Moore",
+      "yahooPlayerId": "30994",
+      "position": "WR",
+      "team": "BUF",
+      "owned": false
+    },
+    {
+      "pick": 60,
+      "player": "T. McLaurin",
+      "yahooPlayerId": "31908",
+      "position": "WR",
+      "team": "WAS",
+      "owned": false
+    },
+    {
+      "pick": 61,
+      "player": "J. Williams",
+      "yahooPlayerId": "33967",
+      "position": "WR",
+      "team": "DET",
+      "owned": false
+    },
+    {
+      "pick": 62,
+      "player": "R. Odunze",
+      "yahooPlayerId": "40901",
+      "position": "WR",
+      "team": "CHI",
+      "owned": false
+    },
+    {
+      "pick": 63,
+      "player": "K. Pitts Sr.",
+      "yahooPlayerId": "33392",
+      "position": "TE",
+      "team": "ATL",
+      "owned": false
+    },
+    {
+      "pick": 64,
+      "player": "C. Watson",
+      "yahooPlayerId": "33989",
+      "position": "WR",
+      "team": "GB",
+      "owned": false
+    },
+    {
+      "pick": 65,
+      "player": "P. Washington",
+      "yahooPlayerId": "40234",
+      "position": "WR",
+      "team": "JAC",
+      "owned": false
+    },
+    {
+      "pick": 66,
+      "player": "D. Adams",
+      "yahooPlayerId": "27581",
+      "position": "WR",
+      "team": "LA",
+      "owned": false
+    },
+    {
+      "pick": 67,
+      "player": "D. Montgomery",
+      "yahooPlayerId": "31905",
+      "position": "RB",
+      "team": "HOU",
+      "owned": false
+    },
+    {
+      "pick": 68,
+      "player": "B. Tuten",
+      "yahooPlayerId": "41900",
+      "position": "RB",
+      "team": "JAC",
+      "owned": false
+    },
+    {
+      "pick": 69,
+      "player": "J. Price",
+      "yahooPlayerId": "42654",
+      "position": "RB",
+      "team": "SEA",
+      "owned": false
+    },
+    {
+      "pick": 70,
+      "player": "M. Evans",
+      "yahooPlayerId": "27535",
+      "position": "WR",
+      "team": "SF",
+      "owned": false
+    },
+    {
+      "pick": 71,
+      "player": "R. Stevenson",
+      "yahooPlayerId": "33508",
+      "position": "RB",
+      "team": "NE",
+      "owned": false
+    },
+    {
+      "pick": 72,
+      "player": "J. Dart",
+      "yahooPlayerId": "41810",
+      "position": "QB",
+      "team": "NYG",
+      "owned": true
+    },
+    {
+      "pick": 73,
+      "player": "J. Warren",
+      "yahooPlayerId": "34447",
+      "position": "RB",
+      "team": "PIT",
+      "owned": true
+    },
+    {
+      "pick": 74,
+      "player": "M. Harrison Jr.",
+      "yahooPlayerId": "40893",
+      "position": "WR",
+      "team": "ARI",
+      "owned": false
+    },
+    {
+      "pick": 75,
+      "player": "T. Henderson",
+      "yahooPlayerId": "41823",
+      "position": "RB",
+      "team": "NE",
+      "owned": false
+    },
+    {
+      "pick": 76,
+      "player": "B. Thomas Jr.",
+      "yahooPlayerId": "40883",
+      "position": "WR",
+      "team": "JAC",
+      "owned": false
+    },
+    {
+      "pick": 77,
+      "player": "C. Tate",
+      "yahooPlayerId": "42626",
+      "position": "WR",
+      "team": "TEN",
+      "owned": false
+    },
+    {
+      "pick": 78,
+      "player": "J. Herbert",
+      "yahooPlayerId": "32676",
+      "position": "QB",
+      "team": "LAC",
+      "owned": false
+    },
+    {
+      "pick": 79,
+      "player": "M. Lloyd",
+      "yahooPlayerId": "40971",
+      "position": "RB",
+      "team": "GB",
+      "owned": false
+    },
+    {
+      "pick": 80,
+      "player": "J. Brooks",
+      "yahooPlayerId": "40926",
+      "position": "RB",
+      "team": "CAR",
+      "owned": false
+    },
+    {
+      "pick": 81,
+      "player": "T. Lawrence",
+      "yahooPlayerId": "33389",
+      "position": "QB",
+      "team": "JAC",
+      "owned": false
+    },
+    {
+      "pick": 82,
+      "player": "G. Kittle",
+      "yahooPlayerId": "30259",
+      "position": "TE",
+      "team": "SF",
+      "owned": false
+    },
+    {
+      "pick": 83,
+      "player": "D. Metcalf",
+      "yahooPlayerId": "31896",
+      "position": "WR",
+      "team": "PIT",
+      "owned": false
+    },
+    {
+      "pick": 84,
+      "player": "B. Purdy",
+      "yahooPlayerId": "34218",
+      "position": "QB",
+      "team": "SF",
+      "owned": false
+    },
+    {
+      "pick": 85,
+      "player": "B. Nix",
+      "yahooPlayerId": "40875",
+      "position": "QB",
+      "team": "DEN",
+      "owned": false
+    },
+    {
+      "pick": 86,
+      "player": "D. Kincaid",
+      "yahooPlayerId": "40048",
+      "position": "TE",
+      "team": "BUF",
+      "owned": false
+    },
+    {
+      "pick": 87,
+      "player": "M. Stafford",
+      "yahooPlayerId": "9265",
+      "position": "QB",
+      "team": "LA",
+      "owned": false
+    },
+    {
+      "pick": 88,
+      "player": "Rams",
+      "yahooPlayerId": "100014",
+      "position": "DEF",
+      "team": "LA",
+      "owned": true
+    },
+    {
+      "pick": 89,
+      "player": "B. Aubrey",
+      "yahooPlayerId": "40819",
+      "position": "K",
+      "team": "DAL",
+      "owned": true
+    },
+    {
+      "pick": 90,
+      "player": "D. Goedert",
+      "yahooPlayerId": "31019",
+      "position": "TE",
+      "team": "PHI",
+      "owned": false
+    },
+    {
+      "pick": 91,
+      "player": "J. Goff",
+      "yahooPlayerId": "29235",
+      "position": "QB",
+      "team": "DET",
+      "owned": false
+    },
+    {
+      "pick": 92,
+      "player": "T. Kelce",
+      "yahooPlayerId": "26686",
+      "position": "TE",
+      "team": "KC",
+      "owned": false
+    },
+    {
+      "pick": 93,
+      "player": "I. Likely",
+      "yahooPlayerId": "34095",
+      "position": "TE",
+      "team": "NYG",
+      "owned": false
+    },
+    {
+      "pick": 94,
+      "player": "J. Johnson",
+      "yahooPlayerId": "33113",
+      "position": "TE",
+      "team": "NO",
+      "owned": false
+    },
+    {
+      "pick": 95,
+      "player": "K. Murray",
+      "yahooPlayerId": "31833",
+      "position": "QB",
+      "team": "MIN",
+      "owned": false
+    },
+    {
+      "pick": 96,
+      "player": "M. Andrews",
+      "yahooPlayerId": "31056",
+      "position": "TE",
+      "team": "BAL",
+      "owned": false
+    },
+    {
+      "pick": 97,
+      "player": "T. Pollard",
+      "yahooPlayerId": "31960",
+      "position": "RB",
+      "team": "TEN",
+      "owned": false
+    },
+    {
+      "pick": 98,
+      "player": "C. Godwin Jr.",
+      "yahooPlayerId": "30197",
+      "position": "WR",
+      "team": "TB",
+      "owned": false
+    },
+    {
+      "pick": 99,
+      "player": "C. Hubbard",
+      "yahooPlayerId": "33514",
+      "position": "RB",
+      "team": "CAR",
+      "owned": false
+    },
+    {
+      "pick": 100,
+      "player": "J. Dobbins",
+      "yahooPlayerId": "32725",
+      "position": "RB",
+      "team": "DEN",
+      "owned": false
+    },
+    {
+      "pick": 101,
+      "player": "R. Dowdle",
+      "yahooPlayerId": "33100",
+      "position": "RB",
+      "team": "PIT",
+      "owned": false
+    },
+    {
+      "pick": 102,
+      "player": "J. Downs",
+      "yahooPlayerId": "40126",
+      "position": "WR",
+      "team": "IND",
+      "owned": false
+    },
+    {
+      "pick": 103,
+      "player": "Q. Johnston",
+      "yahooPlayerId": "40051",
+      "position": "WR",
+      "team": "LAC",
+      "owned": false
+    },
+    {
+      "pick": 104,
+      "player": "H. Henry",
+      "yahooPlayerId": "29269",
+      "position": "TE",
+      "team": "NE",
+      "owned": true
+    },
+    {
+      "pick": 105,
+      "player": "J. Mason",
+      "yahooPlayerId": "34320",
+      "position": "RB",
+      "team": "MIN",
+      "owned": true
+    },
+    {
+      "pick": 106,
+      "player": "Texans",
+      "yahooPlayerId": "100034",
+      "position": "DEF",
+      "team": "HOU",
+      "owned": false
+    },
+    {
+      "pick": 107,
+      "player": "Broncos",
+      "yahooPlayerId": "100007",
+      "position": "DEF",
+      "team": "DEN",
+      "owned": false
+    },
+    {
+      "pick": 108,
+      "player": "Seahawks",
+      "yahooPlayerId": "100026",
+      "position": "DEF",
+      "team": "SEA",
+      "owned": false
+    },
+    {
+      "pick": 109,
+      "player": "K. Fairbairn",
+      "yahooPlayerId": "29792",
+      "position": "K",
+      "team": "HOU",
+      "owned": false
+    },
+    {
+      "pick": 110,
+      "player": "Eagles",
+      "yahooPlayerId": "100021",
+      "position": "DEF",
+      "team": "PHI",
+      "owned": false
+    },
+    {
+      "pick": 111,
+      "player": "C. Dicker",
+      "yahooPlayerId": "34344",
+      "position": "K",
+      "team": "LAC",
+      "owned": false
+    },
+    {
+      "pick": 112,
+      "player": "Ravens",
+      "yahooPlayerId": "100033",
+      "position": "DEF",
+      "team": "BAL",
+      "owned": false
+    },
+    {
+      "pick": 113,
+      "player": "J. Myers",
+      "yahooPlayerId": "28378",
+      "position": "K",
+      "team": "SEA",
+      "owned": false
+    },
+    {
+      "pick": 114,
+      "player": "Vikings",
+      "yahooPlayerId": "100016",
+      "position": "DEF",
+      "team": "MIN",
+      "owned": false
+    },
+    {
+      "pick": 115,
+      "player": "C. Little",
+      "yahooPlayerId": "41062",
+      "position": "K",
+      "team": "JAC",
+      "owned": false
+    },
+    {
+      "pick": 116,
+      "player": "Jaguars",
+      "yahooPlayerId": "100030",
+      "position": "DEF",
+      "team": "JAC",
+      "owned": false
+    },
+    {
+      "pick": 117,
+      "player": "T. Loop",
+      "yahooPlayerId": "41988",
+      "position": "K",
+      "team": "BAL",
+      "owned": false
+    },
+    {
+      "pick": 118,
+      "player": "W. Reichard",
+      "yahooPlayerId": "41093",
+      "position": "K",
+      "team": "MIN",
+      "owned": false
+    },
+    {
+      "pick": 119,
+      "player": "C. Santos",
+      "yahooPlayerId": "28227",
+      "position": "K",
+      "team": "CHI",
+      "owned": false
+    },
+    {
+      "pick": 120,
+      "player": "J. Reed",
+      "yahooPlayerId": "40063",
+      "position": "WR",
+      "team": "GB",
+      "owned": true
+    }
+  ]
+}

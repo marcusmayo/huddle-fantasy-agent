@@ -1,0 +1,35 @@
+/* Opt-in presentation layout. No scrolling containers, clipping, hidden picks,
+   zoom or smaller-than-12px body text. Geometry checks still govern acceptance. */
+@media(min-width:600px){
+html[data-presentation=compact] .stage{padding:5px 7px;gap:5px;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);grid-template-areas:'identity identity identity' 'health health health' 'left middle right' 'footer footer footer';align-items:start}
+html[data-presentation=compact] .presentation-column{display:flex;flex-direction:column;gap:5px;min-width:0}
+html[data-presentation=compact] .presentation-left{grid-area:left}
+html[data-presentation=compact] .presentation-middle{grid-area:middle}
+html[data-presentation=compact] .presentation-right{grid-area:right}
+html[data-presentation=compact] .identity{grid-area:identity;gap:5px}
+html[data-presentation=compact] .identity h1{font-size:17px;line-height:1.15;margin:1px 0}
+html[data-presentation=compact] .identity p,html[data-presentation=compact] .identity a{font-size:12px;line-height:1.15}
+html[data-presentation=compact] .eyebrow{font-size:12px;letter-spacing:0}
+html[data-presentation=compact] .health{grid-area:health;font-size:12px;line-height:1.15;padding:4px 6px;gap:2px 8px}
+html[data-presentation=compact] .panel{padding:5px 6px;border-radius:5px}
+html[data-presentation=compact] .recommendation{grid-area:recommendation}
+html[data-presentation=compact] .recommendation h2{font-size:20px;margin:2px 0}
+html[data-presentation=compact] #score{font-size:14px}
+html[data-presentation=compact] .meta,html[data-presentation=compact] #reasons,html[data-presentation=compact] .quality{font-size:12px;line-height:1.15}
+html[data-presentation=compact] #reasons{padding-left:13px;margin-top:4px}
+html[data-presentation=compact] .row{flex-wrap:wrap;gap:2px 6px}
+html[data-presentation=compact] .row>span{font-size:12px;white-space:normal}
+html[data-presentation=compact] .alternatives{grid-area:alternatives;grid-template-columns:1fr;gap:5px}
+html[data-presentation=compact] .alternatives h3{font-size:17px;margin:2px 0}
+html[data-presentation=compact] .decision{grid-area:decision}
+html[data-presentation=compact] .decision h2{font-size:18px;margin:3px 0}
+html[data-presentation=compact] .decision p:not(.eyebrow){font-size:12px;line-height:1.15}
+html[data-presentation=compact] .receipts{display:contents}
+html[data-presentation=compact] .receipts>article:first-child{grid-area:recent}
+html[data-presentation=compact] .receipts>article:last-child{grid-area:roster}
+html[data-presentation=compact] #recent,html[data-presentation=compact] #receipt-detail,html[data-presentation=compact] #recent small{font-size:12px;line-height:1.15}
+html[data-presentation=compact] #recent{gap:3px;margin-top:4px}
+html[data-presentation=compact] #recent li{flex-wrap:wrap;gap:2px}
+html[data-presentation=compact] #roster{grid-template-columns:1fr;font-size:12px;line-height:1.15;gap:3px 5px;margin-top:4px}
+html[data-presentation=compact] footer{grid-area:footer;font-size:12px;line-height:1.15;gap:3px 10px}
+}

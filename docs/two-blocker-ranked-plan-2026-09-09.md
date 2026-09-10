@@ -1,0 +1,23 @@
+# Clock coverage and selector continuity — ranked implementation plan
+
+The user authorizes isolated implementation, testing and progression to the next applicable candidate. No threshold relaxation, main publication, extension installation, human substitution or actual Yahoo submissions are implied by a local component pass.
+
+## Clock candidates
+
+1. **Concurrent region recognition.** Keep B2's on-demand geometry discovery and strict fresh room/clock/turn reads from one captured image. Compare sequential OCR with a fixed three-worker pool on the saved corpus in the actual browser. Warm workers before capture, bound one frame in flight plus one replaceable pending image, and join only the same frame and epoch using minimum confidence. Select this only if accuracy and worst-case complete processing improve. It targets the measured 300 ms recognition-call cost without a network dependency. Memory and contention are explicit risks.
+2. **Off-thread pixel preparation.** If the first option fails, measure preparation/transfer overhead before adding a bundled worker. Preserve original capture time and pixels; do not timestamp asynchronous completion as capture. Keep cleanup, resize and stop invalidation. It targets the measured 80–104 ms snapshot cost but cannot by itself guarantee a faster frame callback cadence.
+3. **Same-application hosted OCR.** If local browser processing cannot meet coverage, measure a minimal-header, authenticated, same-origin, read-only OCR route with bounded request size and concurrency and no persisted image. Require complete upload-to-acceptance coverage; server compute benchmarks alone do not qualify. No third-party OCR or separate user install.
+4. **Scope fallback for review only.** If all bounded candidates fail, propose keeping prompt recommendations with an explicit unverified-clock state. This cannot pass the current clock gate without a user-approved scope change.
+
+The clock gate checks every previous calibrated capture expiry against the next server acceptance, not merely the interval between acknowledgments. Keep the 1,500 ms limit, two-second source-response-to-visible limit, and at least ten-second human reserve. Longer clocks receive recommendations at the same speed. Corpus and focused tests precede another capture request; repeated and full controlled validations follow a genuine short pass.
+
+## Selector candidates
+
+1. **One bounded persistent UI run across orchestration boundaries.** Test whether the available CUA runtime can continue supported DOM observations while a tool invocation returns. Begin with a finite read-only probe. If supported, use the existing independent UI selector with an explicit deadline, stop flag, single outstanding action and durable event checkpoints; verify an entire controlled sequence. Decisions follow visible Huddle choices, actions use visible controls, and acceptance must be independently observed. This is a ChatGPT-controlled UI runner, not a claim that the language model re-reasons about each player. Huddle remains independent of it.
+2. **Adjacent bounded invocation windows.** If persistence is unsupported, test immediately adjacent bounded windows with no analysis/report work between windows. Preserve state and measure every caller gap. Earlier 25.883-second gaps mean this is unproven; a unit loop cannot certify it. Reject on any observation gap over five seconds or unknown selection. Do not repeatedly run full drafts to re-prove a failed lifecycle.
+3. **Supported external computer-use executor.** If neither runtime pattern can sustain coverage, identify a supported executor integration with explicit lifecycle, cancellation and observation acknowledgments. Prototype against controlled UI only if that capability actually exists. Do not build hidden Yahoo writes or label a custom browser driver as a newly supported integration.
+4. **Human operator for review only.** A human selecting from independent Huddle recommendations is a viable product workflow, but changes the requested ChatGPT-operated validation. Do not substitute it or claim it closes selector continuity without explicit approval.
+
+## Evidence and stopping
+
+Read-only probe success is necessary but not sufficient: it must be followed by controlled visible selections, no duplicate submit after uncertainty, exact identities, manual mode, all expected picks and zero autodrafts. Stop on an uncertain action and retain evidence; do not conceal recovered failures. Record unavailable candidates and their reasons. If all applicable candidates fail, return the remaining architecture/scope decision rather than claiming success or endlessly repeating exhausted plans.

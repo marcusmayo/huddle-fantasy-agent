@@ -79,6 +79,10 @@ class DraftReadinessService {
       ...current,
       blockers: [...new Set(blockers)],
       readyForLiveDraft: Boolean(current.readyForLiveDraft && fresh && !this.inFlight && blockers.length === 0),
+      readinessScope: 'account-league-player-checks',
+      readyForTimedHumanDraft: false,
+      humanTiming: { minimumSelectionSeconds: 10, verified: false,
+        reason: 'Live Yahoo pick deadlines and publication delay are not verified by the built-in API connection.' },
       preflightEvidenceRefresh: fresh ? this.last.preflightEvidenceRefresh : null,
       yahooRehearsals: fresh ? this.last.yahooRehearsals : []
     };

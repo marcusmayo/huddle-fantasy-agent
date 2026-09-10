@@ -14,3 +14,25 @@
   #receipt-detail{font-size:10px;margin:4px 0}#recent{font-size:11px;gap:4px;margin-top:5px}#recent small{font-size:9px}
   #roster{grid-template-columns:1fr 1fr;font-size:11px;line-height:1.15;gap:3px 7px;margin-top:6px}footer{font-size:10px;gap:4px;line-height:1.15}
 }
+
+/* Keep the complete owned roster readable beside recent reconciliation.
+   Do not clip overflow: the visible-fit check must still reject small views. */
+@media(min-width:560px){
+  .receipts{grid-template-columns:.8fr 1.2fr}
+  #roster{grid-template-columns:repeat(3,minmax(0,1fr));font-size:12px;line-height:1.25;gap:4px 8px}
+  body[data-complete=true] .alternatives{display:none}
+  body[data-complete=true] .recommendation{padding-block:6px}
+}
+@media(min-width:560px) and (max-width:720px){
+  .health{font-size:12px}.meta,#reasons,.decision p:not(.eyebrow),#recent{font-size:12px}
+  .identity p:last-child{overflow-wrap:anywhere}
+  #roster{font-size:12px;gap:3px 6px}
+}
+
+/* Wide split views can share vertical space without hiding draft evidence. */
+@media(min-width:960px){
+  .stage{grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);grid-template-areas:'identity identity' 'health health' 'recommendation decision' 'alternatives receipts' 'footer footer';align-items:start}
+  .identity{grid-area:identity}.health{grid-area:health}.recommendation{grid-area:recommendation}.decision{grid-area:decision}
+  .alternatives{grid-area:alternatives;grid-template-columns:1fr}.receipts{grid-area:receipts;grid-template-columns:1fr}
+  footer{grid-area:footer}.alternatives h3{font-size:18px}.recommendation h2{font-size:25px}
+}

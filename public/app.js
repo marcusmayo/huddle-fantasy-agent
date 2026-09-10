@@ -742,9 +742,9 @@ function renderDraftReadiness() {
   const demo = !yahooSyncEligible();
   const ready = !demo && !recommendationBlocked && !state.readinessError && !running && report?.readyForLiveDraft;
   const label = recommendationBlocked ? 'NOT READY' : running ? 'CHECKING' : state.readinessError ? 'CHECK FAILED' : demo ? 'DEMO / MANUAL'
-    : ready ? 'READY' : !snapshot || snapshot.state === 'unchecked' ? 'NOT CHECKED' : 'NOT READY';
+    : ready ? report?.readyForTimedHumanDraft ? 'READY' : 'CONNECTED · TIMING UNVERIFIED' : !snapshot || snapshot.state === 'unchecked' ? 'NOT CHECKED' : 'NOT READY';
   $('#draft-readiness-state').textContent = label;
-  panel.dataset.state = ready ? 'ready' : running ? 'running' : 'blocked';
+  panel.dataset.state = ready && report?.readyForTimedHumanDraft ? 'ready' : running ? 'running' : 'blocked';
   panel.setAttribute('aria-busy', String(Boolean(running)));
   $('#check-draft-readiness').disabled = Boolean(running);
   $('#check-draft-readiness').textContent = running ? 'Checking…' : 'Check draft readiness';
@@ -752,7 +752,7 @@ function renderDraftReadiness() {
     ? 'This session has no eligible recommendation. Resolve the player pool or roster constraints before joining a timed draft.'
     : state.readinessError || (running ? snapshot?.stage || 'Starting checks…'
     : demo ? 'Demo and manual drafts need no Yahoo check. Connect Yahoo and import a league for live use.'
-    : ready ? 'Ready for live Yahoo drafting. Review warnings below; you still make every pick in Yahoo.'
+    : ready ? 'Connection and player checks passed. The minimum ten-second human selection window is not yet verified. You can open the recommendation workspace; check the clock in Yahoo.'
     : 'Check here before a live Yahoo draft. Resolve blockers, then check again. No terminal required.');
   $('#draft-readiness-time').textContent = snapshot?.checkedAt
     ? `Last checked ${new Date(snapshot.checkedAt).toLocaleTimeString()} · recheck after changes or 15 minutes`
@@ -1314,6 +1314,10 @@ async function resumeSession(id) {
       return;
     }
     localStorage.setItem(sessionKey(), id);
+    if (state.session.sourceMode === 'yahoo') {
+      try { state.yahooDraftSync = await api(scoped(`/draft/sessions/${id}/yahoo-sync`), { method: 'POST', body: '{}' }); }
+      catch (error) { state.yahooDraftSync = { state: 'blocked', lastError: { message: error.message } }; }
+    }
     showDraftRoom();
     await refresh();
     startPolling();
@@ -1500,9 +1504,12 @@ function renderMockReadiness(card) {
   if (!readiness) return;
   const room = state.session?.mockRoom;
   $('#mock-sync-status').textContent = readiness.ready
-    ? `Room ${readiness.roomId} · seat ${state.session.draftSlot} · ${state.session.picks.length} picks reconciled · Yahoo Autodraft OFF · ${room.players.length} available candidates`
+    ? `Room ${readiness.roomId} · seat ${state.session.draftSlot} · ${state.session.picks.length} picks reconciled · Yahoo Autodraft OFF · ${room.players.length} available candidates · Browser-assisted; independent delivery unverified`
     : readiness.reasons.join(' ');
   $('#mock-sync-status').dataset.ready = String(readiness.ready);
+  $('#mock-sync-status').dataset.sessionId = state.session.id;
+  $('#mock-sync-status').dataset.phase = state.session.status;
+  $('#mock-sync-status').dataset.reconciled = String(state.session.picks.length);
   const coverage = card.rosterCoverage;
   const flexPositions = coverage ? [...new Set(coverage.flexTypes.flatMap(type => type.positions))].join('/') : '';
   $('#mock-roster-coverage').textContent = coverage
@@ -1515,7 +1522,7 @@ function renderMockReadiness(card) {
       renderRecommendation({ ...card, preferred: null, alternatives: { safe: null, upside: null }, onClock: false,
         explanation: 'Room observation is stale; read Yahoo again.',
         mockReadiness: { ...readiness, ready: false, reasons: ['Room observation is stale; read Yahoo again.'] } });
-    }, Math.max(0, Date.parse(readiness.observedAt) + 30_000 - Date.now()));
+    }, Math.max(0, Date.parse(readiness.observedAt) + (readiness.maxAgeMs || 5000) - Date.now()));
   }
 }
 

@@ -173,6 +173,10 @@ test('Yahoo operations readiness and one-shot draft sync are fail-loud and idemp
   assert.equal(drafts.getSession(session.id).picks.length, 1);
   await operations.syncDraftOnce({ leagueId: league.id, sessionId: session.id });
   assert.equal(drafts.getSession(session.id).picks.length, 1);
+  assert.ok(drafts.state.sessions[session.id].timingEvidence.events.some(e=>e.type==='results-received'&&e.pickCount===1));
+  assert.ok(drafts.state.sessions[session.id].timingEvidence.events.some(e=>e.type==='board-reconciled'&&e.boardChanged));
+  assert.equal(first.timingEvidence.incomplete,false);
+  assert.equal(drafts.getSession(session.id).timingEvidence.events,undefined,'growing timing history must not inflate live workspace responses');
   const started = operations.startDraftSync({ leagueId: league.id, sessionId: session.id });
   assert.equal(started.recurring, true);
   assert.equal(started.state, 'running');
