@@ -2,26 +2,6 @@
 
 A read-only fantasy football assistant for Yahoo drafts and weekly team decisions across multiple leagues. **Huddle recommends; you make every pick, lineup change and waiver claim.**
 
-## Improvements since the first live draft
-
-The September 8, 2026 live draft exposed missed selections, delayed recommendations and incomplete on-screen evidence. The real-draft videos below document that earlier experience. Since that run, the following improvements have been implemented:
-
-| Area | What changed |
-|---|---|
-| Recommendation updates | Faster Yahoo polling, pushed workspace updates and connection recovery reduce stale recommendations. |
-| Draft clock | Optional built-in screen sharing and local clock recognition track the observed turn and deadline. Recommendations are intended to arrive as soon as possible on any clock, preserving at least ten seconds for a human selection. No browser extension is required. |
-| Recommendation visibility | Compact and floating views show preferred, safer and upside choices alongside accepted picks, recent results and the roster. Visibility checks distinguish a calculated recommendation from one actually displayed. |
-| Selection reliability | The browser-assisted test controller verifies the exact Yahoo player and enabled Draft button, clears stale searches, recovers manual mode and checks that Yahoo accepted the selection. Uncertain or duplicate inputs stop execution. |
-| Reconciliation and recovery | Contiguous result checks, saved decisions and session identity checks protect against missing picks, cross-room updates and lost state after a restart. |
-| Player evidence | Stronger injury, projection, season and identity checks protect recommendations from stale or incompatible inputs. |
-| Reporting and regression coverage | Downloadable audit reports separate verified results from unknown timing or selection actors. Added tests cover clock recognition, delivery, UI selection and recovery failures. |
-
-**Latest Yahoo result — September 10:** one 30-second-clock mock completed **15/15 manual selections, zero autodrafts and 120/120 reconciled results**, with ChatGPT computer use acting as the human selector. [Read the run results](docs/yahoo-desktop-mock-results-2026-09-10.md).
-
-**What remains unverified:** repeatable clean Yahoo drafts, independent recommendation delivery with the required human time margin, and actual-Yahoo clock/display evidence. The successful mock recorded no verified timely receipts from the compact view. These improvements are implemented; that single run does not validate every feature or guarantee future draft performance.
-
-[Full improvement review and evidence](docs/draft-enhancements-since-real-draft.md) · [Changed-file inventory](docs/draft-enhancement-file-inventory.md). The review also explains why the experimental scoring change was rejected and why weights were not changed to imitate Yahoo's draft grades. Recording remains separate from Huddle.
-
 <!-- HUDDLE-LINKEDIN-VIDEOS:START -->
 ## Huddle in 60 seconds
 
@@ -141,3 +121,25 @@ Next features: external failure notifications and reviewed weekly screenshot imp
 | Internals, API routes and provider budgets | [Technical reference](docs/technical-reference.md) · [Architecture](docs/architecture.md) |
 | Access, retention and incident handling | [Yahoo safety](docs/yahoo-integration-safety.md) · [Security runbook](docs/security-incident-response.md) |
 | Player-image licensing | [Media policy](docs/player-media-policy.md) |
+
+[Improvements since the first live draft](#improvements-since-the-first-live-draft)
+
+## Improvements since the first live draft
+
+The September 8, 2026 live draft exposed missed selections, delayed recommendations and incomplete on-screen evidence. The real-draft videos below document that earlier experience. Since that run, the following improvements have been implemented:
+
+| Area | What changed |
+|---|---|
+| Recommendation updates | Faster Yahoo polling, pushed workspace updates and connection recovery reduce stale recommendations. |
+| Draft clock | Optional built-in screen sharing and local clock recognition track the observed turn and deadline. Recommendations are intended to arrive as soon as possible on any clock, preserving at least ten seconds for a human selection. No browser extension is required. |
+| Recommendation visibility | Compact and floating views show preferred, safer and upside choices alongside accepted picks, recent results and the roster. Visibility checks distinguish a calculated recommendation from one actually displayed. |
+| Selection reliability | The browser-assisted test controller verifies the exact Yahoo player and enabled Draft button, clears stale searches, recovers manual mode and checks that Yahoo accepted the selection. Uncertain or duplicate inputs stop execution. |
+| Reconciliation and recovery | Contiguous result checks, saved decisions and session identity checks protect against missing picks, cross-room updates and lost state after a restart. |
+| Player evidence | Stronger injury, projection, season and identity checks protect recommendations from stale or incompatible inputs. |
+| Reporting and regression coverage | Downloadable audit reports separate verified results from unknown timing or selection actors. Added tests cover clock recognition, delivery, UI selection and recovery failures. |
+
+**Latest Yahoo result — September 10:** one 30-second-clock mock completed **15/15 manual selections, zero autodrafts and 120/120 reconciled results**, with ChatGPT computer use acting as the human selector. [Read the run results](docs/yahoo-desktop-mock-results-2026-09-10.md).
+
+**What remains unverified:** repeatable clean Yahoo drafts, independent recommendation delivery with the required human time margin, and actual-Yahoo clock/display evidence. The successful mock recorded no verified timely receipts from the compact view. These improvements are implemented; that single run does not validate every feature or guarantee future draft performance.
+
+[Full improvement review and evidence](docs/draft-enhancements-since-real-draft.md) · [Changed-file inventory](docs/draft-enhancement-file-inventory.md). The review also explains why the experimental scoring change was rejected and why weights were not changed to imitate Yahoo's draft grades. Recording remains separate from Huddle.
