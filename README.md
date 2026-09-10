@@ -2,7 +2,25 @@
 
 A read-only fantasy football assistant for Yahoo drafts and weekly team decisions across multiple leagues. **Huddle recommends; you make every pick, lineup change and waiver claim.**
 
-**Draft improvements and validation:** [Changes since the first real draft](docs/draft-enhancements-since-real-draft.md) covers recovery, player evidence, clock recognition, recommendation delivery, selection controls and remaining limitations. The [latest Yahoo mock](docs/yahoo-desktop-mock-results-2026-09-10.md) completed **15/15 manual selections, zero autodrafts and 120/120 reconciled results** through desktop browser control; independent delivery and repeatability remain unverified.
+## Improvements since the first live draft
+
+The September 8, 2026 live draft exposed missed selections, delayed recommendations and incomplete on-screen evidence. The real-draft videos below document that earlier experience. Since that run, the following improvements have been implemented:
+
+| Area | What changed |
+|---|---|
+| Recommendation updates | Faster Yahoo polling, pushed workspace updates and connection recovery reduce stale recommendations. |
+| Draft clock | Optional built-in screen sharing and local clock recognition track the observed turn and deadline. Recommendations are intended to arrive as soon as possible on any clock, preserving at least ten seconds for a human selection. No browser extension is required. |
+| Recommendation visibility | Compact and floating views show preferred, safer and upside choices alongside accepted picks, recent results and the roster. Visibility checks distinguish a calculated recommendation from one actually displayed. |
+| Selection reliability | The browser-assisted test controller verifies the exact Yahoo player and enabled Draft button, clears stale searches, recovers manual mode and checks that Yahoo accepted the selection. Uncertain or duplicate inputs stop execution. |
+| Reconciliation and recovery | Contiguous result checks, saved decisions and session identity checks protect against missing picks, cross-room updates and lost state after a restart. |
+| Player evidence | Stronger injury, projection, season and identity checks protect recommendations from stale or incompatible inputs. |
+| Reporting and regression coverage | Downloadable audit reports separate verified results from unknown timing or selection actors. Added tests cover clock recognition, delivery, UI selection and recovery failures. |
+
+**Latest Yahoo result — September 10:** one 30-second-clock mock completed **15/15 manual selections, zero autodrafts and 120/120 reconciled results**, with ChatGPT computer use acting as the human selector. [Read the run results](docs/yahoo-desktop-mock-results-2026-09-10.md).
+
+**What remains unverified:** repeatable clean Yahoo drafts, independent recommendation delivery with the required human time margin, and actual-Yahoo clock/display evidence. The successful mock recorded no verified timely receipts from the compact view. These improvements are implemented; that single run does not validate every feature or guarantee future draft performance.
+
+[Full improvement review and evidence](docs/draft-enhancements-since-real-draft.md) · [Changed-file inventory](docs/draft-enhancement-file-inventory.md). The review also explains why the experimental scoring change was rejected and why weights were not changed to imitate Yahoo's draft grades. Recording remains separate from Huddle.
 
 <!-- HUDDLE-LINKEDIN-VIDEOS:START -->
 ## Huddle in 60 seconds
@@ -27,6 +45,8 @@ September 2026 · AI-generated narration and an original orchestral score. The a
 Watch the second Huddle preview: a 60-second edited replay of the completed Yahoo mock, with Huddle recommendations, synthetic narration and original orchestral music. The animated GIF is silent; click it for the video with sound.
 
 ## Huddle's first real draft
+
+Historical footage from September 8, 2026. See [improvements since this live draft](#improvements-since-the-first-live-draft) for the subsequent changes and validation results.
 
 [![Watch Huddle's first real draft with narration and orchestral music](docs/assets/huddle-real-draft-preview.gif)](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-real-draft-narrated-landscape-1920x1080.mp4)
 
