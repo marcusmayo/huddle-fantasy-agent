@@ -2,6 +2,8 @@
 
 A read-only fantasy football assistant for Yahoo drafts and weekly team decisions across multiple leagues. **Huddle recommends; you make every pick, lineup change and waiver claim.**
 
+**Draft improvements and validation:** [Changes since the first real draft](docs/draft-enhancements-since-real-draft.md) covers recovery, player evidence, clock recognition, recommendation delivery, selection controls and remaining limitations. The [latest Yahoo mock](docs/yahoo-desktop-mock-results-2026-09-10.md) completed **15/15 manual selections, zero autodrafts and 120/120 reconciled results** through desktop browser control; independent delivery and repeatability remain unverified.
+
 <!-- HUDDLE-LINKEDIN-VIDEOS:START -->
 ## Huddle in 60 seconds
 
@@ -15,6 +17,34 @@ September 2026 · AI-generated narration and an original orchestral score. The a
 
 **Second narrated preview: [Every pick accounted for](docs/media/draft-replay-preview.md)** — an edited replay of an actual completed Yahoo mock: 15 Huddle-guided selections, zero autopicks, five WRs, four RBs, two QBs and two TEs. Includes the same three video formats and captions. [Final retrospective and draft-night handoff](docs/draft-final-postmortem-2026-09-08.md).
 <!-- HUDDLE-LINKEDIN-VIDEOS:END -->
+
+## Narrated draft replay
+
+[![Watch Huddle's draft rehearsal with narration and original orchestral music](docs/assets/huddle-draft-rehearsal-preview.gif)](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-draft-narrated-landscape-1920x1080.mp4)
+
+**[Watch with sound — 1920 × 1080](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-draft-narrated-landscape-1920x1080.mp4)** · **[LinkedIn feed — 1080 × 1350](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-draft-narrated-feed-1080x1350.mp4)** · **[X thread — 1280 × 720](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-draft-narrated-x-1280x720.mp4)**
+
+Watch the second Huddle preview: a 60-second edited replay of the completed Yahoo mock, with Huddle recommendations, synthetic narration and original orchestral music. The animated GIF is silent; click it for the video with sound.
+
+## Huddle's first real draft
+
+[![Watch Huddle's first real draft with narration and orchestral music](docs/assets/huddle-real-draft-preview.gif)](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-real-draft-narrated-landscape-1920x1080.mp4)
+
+**[Watch with sound — 1920 × 1080](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-real-draft-narrated-landscape-1920x1080.mp4)** · **[LinkedIn feed — 1080 × 1350](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-real-draft-narrated-feed-1080x1350.mp4)** · **[X thread — 1280 × 720](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/huddle-real-draft-narrated-x-1280x720.mp4)**
+
+Watch Huddle enter the Yahoo draft for Blitzkrieg: 60 seconds of recommendations, reconciliation and an audible, using actual recorded footage with the familiar synthetic voice and original orchestral music. The edit includes the failures that shaped the postmortem. The animated GIF is silent; click it for sound.
+
+[Captions](docs/assets/huddle-real-draft-narration-en.srt) · [Media notes](docs/media/real-draft-previews.md#huddle-the-first-real-draft) · [Thumbnail](docs/assets/huddle-real-draft-preview-poster.jpg)
+
+## ChatGPT runs the draft
+
+[![Watch ChatGPT operate the real draft and review its decisions](docs/assets/chatgpt-real-draft-preview.gif)](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/chatgpt-real-draft-narrated-landscape-1920x1080.mp4)
+
+**[Watch with sound — 1920 × 1080](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/chatgpt-real-draft-narrated-landscape-1920x1080.mp4)** · **[LinkedIn feed — 1080 × 1350](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/chatgpt-real-draft-narrated-feed-1080x1350.mp4)** · **[X highlights — 1280 × 720](https://raw.githubusercontent.com/marcusmayo/huddle-fantasy-agent/main/docs/assets/chatgpt-real-draft-narrated-x-1280x720.mp4)**
+
+A 4:10 review of ChatGPT using the computer to draft Blitzkrieg on Yahoo: when it followed Huddle, why it made five audibles, and where execution failed. A different synthetic voice and original electronic score accompany the actual footage, including the user's Gibbs pick, Yahoo's autopick and the draft-grade comparison. The X highlights run 2:10; the animated GIF is silent.
+
+[Full captions](docs/assets/chatgpt-real-draft-narration-en.srt) · [X captions](docs/assets/chatgpt-real-draft-x-narration-en.srt) · [Media notes](docs/media/real-draft-previews.md#chatgpt-the-draft-through-computer-use) · [Thumbnail](docs/assets/chatgpt-real-draft-preview-poster.jpg)
 
 ## What it does
 

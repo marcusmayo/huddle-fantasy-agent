@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "scope": "Local application regression and publication review; not live Yahoo certification",
+  "application": {
+    "files": 65,
+    "passed": 65,
+    "failed": [],
+    "tests": 500
+  },
+  "experimentalFocusedTests": 16,
+  "existingMainMediaFilesCompared": 43,
+  "existingMainMediaDifferences": [],
+  "realYahooRun": {
+    "roomId": "11197752",
+    "manual": 15,
+    "autodraft": 0,
+    "reconciled": 120,
+    "independentDeliveryVerified": false
+  }
+}

@@ -55,3 +55,11 @@ The user's requested Yahoo completion condition was achieved for one desktop moc
 Still unproven: independent Yahoo mock publication/deadline delivery, sustained independent authenticated API selection, actual-Yahoo clock/display receipts, recovery under live interruption, and repeatability. The compact practice view in the successful run reported zero verified timely display receipts. Historical failures remain published so the later success does not erase them. Do not describe this publication as production certification or a guarantee of a clean future draft.
 
 Current full regression and GitHub integration results are recorded in the publication validation section below.
+
+## Publication validation
+
+- Full application regression: **500 tests across 65 files passed**, zero failed files or timeouts. The bounded file runner completed the longer execution-controller workload in 182.940 seconds. This closes the previously interrupted local regression check; it is not a new browser acceptance run.
+- Experimental host/budget and real-browser exact-identity checks: **16 tests passed**. No paid API call was made for publication validation.
+- The unchanged fleet-core module's SHA-256 matches its checked-in manifest.
+- Current GitHub `main` was merged into the enhancement branch without conflicts. Existing real-draft videos, captions and media notes were retained. The new compact Yahoo evidence removes account credentials and opponent-owner details; full local state, browser profiles, recordings and API keys remain excluded.
+- Production code and development experiments have different acceptance scopes as described above. Publishing their source does not enable the extension, API agent, optional clock capture or recording in normal app startup.

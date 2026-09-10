@@ -1,0 +1,152 @@
+{
+  "sourceOriginalSha256": "cad6fe121e229477dfcb80b9a3b736e41600516281922a339bfee35e9bb1847a",
+  "voice": "Kokoro am_michael 70% / am_onyx 30%; pitch 0.955",
+  "music": "Same original Huddle orchestral recording",
+  "modelConfiguration": "User-confirmed Astra, Extra High effort; computer use while recording",
+  "interpretation": "Postproduction explanation, not live recorded reasoning. No reconstructed application UI. Every shot is a crop of the actual recording; league and opponent identity bands are masked.",
+  "scenes": [
+    {
+      "outputStart": 0,
+      "sourceStart": 1750,
+      "seconds": 10,
+      "focus": "both",
+      "label": "FIRST REAL DRAFT",
+      "title": "The clock makes it real.",
+      "explanation": "Yahoo \u00b7 Blitzkrieg \u00b7 September 8, 2026"
+    },
+    {
+      "outputStart": 10,
+      "sourceStart": 502,
+      "seconds": 10,
+      "focus": "huddle",
+      "label": "FOLLOWED HUDDLE",
+      "title": "Josh Allen. Chase Brown.",
+      "explanation": "Picks 12 and 13 \u00b7 Recommended players selected in Yahoo"
+    },
+    {
+      "outputStart": 20,
+      "sourceStart": 1419,
+      "seconds": 10,
+      "focus": "huddle",
+      "label": "FOLLOWED HUDDLE",
+      "title": "A recommendation needs a receipt.",
+      "explanation": "Terry McLaurin \u00b7 Pick 49 \u00b7 Yahoo result verified"
+    },
+    {
+      "outputStart": 30,
+      "sourceStart": 1733,
+      "seconds": 10,
+      "focus": "both",
+      "label": "AUDIBLE / PICK 61",
+      "title": "Bucky Irving over D\u2019Andre Swift.",
+      "explanation": "Yahoo showed Irving available; Huddle\u2019s pool was missing him."
+    },
+    {
+      "outputStart": 40,
+      "sourceStart": 2459,
+      "seconds": 10,
+      "focus": "huddle",
+      "label": "LIVE LESSONS",
+      "title": "Fresh evidence matters.",
+      "explanation": "Feed interruptions \u00b7 Missing metadata \u00b7 One Yahoo autopick"
+    },
+    {
+      "outputStart": 50,
+      "sourceStart": 2932,
+      "seconds": 10,
+      "focus": "both",
+      "label": "120 RESULTS RECONCILED",
+      "title": "Every result. An honest review.",
+      "explanation": "20-player roster \u00b7 Complete draft \u00b7 Fixes require verification"
+    }
+  ],
+  "files": [
+    {
+      "file": "huddle-real-draft-narrated-landscape-1920x1080.mp4",
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "frames": 1800,
+      "seconds": 60.0,
+      "bytes": 3145021,
+      "sha256": "e436d2e7d2d6ed85bc7bb858c250b58845806be292b1ca4398488e555fea468e",
+      "video": "H.264 yuv420p",
+      "audio": "AAC-LC stereo 48 kHz",
+      "captions": "English mov_text; sidecar round-trip passed",
+      "faststart": true,
+      "fullDecode": "passed",
+      "loudness": {
+        "input_i": "-16.09",
+        "input_tp": "-1.53",
+        "input_lra": "3.10",
+        "input_thresh": "-26.25",
+        "output_i": "-16.00",
+        "output_tp": "-1.50",
+        "output_lra": "2.50",
+        "output_thresh": "-26.14",
+        "normalization_type": "dynamic",
+        "target_offset": "0.00"
+      }
+    },
+    {
+      "file": "huddle-real-draft-narrated-feed-1080x1350.mp4",
+      "width": 1080,
+      "height": 1350,
+      "fps": 30,
+      "frames": 1800,
+      "seconds": 60.0,
+      "bytes": 2817435,
+      "sha256": "86f2c11f22b32f5408213697b8f00d2e7acfdd2d1444a69458752c378355ce93",
+      "video": "H.264 yuv420p",
+      "audio": "AAC-LC stereo 48 kHz",
+      "captions": "English mov_text; sidecar round-trip passed",
+      "faststart": true,
+      "fullDecode": "passed",
+      "loudness": {
+        "input_i": "-16.09",
+        "input_tp": "-1.53",
+        "input_lra": "3.10",
+        "input_thresh": "-26.25",
+        "output_i": "-16.00",
+        "output_tp": "-1.50",
+        "output_lra": "2.50",
+        "output_thresh": "-26.14",
+        "normalization_type": "dynamic",
+        "target_offset": "0.00"
+      }
+    },
+    {
+      "file": "huddle-real-draft-narrated-x-1280x720.mp4",
+      "width": 1280,
+      "height": 720,
+      "fps": 30,
+      "frames": 1800,
+      "seconds": 60.0,
+      "bytes": 2447493,
+      "sha256": "631f6947761c805a8ff6b23e792aeb085db7333f16da4339e8f08094b216e599",
+      "video": "H.264 yuv420p",
+      "audio": "AAC-LC stereo 48 kHz",
+      "captions": "English mov_text; sidecar round-trip passed",
+      "faststart": true,
+      "fullDecode": "passed",
+      "loudness": {
+        "input_i": "-16.09",
+        "input_tp": "-1.53",
+        "input_lra": "3.10",
+        "input_thresh": "-26.25",
+        "output_i": "-16.00",
+        "output_tp": "-1.50",
+        "output_lra": "2.50",
+        "output_thresh": "-26.14",
+        "normalization_type": "dynamic",
+        "target_offset": "0.00"
+      }
+    }
+  ],
+  "visualReview": "Representative revised landscape/poster, portrait and X frames reviewed; identity bands and detail regions are continuously masked. Titles, grade explanation and captions checked.",
+  "captionTiming": "Estimated phrase timing, not forced word alignment",
+  "portraitTreatment": "Actual Huddle viewport enlarged; dual-screen scenes cut from Yahoo to Huddle after five seconds. Same narration and chronology.",
+  "platformUploadTested": false,
+  "publication": "Repository assets; no LinkedIn or X post",
+  "identityTreatment": "Yahoo and Blitzkrieg only. Opaque editorial masks cover the Yahoo league/opponent band and Huddle recent-team detail region. Raw evidence stays private and unchanged."
+}

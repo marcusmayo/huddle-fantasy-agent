@@ -1,0 +1,161 @@
+1
+00:00:00,300 --> 00:00:04,982
+This is an edited recording of ChatGPT
+operating a real Yahoo draft. The user
+
+2
+00:00:04,982 --> 00:00:09,665
+confirmed Astra at Extra High effort, with
+computer use and screen recording.
+
+3
+00:00:10,300 --> 00:00:14,728
+The user submitted Jahmyr Gibbs because I
+had not started running the draft
+
+4
+00:00:14,728 --> 00:00:18,448
+and needed another prompt. That was my
+opening handoff failure.
+
+5
+00:00:20,300 --> 00:00:24,833
+At twelve, I followed Huddle and selected
+Josh Allen. This league starts two
+
+6
+00:00:24,833 --> 00:00:29,128
+quarterbacks, so Allen filled the first of
+two important starting slots.
+
+7
+00:00:30,300 --> 00:00:34,830
+The dashboard then stopped advancing. I
+selected Nico Collins using the last
+
+8
+00:00:34,830 --> 00:00:38,765
+available Huddle board and Yahoo. This was a
+fallback, not a fresh
+
+9
+00:00:38,765 --> 00:00:39,659
+recommendation.
+
+10
+00:00:40,300 --> 00:00:44,377
+I chose Colston Loveland over Huddle’s
+preferred Tee Higgins to fill tight
+
+11
+00:00:44,377 --> 00:00:48,233
+end. Higgins had uncertain metadata and a
+questionable flag. My injury
+
+12
+00:00:48,233 --> 00:00:49,665
+comparison was incomplete.
+
+13
+00:00:50,300 --> 00:00:54,856
+I overrode Swift for Bucky Irving. Yahoo
+projected Irving higher, without a
+
+14
+00:00:54,856 --> 00:00:59,108
+questionable flag, but Huddle had omitted
+him. My Swift news check was
+
+15
+00:00:59,108 --> 00:00:59,655
+outdated.
+
+16
+00:01:00,300 --> 00:01:04,773
+At eighty-four, I missed the deadline. Yahoo
+selected Baltimore defense. My
+
+17
+00:01:04,773 --> 00:01:09,187
+first fresh clock check had only three
+seconds left. This was an execution
+
+18
+00:01:09,187 --> 00:01:09,664
+failure.
+
+19
+00:01:10,300 --> 00:01:14,535
+I selected Jaylen Warren over Huddle’s Tony
+Pollard. Yahoo showed two hundred
+
+20
+00:01:14,535 --> 00:01:18,440
+four projected points versus one hundred
+sixty-one, and Warren supplied
+
+21
+00:01:18,440 --> 00:01:19,650
+running-back coverage.
+
+22
+00:01:20,300 --> 00:01:25,165
+At ninety-seven, I again passed on Pollard,
+selecting Brock Purdy. The third
+
+23
+00:01:25,165 --> 00:01:29,646
+quarterback covered Allen’s week-seven bye
+and Maye’s week-eleven bye.
+
+24
+00:01:30,300 --> 00:01:34,488
+At one hundred eight, I selected Parker
+Washington over Pollard. A sixth
+
+25
+00:01:34,488 --> 00:01:38,850
+receiver helped cover Collins and Evans in
+week eight while retaining week-
+
+26
+00:01:38,850 --> 00:01:39,664
+seven options.
+
+27
+00:01:40,300 --> 00:01:44,178
+Eighteen verified submissions: ten aligned
+choices, five overrides, three
+
+28
+00:01:44,178 --> 00:01:47,949
+outage fallbacks. Two aligned choices used
+stale cards. Every submitted
+
+29
+00:01:47,949 --> 00:01:49,649
+player identifier matched Yahoo.
+
+30
+00:01:50,300 --> 00:01:54,790
+Yahoo graded our draft C minus, versus the
+top grade of B plus. Maye at
+
+31
+00:01:54,790 --> 00:01:59,660
+twenty-five was the clearest reach. The
+recommendation strategy needs review.
+
+32
+00:02:00,300 --> 00:02:04,116
+The original silent recording is preserved.
+This narration explains the
+
+33
+00:02:04,116 --> 00:02:08,201
+decisions afterward. A completed roster is
+evidence of completion, not proof
+
+34
+00:02:08,201 --> 00:02:09,652
+that the process was clean.

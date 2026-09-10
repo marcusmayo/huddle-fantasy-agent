@@ -1,5 +1,7 @@
 # Yahoo mock results — Blitzkrieg
 
+Publication follow-up: the broader application regression subsequently completed with **500 tests across 65 files passing**. The table below retains the checks as they stood at the mock's completion. See [the consolidated improvement record](draft-enhancements-since-real-draft.md) and [public per-pick evidence](yahoo-mock-11197752-evidence.json).
+
 Completed September 9, 2026 at approximately 11:47 PM America/New_York (September 10 UTC). Room 11197752, seat 8, eight teams, 15 rounds, 30-second clock, half-PPR, four-point passing touchdowns.
 
 **15/15 owned picks manually verified, zero owned autodrafts, 120/120 results reconciled.** All selections followed Huddle's preferred recommendation; no audibles. Roster: QB 2, RB 5, WR 4, TE 2, K 1, DEF 1; all nine starters covered.
