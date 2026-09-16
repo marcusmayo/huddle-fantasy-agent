@@ -10,6 +10,7 @@ const { colorContract, fleetManifest, fleetStatus } = require('./fleet/status');
 const { headshotPolicy, sanitizePlayerPool } = require('./media/player-headshots');
 const { FantasyProsClient } = require('./providers/fantasypros');
 const { WeeklyEvidenceService } = require('./services/weekly-evidence-service');
+const { WeeklyContextFeeds } = require('./services/weekly-context-feeds');
 const { OpenRouterVisionClient } = require('./providers/openrouter-vision');
 const { SleeperClient } = require('./providers/sleeper');
 const { Tank01Client } = require('./providers/tank01');
@@ -861,7 +862,8 @@ function buildApp(inputRuntime = loadRuntimeConfig(), options = {}) {
     weeklyServices,
     pollerFactory: options.yahooDraftPollerFactory,
     weeklyAdapterFactory: options.yahooWeeklyAdapterFactory,
-    weeklyEvidence: new WeeklyEvidenceService({ fantasyProsClient, tank01Client, sleeperClient }),
+    weeklyEvidence: new WeeklyEvidenceService({ fantasyProsClient, tank01Client, sleeperClient,
+      contextFeeds: new WeeklyContextFeeds({ tank01Client, cacheDir: path.join(runtime.tank01CacheDir, 'weekly-context') }) }),
     now: options.now,
     setIntervalImpl: options.setIntervalImpl,
     clearIntervalImpl: options.clearIntervalImpl,

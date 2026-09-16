@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { scorePlayerStats } = require('../domain/weekly-management');
 const { normalizeTeam } = require('../domain/player-snapshot');
+const { newsForPlayer } = require('./weekly-context-feeds');
 const number = value => value == null || value === '' || !Number.isFinite(Number(value)) ? null : Number(value);
 const nameKey = value => String(value || '').toLowerCase().replace(/\b(jr|sr)\.?\b/g, '').replace(/[^a-z0-9]/g, '');
 const pos = value => ({ DST: 'DEF', 'D/ST': 'DEF', PK: 'K' }[value] || value);
@@ -53,9 +54,10 @@ function findPlayer(player, rows) {
 }
 
 class WeeklyEvidenceService {
-  constructor({ tank01Client, fantasyProsClient, sleeperClient, now = () => new Date() } = {}) {
+  constructor({ tank01Client, fantasyProsClient, sleeperClient, contextFeeds, now = () => new Date() } = {}) {
     this.tank = tank01Client; this.fp = fantasyProsClient; this.sleeper = sleeperClient; this.now = now;
     this.inflight = new Map();
+    this.contextFeeds = contextFeeds;
   }
 
   async tankRequest(endpoint, season, week) {
@@ -114,6 +116,12 @@ class WeeklyEvidenceService {
 
   async enrich(snapshot, league) {
     const { sources, schedules, warnings, trends = [] } = await this.load(Number(snapshot.season), Number(snapshot.week));
+    let extra = { ratings: [], news: [], warnings: [] };
+    if (this.contextFeeds) {
+      try { extra = await this.contextFeeds.load({ season: Number(snapshot.season), week: Number(snapshot.week), league }); }
+      catch (error) { extra.warnings.push(`Weekly context feeds: ${error.message}`); }
+    }
+    const players = [...snapshot.roster, ...snapshot.availablePlayers];
     const enrich = player => {
       const game = schedules.find(game => [game.home, game.away].includes(normalizeTeam(player.nflTeam)));
       const projections = [];
@@ -151,12 +159,16 @@ class WeeklyEvidenceService {
         sleeperTrend: trend || null,
         sourceCoverage: { fantasyPros: Boolean(fp), tank01: Boolean(tank), sleeper: Boolean(trend) },
         weeklyContext: { ...player.weeklyContext, season: snapshot.season, week: snapshot.week, source: 'weekly-provider-reconciliation', observedAt: this.now().toISOString(), opponent,
+          defense: extra.ratings.find(r => r.opponent === opponent && r.position === player.position) || null,
+          news: newsForPlayer(player, extra.news, players),
           projection: points == null ? null : { points, updatedAt, source: projections.map(row => row.source).join(' + ') || 'Yahoo import', includes: ['matchup'], contextNeutral: false } }
       };
     };
     snapshot.roster = snapshot.roster.map(enrich);
     snapshot.availablePlayers = snapshot.availablePlayers.map(enrich);
-    snapshot.reconciliation = { warnings, projectionSources: [...new Set(sources.map(row => row.source))],
+    snapshot.reconciliation = { warnings: [...warnings, ...extra.warnings], projectionSources: [...new Set(sources.map(row => row.source))],
+      newsArticles: extra.news.length, defensiveRatings: extra.ratings.length, newsObservedAt: extra.observedAt || null,
+      statisticsObservedAt: extra.statisticsObservedAt || null,
       rosterProjected: snapshot.roster.filter(row => row.projectedPoints != null).length, rosterCount: snapshot.roster.length,
       availableProjected: snapshot.availablePlayers.filter(row => row.projectedPoints != null).length,
       scheduleGames: schedules.length, method: 'League-scored weekly statistics; FantasyPros 67.5% / Tank01 32.5% when both match; otherwise single source. No preseason extrapolation.' };

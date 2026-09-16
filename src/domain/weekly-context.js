@@ -49,10 +49,11 @@ function applyWeeklyContext(player, { season, week, now, leagueReceptionPoints }
   if (!eligible) { projected = 0; effects.push(onBye ? 'Unavailable this week: bye.' : `Unavailable this week: ${status}.`); }
   if (['Q', 'QUESTIONABLE', 'D', 'DOUBTFUL', 'GTD'].includes(status)) warnings.push('Uncertain availability: check practice reports and final inactive list; no invented playing probability.');
   const news = fresh && Array.isArray(context.news) ? context.news.filter(item => {
-    const newsAge = now.getTime() - Date.parse(item.publishedAt);
-    return item.source && item.summary && newsAge >= -300000 && newsAge <= 72 * 3600000;
+    const newsAge = now.getTime() - Date.parse(item.publishedAt || item.observedAt);
+    const maxAge = item.publishedAt ? 72 * 3600000 : 6 * 3600000;
+    return item.source && item.summary && newsAge >= -300000 && newsAge <= maxAge;
   }).slice(0, 5) : [];
-  if (news.length) effects.push('Dated team news attached; role changes require an updated projection.');
+  if (news.length) effects.push('Player news attached; role changes require an updated projection. Undated headlines are not confirmed fresh reports.');
   return {
     ...player, injuryStatus: status, adjustedWeeklyPoints: projected == null ? null : round(projected), weeklyEligible: eligible,
     weeklyEvidence: {

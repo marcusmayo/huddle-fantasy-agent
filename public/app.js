@@ -947,6 +947,20 @@ function weeklyProjection(player, field) {
   return value !== null && value !== undefined && Number.isFinite(Number(value)) ? Number(value) : null;
 }
 
+function weeklyContextMarkup(player) {
+  const context = player?.weeklyEvidence;
+  const defense = context?.defense;
+  const matchup = defense ? `<small>${escapeHtml(`${defense.opponent} vs ${player.position}: ${defense.rank}/${defense.teamCount || 32}, 1 = easiest; ${defense.confidence || 'unrated'} confidence. ${defense.currentGames ?? defense.sampleGames} current / ${defense.priorGames ?? 0} prior games. ${defense.pointsAllowedPerGame ?? '—'} points allowed/game this season. Context only.`)}</small>` : '';
+  const news = (context?.news || []).map(item => {
+    let url = null;
+    try { const parsed = new URL(item.url); if (parsed.protocol === 'https:' && !parsed.username && !parsed.password) url = parsed.href; } catch {}
+    const label = escapeHtml(`${item.source}: ${item.summary}`);
+    const date = item.publishedAt ? `Published ${new Date(item.publishedAt).toLocaleString()}` : `Publication date unavailable; retrieved ${new Date(item.observedAt).toLocaleString()}`;
+    return `<small>${url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${label}</a>` : label} · ${escapeHtml(date)}</small>`;
+  }).join('');
+  return matchup || news ? `<details><summary>Matchup and news</summary>${matchup}${news}</details>` : '';
+}
+
 function renderWeeklyPlayerBoard(review = state.weeklyReview) {
   const body = $('#weekly-player-body');
   const count = $('#weekly-player-count');
@@ -1010,7 +1024,7 @@ function renderWeeklyPlayerBoard(review = state.weeklyReview) {
       <td>${weeklyProjection(player, 'projectedPoints') ?? '—'}</td>
       <td>${weeklyProjection(player, 'remainingProjectedPoints') ?? '—'}</td>
       <td class="weekly-player-guidance">${item ? `<strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.detail)}</small>` : '<span class="muted">Available · not in top claim plan</span>'}</td>
-      <td class="weekly-player-evidence">${sources.length ? sources.map((source) => `<span class="badge">${source}</span>`).join(' ') : '<span class="muted">No shared projection</span>'}</td>
+      <td class="weekly-player-evidence">${sources.length ? sources.map((source) => `<span class="badge">${source}</span>`).join(' ') : '<span class="muted">No shared projection</span>'}${weeklyContextMarkup(player)}</td>
     </tr>`;
   }).join('') : '<tr><td colspan="7" class="empty-board">No available players match this search and position.</td></tr>';
 }
@@ -1080,19 +1094,18 @@ function renderWeekly(review) {
       `${player.adjustedWeeklyPoints ?? 'Missing'} projected points`,
       locked ? 'Locked' : '',
       context?.opponent ? `vs ${context.opponent}` : 'NFL opponent not supplied',
-      context?.defense?.rank ? `${player.position} matchup rank ${context.defense.rank} (source convention)` : '',
+      context?.defense?.rank ? `${player.position} matchup ${context.defense.rank}/${context.defense.teamCount || 32} (1 = easiest), ${context.defense.confidence || 'unrated'} confidence` : '',
       ...(context?.effects || []), ...(context?.warnings || []),
-      ...(player.projectionLimitations || []),
-      ...(context?.news || []).map(item => `${item.source}, ${item.publishedAt}: ${item.summary}`)
+      ...(player.projectionLimitations || [])
     ].filter(Boolean).join(' · ') : 'No eligible player with a positive projection.';
-    return `<article><strong>${escapeHtml(slot)} · ${escapeHtml(player?.name || 'Unfilled')}</strong><span>${escapeHtml(detail)}</span></article>`;
+    return `<article><strong>${escapeHtml(slot)} · ${escapeHtml(player?.name || 'Unfilled')}</strong><span>${escapeHtml(detail)}</span>${weeklyContextMarkup(player)}</article>`;
   }).join('');
 
   $('#weekly-standings').innerHTML = review.standings.map((team) => `<tr class="${team.teamId === target.teamId ? 'target-team-row' : ''}">
     <td>${team.standingRank ?? '—'}</td><td><strong>${escapeHtml(team.name)}</strong><small>${escapeHtml(team.result || 'pending')}</small></td>
     <td>${team.score}</td><td>${team.pointsFor ?? '—'}</td><td>${team.pointsAgainst ?? '—'}</td><td>${escapeHtml(movementLabel(team.positionMovement))}</td>
   </tr>`).join('');
-  $('#weekly-roster').innerHTML = review.roster.map((player) => `<tr><td><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.position)} · ${escapeHtml(player.nflTeam || 'FA')}</small></td><td>${escapeHtml(player.rosterSlot || '—')}</td><td>${player.actualPoints ?? '—'}</td><td>${player.projectedPoints ?? '—'}</td></tr>`).join('');
+  $('#weekly-roster').innerHTML = review.roster.map((player) => `<tr><td><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.position)} · ${escapeHtml(player.nflTeam || 'FA')}</small>${weeklyContextMarkup(player)}</td><td>${escapeHtml(player.rosterSlot || '—')}</td><td>${player.actualPoints ?? '—'}</td><td>${player.projectedPoints ?? '—'}</td></tr>`).join('');
   $('#weekly-switches').innerHTML = review.matchupComplete === false ? '<article><strong>Week is not complete</strong><span>Use the projected lineup above for upcoming decisions; final lineup hindsight is not available yet.</span></article>' : review.lineup.suggestedSwitches.length
     ? review.lineup.suggestedSwitches.map((item) => `<article><strong>Start ${escapeHtml(item.start.name)}</strong><span>${item.start.actualPoints} pts${item.sit ? ` · sit ${escapeHtml(item.sit.name)} (${item.sit.actualPoints} pts)` : ''}</span></article>`).join('')
     : '<article><strong>Best lineup used</strong><span>No points were left on the bench.</span></article>';
@@ -1109,7 +1122,7 @@ function renderWeekly(review) {
     ['Yahoo authority', evidence.yahooAuthority],
     ['Shared player source', `${evidence.sharedPlayerSource} · ${evidence.sharedFetchedAt ? new Date(evidence.sharedFetchedAt).toLocaleString() : 'bundled/current cache'}`],
     ['Available pool', `${evidence.availablePlayersReviewed} league-visible players reviewed`],
-    ['Weekly context', evidence.weeklyContext ? `${evidence.weeklyContext.fresh}/${evidence.weeklyContext.players} fresh · ${evidence.weeklyContext.matchups} NFL opponents · ${evidence.weeklyContext.defenses} positional defenses · ${evidence.weeklyContext.news} players with dated news. ${evidence.weeklyContext.liveFeed}` : 'Coverage unavailable for this older review'],
+    ['Weekly context', evidence.weeklyContext ? `${evidence.weeklyContext.fresh}/${evidence.weeklyContext.players} fresh · ${evidence.weeklyContext.matchups} NFL opponents · ${evidence.weeklyContext.defenses} positional defenses · ${evidence.weeklyContext.news} players with news (${evidence.weeklyContext.datedNews ?? 0} with publication dates). ${evidence.weeklyContext.liveFeed}` : 'Coverage unavailable for this older review'],
     ['Source coverage', `${evidence.sourceCoverage.fantasyPros} FantasyPros · ${evidence.sourceCoverage.tank01} Tank01 · ${evidence.sourceCoverage.sleeper} Sleeper`]
   ].map(([label, value]) => `<article><strong>${escapeHtml(label)}</strong><span>${escapeHtml(value)}</span></article>`).join('');
 }

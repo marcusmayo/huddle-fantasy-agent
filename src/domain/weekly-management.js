@@ -577,7 +577,8 @@ function buildWeeklyReview({ snapshot, league, playerPool = { players: [] }, exp
         matchups: [...roster, ...availablePlayers].filter(player => player.weeklyEvidence.opponent).length,
         defenses: [...roster, ...availablePlayers].filter(player => player.weeklyEvidence.defense).length,
         news: [...roster, ...availablePlayers].filter(player => player.weeklyEvidence.news.length).length,
-        liveFeed: 'Yahoo supplies roster, scores, availability, status and byes. Weekly projections and NFL schedules are reconciled from configured providers; dated news and positional defense evidence are shown only when supplied.'
+        datedNews: [...roster, ...availablePlayers].filter(player => player.weeklyEvidence.news.some(n => n.publishedAt)).length,
+        liveFeed: 'Yahoo supplies roster, scores, availability, status and byes. Tank01 supplies player headlines; missing publication dates are disclosed. nflverse supplies league-scored positional points allowed, blended with prior-season evidence. These explain matchups without multiplying provider projections again.'
       },
       sourceCoverage: {
         fantasyPros: availablePlayers.filter((player) => player.sourceCoverage.fantasyPros).length,
