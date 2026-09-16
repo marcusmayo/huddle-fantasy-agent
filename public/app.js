@@ -947,18 +947,44 @@ function weeklyProjection(player, field) {
   return value !== null && value !== undefined && Number.isFinite(Number(value)) ? Number(value) : null;
 }
 
+function weeklyMatchupDescription(player) {
+  const defense = player?.weeklyEvidence?.defense;
+  if (!defense?.rank) return null;
+  const rank = Number(defense.rank), total = Number(defense.teamCount || 32);
+  if (!Number.isFinite(rank) || rank < 1 || rank > total) return null;
+  const teams = { ARI: 'Arizona', ATL: 'Atlanta', BAL: 'Baltimore', BUF: 'Buffalo', CAR: 'Carolina', CHI: 'Chicago', CIN: 'Cincinnati', CLE: 'Cleveland', DAL: 'Dallas', DEN: 'Denver', DET: 'Detroit', GB: 'Green Bay', HOU: 'Houston', IND: 'Indianapolis', JAX: 'Jacksonville', JAC: 'Jacksonville', KC: 'Kansas City', LAC: 'Los Angeles Chargers', LAR: 'Los Angeles Rams', LV: 'Las Vegas', MIA: 'Miami', MIN: 'Minnesota', NE: 'New England', NO: 'New Orleans', NYG: 'New York Giants', NYJ: 'New York Jets', PHI: 'Philadelphia', PIT: 'Pittsburgh', SEA: 'Seattle', SF: 'San Francisco', TB: 'Tampa Bay', TEN: 'Tennessee', WAS: 'Washington', WSH: 'Washington' };
+  const opponent = teams[defense.opponent] || defense.opponent;
+  const position = { QB: 'quarterbacks', RB: 'running backs', WR: 'wide receivers', TE: 'tight ends' }[player.position] || player.position;
+  const percentile = rank / total;
+  const label = percentile <= 0.16 ? 'Very favorable matchup' : percentile <= 0.38 ? 'Favorable matchup' : percentile <= 0.63 ? 'Typical matchup' : percentile <= 0.85 ? 'Tough matchup' : 'Very tough matchup';
+  const explanation = percentile <= 0.38
+    ? `${opponent} looks easier than most defenses for ${position} to score fantasy points against.`
+    : percentile <= 0.63 ? `${opponent} looks like an average difficulty matchup for ${position}.`
+      : `${opponent} looks harder than most defenses for ${position} to score fantasy points against.`;
+  const games = Number(defense.currentGames ?? defense.sampleGames ?? 0);
+  const confidence = games < 4
+    ? `Early-season estimate: ${games === 0 ? 'no games' : games === 1 ? 'only one game' : `only ${games} games`} from this season${defense.priorGames ? ", supported by last season’s results" : ''}. Treat this as a clue, not a reason by itself to bench a player.`
+    : `Based on ${games} games this season${defense.priorGames ? ' plus last season’s results' : ''}. Use this alongside projected points and injury news.`;
+  const order = n => n === 1 ? 'the' : `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th')}`;
+  const difficult = rank > total / 2;
+  const ordinal = difficult ? total - rank + 1 : rank;
+  const standing = `${opponent} is rated ${order(ordinal)} ${difficult ? 'toughest' : 'easiest'} of ${total} defenses for ${position} in this estimate.`;
+  return { label, explanation, confidence, standing, opponent, position };
+}
+
 function weeklyContextMarkup(player) {
   const context = player?.weeklyEvidence;
   const defense = context?.defense;
-  const matchup = defense ? `<small>${escapeHtml(`${defense.opponent} vs ${player.position}: ${defense.rank}/${defense.teamCount || 32}, 1 = easiest; ${defense.confidence || 'unrated'} confidence. ${defense.currentGames ?? defense.sampleGames} current / ${defense.priorGames ?? 0} prior games. ${defense.pointsAllowedPerGame ?? '—'} points allowed/game this season. Context only.`)}</small>` : '';
+  const description = weeklyMatchupDescription(player);
+  const matchup = description ? `<p><strong>${escapeHtml(description.label)}</strong></p><p>${escapeHtml(description.explanation)}</p><p>${escapeHtml(description.confidence)}</p><details><summary>How this matchup was rated</summary><p>${escapeHtml(description.standing)}</p><p>${escapeHtml(defense.pointsAllowedPerGame == null ? 'No completed games from this season are available yet.' : `This season, opposing ${description.position} have scored ${defense.pointsAllowedPerGame} fantasy points per game against ${description.opponent}, using your league’s scoring. This is the total for all players at that position, not a prediction for one player.`)}</p><p>${escapeHtml(`The estimate combines ${defense.currentGames ?? defense.sampleGames ?? 0} games this season with ${defense.priorGames ?? 0} games last season. It does not add or subtract points from the player’s projection.`)}</p></details>` : '';
   const news = (context?.news || []).map(item => {
     let url = null;
     try { const parsed = new URL(item.url); if (parsed.protocol === 'https:' && !parsed.username && !parsed.password) url = parsed.href; } catch {}
     const label = escapeHtml(`${item.source}: ${item.summary}`);
     const date = item.publishedAt ? `Published ${new Date(item.publishedAt).toLocaleString()}` : `Publication date unavailable; retrieved ${new Date(item.observedAt).toLocaleString()}`;
-    return `<small>${url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${label}</a>` : label} · ${escapeHtml(date)}</small>`;
+    return `<p>${url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${label}</a>` : label}<br><small>${escapeHtml(date)}</small></p>`;
   }).join('');
-  return matchup || news ? `<details><summary>Matchup and news</summary>${matchup}${news}</details>` : '';
+  return `${matchup}${news ? `<details><summary>Player news</summary>${news}</details>` : ''}`;
 }
 
 function renderWeeklyPlayerBoard(review = state.weeklyReview) {
@@ -1094,8 +1120,8 @@ function renderWeekly(review) {
       `${player.adjustedWeeklyPoints ?? 'Missing'} projected points`,
       locked ? 'Locked' : '',
       context?.opponent ? `vs ${context.opponent}` : 'NFL opponent not supplied',
-      context?.defense?.rank ? `${player.position} matchup ${context.defense.rank}/${context.defense.teamCount || 32} (1 = easiest), ${context.defense.confidence || 'unrated'} confidence` : '',
-      ...(context?.effects || []), ...(context?.warnings || []),
+      ...(context?.effects || []).filter(effect => !effect.startsWith('Defensive matchup shown as context')),
+      ...(context?.warnings || []),
       ...(player.projectionLimitations || [])
     ].filter(Boolean).join(' · ') : 'No eligible player with a positive projection.';
     return `<article><strong>${escapeHtml(slot)} · ${escapeHtml(player?.name || 'Unfilled')}</strong><span>${escapeHtml(detail)}</span>${weeklyContextMarkup(player)}</article>`;
