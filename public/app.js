@@ -1052,10 +1052,10 @@ function renderWeekly(review) {
 
   const waiver = review.waiver.recommendation;
   $('#waiver-card').classList.toggle('hold', waiver.action === 'HOLD');
-  $('#waiver-action').textContent = waiver.action === 'HOLD' ? 'HOLD — no worthwhile claim' : `ADD ${waiver.add.name}`;
+  $('#waiver-action').textContent = waiver.action === 'INSUFFICIENT_DATA' ? 'REVIEW INCOMPLETE — missing evidence' : waiver.action === 'HOLD' ? 'HOLD — no worthwhile claim' : `ADD ${waiver.add.name}`;
   $('#waiver-move').textContent = waiver.action === 'ADD_DROP'
     ? `Drop ${waiver.drop.name} (${waiver.drop.position}) for ${waiver.add.name} (${waiver.add.position}).`
-    : 'Keep the current roster and preserve waiver capital this week.';
+    : waiver.action === 'INSUFFICIENT_DATA' ? 'Refresh the missing projections before deciding whether to change the roster.' : 'Keep the current roster and preserve waiver capital this week.';
   $('#waiver-gain').textContent = `${waiver.expectedPointsGained} ${waiver.gainBasis || 'projected points gained'}`;
   $('#waiver-faab').textContent = waiver.faab.recommended == null ? `${waiver.faab.percent}% FAAB guidance` : `$${waiver.faab.recommended} · ${waiver.faab.percent}% FAAB`;
   $('#waiver-confidence').textContent = `${waiver.confidenceLabel} confidence`;
@@ -1082,6 +1082,7 @@ function renderWeekly(review) {
       context?.opponent ? `vs ${context.opponent}` : 'NFL opponent not supplied',
       context?.defense?.rank ? `${player.position} matchup rank ${context.defense.rank} (source convention)` : '',
       ...(context?.effects || []), ...(context?.warnings || []),
+      ...(player.projectionLimitations || []),
       ...(context?.news || []).map(item => `${item.source}, ${item.publishedAt}: ${item.summary}`)
     ].filter(Boolean).join(' · ') : 'No eligible player with a positive projection.';
     return `<article><strong>${escapeHtml(slot)} · ${escapeHtml(player?.name || 'Unfilled')}</strong><span>${escapeHtml(detail)}</span></article>`;
@@ -1092,7 +1093,7 @@ function renderWeekly(review) {
     <td>${team.score}</td><td>${team.pointsFor ?? '—'}</td><td>${team.pointsAgainst ?? '—'}</td><td>${escapeHtml(movementLabel(team.positionMovement))}</td>
   </tr>`).join('');
   $('#weekly-roster').innerHTML = review.roster.map((player) => `<tr><td><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.position)} · ${escapeHtml(player.nflTeam || 'FA')}</small></td><td>${escapeHtml(player.rosterSlot || '—')}</td><td>${player.actualPoints ?? '—'}</td><td>${player.projectedPoints ?? '—'}</td></tr>`).join('');
-  $('#weekly-switches').innerHTML = review.lineup.suggestedSwitches.length
+  $('#weekly-switches').innerHTML = review.matchupComplete === false ? '<article><strong>Week is not complete</strong><span>Use the projected lineup above for upcoming decisions; final lineup hindsight is not available yet.</span></article>' : review.lineup.suggestedSwitches.length
     ? review.lineup.suggestedSwitches.map((item) => `<article><strong>Start ${escapeHtml(item.start.name)}</strong><span>${item.start.actualPoints} pts${item.sit ? ` · sit ${escapeHtml(item.sit.name)} (${item.sit.actualPoints} pts)` : ''}</span></article>`).join('')
     : '<article><strong>Best lineup used</strong><span>No points were left on the bench.</span></article>';
   $('#weekly-risks').innerHTML = review.lineupRisks.length
@@ -1103,6 +1104,7 @@ function renderWeekly(review) {
     : '<article><strong>No transactions imported</strong><span>Adds, drops, trades, and waiver results remain empty for this snapshot.</span></article>';
   const evidence = review.evidence;
   $('#weekly-evidence').innerHTML = [
+    ['Reconciliation', evidence.reconciliation ? `${evidence.reconciliation.rosterProjected}/${evidence.reconciliation.rosterCount} roster projections · ${evidence.reconciliation.availableProjected} available-player projections · ${evidence.reconciliation.scheduleGames} NFL games. ${evidence.reconciliation.method} ${(evidence.reconciliation.warnings || []).join(' ')}` : 'No automatic weekly reconciliation recorded'],
     ['League scoring', 'Applied to raw projected and actual stats when supplied'],
     ['Yahoo authority', evidence.yahooAuthority],
     ['Shared player source', `${evidence.sharedPlayerSource} · ${evidence.sharedFetchedAt ? new Date(evidence.sharedFetchedAt).toLocaleString() : 'bundled/current cache'}`],

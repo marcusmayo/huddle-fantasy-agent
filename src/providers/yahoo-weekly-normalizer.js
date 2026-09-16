@@ -40,7 +40,18 @@ function normalizePosition(value) {
   return normalizeRosterPosition(first).replace('D/ST', 'DEF').replace('DST', 'DEF');
 }
 
-function normalizeYahooPlayer(raw, { available = false } = {}) {
+function periodTotal(raw, resourceName, week) {
+  for (const resource of collectResources(raw, resourceName)) {
+    const coverage = findScalar(resource, 'coverage_type');
+    const observedWeek = findScalar(resource, 'week');
+    if (coverage && coverage !== 'week') continue;
+    if (week != null && observedWeek != null && Number(observedWeek) !== Number(week)) continue;
+    return finite(findScalar(resource, 'total'));
+  }
+  return null;
+}
+
+function normalizeYahooPlayer(raw, { available = false, week } = {}) {
   const playerKey = String(findScalar(raw, 'player_key') || '');
   const name = playerName(raw);
   if (!playerKey || !name) return null;
@@ -55,14 +66,16 @@ function normalizeYahooPlayer(raw, { available = false } = {}) {
     position,
     nflTeam: String(findScalar(raw, 'editorial_team_abbr') || 'FA').toUpperCase(),
     rosterSlot: available ? null : normalizeRosterPosition(selectedPosition || 'BN'),
-    actualPoints: finite(resourceScalar(raw, 'player_points', 'total')),
-    projectedPoints: finite(resourceScalar(raw, 'player_projected_points', 'total')),
+    actualPoints: periodTotal(raw, 'player_points', week),
+    projectedPoints: periodTotal(raw, 'player_projected_points', week),
     remainingProjectedPoints: null,
     injuryStatus: String(status || '').toUpperCase(),
     injuryStatusKnown: typeof status === 'string',
     byeWeek: integer(resourceScalar(raw, 'bye_weeks', 'week')),
     available,
-    availabilityStatus: available ? String(resourceScalar(raw, 'ownership', 'ownership_type') || 'free-agent') : null
+    availabilityStatus: available ? String(resourceScalar(raw, 'ownership', 'ownership_type') || 'unknown') : null,
+    waiverDate: resourceScalar(raw, 'ownership', 'waiver_date') || null,
+    noCut: String(findScalar(raw, 'is_undroppable')) === '1'
   };
 }
 
@@ -78,7 +91,7 @@ function extractPlayers(payload, options) {
   return [...players.values()];
 }
 
-function normalizeTeam(raw) {
+function normalizeTeam(raw, week) {
   const teamKey = String(findScalar(raw, 'team_key', { stopAt: new Set(['players', 'roster']) }) || '');
   if (!teamKey) return null;
   const teamId = String(findScalar(raw, 'team_id', { stopAt: new Set(['players', 'roster']) }) || teamKey.split('.t.').at(-1));
@@ -91,8 +104,8 @@ function normalizeTeam(raw) {
     teamKey,
     teamId,
     name,
-    score: finite(resourceScalar(raw, 'team_points', 'total')),
-    projectedScore: finite(resourceScalar(raw, 'team_projected_points', 'total')),
+    score: periodTotal(raw, 'team_points', week),
+    projectedScore: periodTotal(raw, 'team_projected_points', week),
     standingRank: integer(resourceScalar(raw, 'team_standings', 'rank')),
     wins: integer(resourceScalar(raw, 'outcome_totals', 'wins')),
     losses: integer(resourceScalar(raw, 'outcome_totals', 'losses')),
@@ -120,24 +133,29 @@ function priorRanks(previousReview) {
   ]));
 }
 
-function extractTeams({ scoreboard, standings }, { league, teamKey, previousReview }) {
+function extractTeams({ scoreboard, standings }, { league, teamKey, previousReview, week }) {
   const teams = new Map();
   for (const payload of [scoreboard, standings]) {
     for (const raw of collectResources(payload, 'team')) {
-      const team = normalizeTeam(raw);
+      const team = normalizeTeam(raw, week);
+      // Standings totals describe the season, never this week's matchup.
+      if (team && payload === standings) { delete team.score; delete team.projectedScore; }
       if (team) teams.set(team.teamKey, mergeTeam(teams.get(team.teamKey), team));
     }
   }
 
   const opponentByKey = new Map();
+  const statusByKey = new Map();
   const byeKeys = new Set();
   for (const raw of collectResources(scoreboard, 'matchup')) {
     const matchupTeams = new Map();
     for (const candidate of collectResources(raw, 'team')) {
-      const team = normalizeTeam(candidate);
+      const team = normalizeTeam(candidate, week);
       if (team) matchupTeams.set(team.teamKey, team);
     }
     const keys = [...matchupTeams.keys()];
+    const status = findScalar(raw, 'status', { stopAt: new Set(['teams', 'team']) }) || 'unknown';
+    for (const key of keys) statusByKey.set(key, status);
     if (keys.length === 1) byeKeys.add(keys[0]);
     if (keys.length >= 2) {
       opponentByKey.set(keys[0], keys[1]);
@@ -164,7 +182,8 @@ function extractTeams({ scoreboard, standings }, { league, teamKey, previousRevi
       yahooTeamKey: team.teamKey,
       name: team.name,
       isTarget,
-      score: team.score ?? 0,
+      score: team.score,
+      matchupStatus: statusByKey.get(team.teamKey) || 'unknown',
       projectedScore: team.projectedScore,
       opponentId: resolvedOpponent?.teamId || null,
       bye: byeKeys.has(team.teamKey) || !resolvedOpponent,
@@ -204,7 +223,9 @@ function extractTransactions(payload) {
       playersAdded,
       playersDropped,
       faab: finite(findScalar(raw, 'faab_bid')),
-      successful: !/failed|unsuccessful|vetoed/.test(String(findScalar(raw, 'status') || '').toLowerCase()),
+      status: String(findScalar(raw, 'status') || 'unknown').toLowerCase(),
+      successful: /^(successful|success|completed)$/.test(String(findScalar(raw, 'status') || '').toLowerCase()) ? true
+        : /failed|unsuccessful|vetoed/.test(String(findScalar(raw, 'status') || '').toLowerCase()) ? false : null,
       occurredAt: timestamp ? new Date(timestamp * 1000).toISOString() : null
     });
   }
@@ -216,10 +237,10 @@ function normalizeYahooWeeklyBundle(bundle, context = {}) {
   if (!league || !leagueKey || !teamKey) {
     throw weeklyYahooError('YAHOO_WEEKLY_CONTEXT_MISSING', 'League configuration and Yahoo league/team keys are required');
   }
-  const teams = extractTeams(bundle, { league, teamKey, previousReview });
-  const roster = extractPlayers(bundle.roster, { available: false });
+  const teams = extractTeams(bundle, { league, teamKey, week, previousReview: Number(previousReview?.week) < Number(week) && Number(previousReview?.season) === Number(season) ? previousReview : null });
+  const roster = extractPlayers(bundle.roster, { available: false, week });
   if (!roster.length) throw weeklyYahooError('YAHOO_WEEKLY_ROSTER_EMPTY', 'Yahoo returned no target-team roster players');
-  const availablePlayers = extractPlayers(bundle.availablePlayers, { available: true });
+  const availablePlayers = extractPlayers(bundle.availablePlayers, { available: true, week });
   const target = teams.find((team) => team.isTarget);
   if (!target) throw weeklyYahooError('YAHOO_TARGET_TEAM_MISSING', 'The configured Yahoo target team was not present in the weekly payload');
   const transactions = extractTransactions(bundle.transactions);

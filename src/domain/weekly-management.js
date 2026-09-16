@@ -67,7 +67,7 @@ function normalizePlayer(player, league, poolByIdentity = new Map(), { preferSha
   const remainingProjectedPoints = preferSharedProjections && sharedRemainingProjection != null
     ? round(sharedRemainingProjection)
     : player?.remainingProjectedPoints == null
-    ? player?.remainingProjection == null ? projectedPoints : round(player.remainingProjection)
+    ? player?.remainingProjection == null ? null : round(player.remainingProjection)
     : round(player.remainingProjectedPoints);
   const actualPoints = player?.actualPoints == null
     ? player?.actualStats ? scorePlayerStats(player.actualStats, league) : null
@@ -285,15 +285,16 @@ function teamResults(teams) {
   const byId = new Map(teams.map((team) => [String(team.teamId), team]));
   return teams.map((team) => {
     const opponent = byId.get(String(team.opponentId));
-    const score = finite(team.score);
+    const score = team.score == null ? null : finite(team.score);
     const opponentScore = opponent ? finite(opponent.score) : team.opponentScore == null ? null : finite(team.opponentScore);
-    const result = team.result || (opponentScore == null ? null : score > opponentScore ? 'W' : score < opponentScore ? 'L' : 'T');
+    const completed = team.matchupStatus == null || ['postevent', 'completed', 'final'].includes(team.matchupStatus);
+    const result = completed ? team.result || (score == null || opponentScore == null ? null : score > opponentScore ? 'W' : score < opponentScore ? 'L' : 'T') : null;
     const rank = team.standingRank == null ? null : Number(team.standingRank);
     const previous = team.previousStandingRank == null ? rank : Number(team.previousStandingRank);
     return {
       ...structuredClone(team),
       teamId: String(team.teamId),
-      score: round(score),
+      score: score == null ? null : round(score),
       opponentName: opponent?.name || team.opponentName || null,
       opponentScore: opponentScore == null ? null : round(opponentScore),
       result,
@@ -326,8 +327,15 @@ function confidenceFor(candidate, drop) {
 }
 
 function waiverRecommendation({ roster, availablePlayers, league, waiver = {}, holdThreshold = 2 }) {
-  const droppable = roster.filter((player) => ['BN', 'BENCH'].includes(player.rosterSlot) && !isStarter(player) && !player.noCut && !player.locked && !player.gameStarted);
+  const droppable = roster.filter((player) => (['BN', 'BENCH'].includes(player.rosterSlot) || ['K', 'DEF'].includes(player.position)) && !player.noCut && !player.locked && !player.gameStarted);
   const useWeekly = roster.every(player => player.adjustedWeeklyPoints != null || ['IR', 'IL', 'NA'].includes(player.rosterSlot));
+  const useRemaining = roster.every(player => player.remainingProjectedPoints != null || ['IR', 'IL', 'NA'].includes(player.rosterSlot));
+  if (!useWeekly && !useRemaining) return {
+    action: 'INSUFFICIENT_DATA', expectedPointsGained: null, gainBasis: 'Weekly roster projections incomplete',
+    confidence: 0, confidenceLabel: 'unavailable', faab: { recommended: null, percent: 0 },
+    priorityGuidance: 'Refresh missing weekly evidence before making a waiver decision.', claimPlan: [],
+    reasons: ['Missing projections are not evidence that the roster should be held.'], consideredAlternatives: []
+  };
   const valueField = useWeekly ? 'adjustedWeeklyPoints' : 'remainingProjectedPoints';
   const gainBasis = useWeekly ? 'projected starting-lineup points this week' : 'remaining-season lineup projection; weekly projections incomplete';
   const before = projectedLineup(roster, league, valueField);
@@ -336,6 +344,10 @@ function waiverRecommendation({ roster, availablePlayers, league, waiver = {}, h
     if (candidate[valueField] == null || (useWeekly && candidate.weeklyEligible === false)) continue;
     const options = droppable.flatMap(drop => {
       if (drop[valueField] == null) return [];
+      // Do not recommend a kicker on a point estimate when the unknown
+      // distance bonuses could erase the apparent improvement.
+      if (useWeekly && candidate.position === 'K' && roster.some(player => player.position === 'K'
+        && candidate[valueField] - (player.projectionUpperPoints ?? player[valueField]) < finite(holdThreshold, 2))) return [];
       const after = [...roster.filter(player => player !== drop), { ...candidate, rosterSlot: 'BN' }];
       const maximum = league.rosterMaximums?.[candidate.position];
       if (maximum != null && after.filter(player => player.position === candidate.position).length > maximum) return [];
@@ -357,7 +369,8 @@ function waiverRecommendation({ roster, availablePlayers, league, waiver = {}, h
       confidence: confidenceFor(candidate, drop)
     });
   }
-  evaluated.sort((a, b) => b.rankScore - a.rankScore || b.confidence - a.confidence);
+  const isFreeAgent = player => /^(freeagents?|free-agent|fa)$/i.test(player.availabilityStatus || '');
+  evaluated.sort((a, b) => b.rankScore - a.rankScore || Number(isFreeAgent(b.candidate)) - Number(isFreeAgent(a.candidate)) || b.confidence - a.confidence);
   const best = evaluated[0];
   const threshold = finite(holdThreshold, 2);
   const move = (item, priority) => {
@@ -372,12 +385,13 @@ function waiverRecommendation({ roster, availablePlayers, league, waiver = {}, h
       gainBasis,
       confidence: item.confidence,
       confidenceLabel: item.confidence >= 0.8 ? 'high' : item.confidence >= 0.6 ? 'medium' : 'low',
+      acquisition: isFreeAgent(item.candidate) ? 'FREE_AGENT' : /waiver/i.test(item.candidate.availabilityStatus || '') ? 'WAIVER' : 'VERIFY_AVAILABILITY',
       faab: {
-        recommended: budgetRemaining ? Math.max(1, Math.round(budgetRemaining * percent / 100)) : null,
-        percent,
+        recommended: isFreeAgent(item.candidate) ? 0 : budgetRemaining ? Math.max(1, Math.round(budgetRemaining * percent / 100)) : null,
+        percent: isFreeAgent(item.candidate) ? 0 : percent,
         budgetRemaining
       },
-      priorityGuidance: item.expectedPointsGained >= 5
+      priorityGuidance: isFreeAgent(item.candidate) ? 'Add as a free agent; no waiver claim or priority required.' : item.expectedPointsGained >= 5
         ? 'Use a strong waiver priority if roster need is immediate.'
         : 'Use a claim only if losing normal rolling priority is acceptable.'
     };
@@ -385,13 +399,13 @@ function waiverRecommendation({ roster, availablePlayers, league, waiver = {}, h
   const claimPlan = evaluated.filter((item) => item.expectedPointsGained >= threshold).slice(0, 5).map((item, index) => move(item, index + 1));
   if (!best || best.expectedPointsGained < threshold) {
     return {
-      action: 'HOLD',
+      action: best ? 'HOLD' : 'INSUFFICIENT_DATA',
       gainBasis,
       expectedPointsGained: best?.expectedPointsGained || 0,
-      confidence: best?.confidence || 0.7,
+      confidence: best?.confidence || 0,
       confidenceLabel: best?.confidence >= 0.8 ? 'high' : best?.confidence >= 0.6 ? 'medium' : 'low',
       faab: { recommended: 0, percent: 0, budgetRemaining: finite(waiver.budgetRemaining) },
-      priorityGuidance: 'Preserve waiver priority this week.',
+      priorityGuidance: best ? 'Preserve waiver priority this week.' : 'No evaluable moves; refresh projection and availability coverage.',
       claimPlan: [],
       consideredAlternatives: evaluated.slice(0, 3).map((item, index) => ({
         priority: index + 1,
@@ -492,7 +506,8 @@ function buildWeeklyReview({ snapshot, league, playerPool = { players: [] }, exp
   const teams = teamResults(snapshot.teams);
   const targetTeam = teams.find((team) => team.isTarget || team.name === league.targetTeam);
   const topScore = Math.max(...teams.map((team) => finite(team.score)));
-  const winners = teams.filter((team) => finite(team.score) === topScore).map((team) => ({ teamId: team.teamId, name: team.name, score: team.score }));
+  const completed = teams.every(team => team.matchupStatus == null || ['postevent', 'completed', 'final'].includes(team.matchupStatus));
+  const winners = completed ? teams.filter((team) => team.score != null && finite(team.score) === topScore).map((team) => ({ teamId: team.teamId, name: team.name, score: team.score })) : [];
   const lineup = lineupReview(roster, league);
   if (lineup.optimalPoints + 0.001 < lineup.actualPoints) {
     throw weeklyError('INVALID_WEEKLY_LINEUP', 'Actual lineup points exceed the legal optimal lineup; verify roster slots and player results.');
@@ -513,6 +528,7 @@ function buildWeeklyReview({ snapshot, league, playerPool = { players: [] }, exp
     playersDropped: structuredClone(transaction.playersDropped || []),
     faab: transaction.faab == null ? null : finite(transaction.faab),
     successful: transaction.successful == null ? null : Boolean(transaction.successful),
+    status: transaction.status || null,
     occurredAt: transaction.occurredAt || null
   }));
   return {
@@ -524,6 +540,7 @@ function buildWeeklyReview({ snapshot, league, playerPool = { players: [] }, exp
     week,
     observedAt: snapshot.observedAt || new Date().toISOString(),
     source: snapshot.source || 'normalized-import',
+    matchupComplete: completed,
     weeklyWinners: winners,
     teams,
     targetResult: targetTeam,
@@ -544,6 +561,7 @@ function buildWeeklyReview({ snapshot, league, playerPool = { players: [] }, exp
       recommendation
     },
     evidence: {
+      reconciliation: snapshot.reconciliation || null,
       sharedPlayerSource: playerPool.source || 'not-loaded',
       sharedFetchedAt: playerPool.fetchedAt || null,
       leagueScoringApplied: true,
@@ -556,7 +574,7 @@ function buildWeeklyReview({ snapshot, league, playerPool = { players: [] }, exp
         matchups: [...roster, ...availablePlayers].filter(player => player.weeklyEvidence.opponent).length,
         defenses: [...roster, ...availablePlayers].filter(player => player.weeklyEvidence.defense).length,
         news: [...roster, ...availablePlayers].filter(player => player.weeklyEvidence.news.length).length,
-        liveFeed: 'Yahoo supplies projections, status and byes. NFL matchup/defense/news context requires a sourced weekly-context import; no automatic news feed is connected.'
+        liveFeed: 'Yahoo supplies roster, scores, availability, status and byes. Weekly projections and NFL schedules are reconciled from configured providers; dated news and positional defense evidence are shown only when supplied.'
       },
       sourceCoverage: {
         fantasyPros: availablePlayers.filter((player) => player.sourceCoverage.fantasyPros).length,

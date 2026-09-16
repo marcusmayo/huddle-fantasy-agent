@@ -151,16 +151,16 @@ class YahooReadOnlyClient {
   }
 
   async roster(teamKey, week) {
-    return this.get(`/team/${encodeURIComponent(teamKey)}/roster;week=${Number(week)}`);
+    return this.get(`/team/${encodeURIComponent(teamKey)}/roster;week=${Number(week)}/players/stats;type=week;week=${Number(week)}`);
   }
 
-  async availablePlayers(leagueKey, { start = 0, count = 100, status = 'A', position = null, sort = null, season = null } = {}) {
+  async availablePlayers(leagueKey, { start = 0, count = 100, status = 'A', position = null, sort = null, season = null, ownership = false } = {}) {
     const filters = [`status=${encodeURIComponent(status)}`];
     if (position) filters.push(`position=${encodeURIComponent(position)}`);
     if (sort) filters.push(`sort=${encodeURIComponent(sort)}`);
     if (season) filters.push('sort_type=season', `sort_season=${Number(season)}`);
     filters.push(`start=${Number(start)}`, `count=${Number(count)}`);
-    return this.get(`/league/${encodeURIComponent(leagueKey)}/players;${filters.join(';')}`);
+    return this.get(`/league/${encodeURIComponent(leagueKey)}/players;${filters.join(';')}${ownership ? '/ownership' : ''}`);
   }
 
   async get(endpoint, { maxAttempts = this.maxAttempts, requestTimeoutMs = this.requestTimeoutMs } = {}) {

@@ -52,6 +52,7 @@ class YahooOperationsService {
     weeklyServices,
     pollerFactory,
     weeklyAdapterFactory,
+    weeklyEvidence,
     now = () => new Date(),
     setIntervalImpl = setInterval,
     clearIntervalImpl = clearInterval,
@@ -65,6 +66,7 @@ class YahooOperationsService {
     this.weeklyAdapterFactory = weeklyAdapterFactory || ((client) => new YahooTransientWeeklyAdapter({
       client,
       normalizer: normalizeYahooWeeklyBundle,
+      weeklyEvidence,
       playerPageSize: runtime.yahooWeeklyPlayerPageSize,
       maximumAvailablePlayers: runtime.yahooWeeklyMaximumAvailablePlayers
     }));
@@ -669,7 +671,7 @@ class YahooOperationsService {
             expectedWeek: resolvedWeek,
             eventId: `yahoo-weekly:${entry.id}:${resolvedSeason}:${resolvedWeek}:${crypto.randomUUID()}`,
             source: 'yahoo-normalized-weekly-v1',
-            preferSharedProjections: true
+            preferSharedProjections: !result.normalizedSnapshot.reconciliation
           }
         );
         const summary = service.listWeeks().find((item) => item.season === resolvedSeason && item.week === resolvedWeek);
