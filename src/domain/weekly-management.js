@@ -398,14 +398,16 @@ function waiverRecommendation({ roster, availablePlayers, league, waiver = {}, h
   };
   const claimPlan = evaluated.filter((item) => item.expectedPointsGained >= threshold).slice(0, 5).map((item, index) => move(item, index + 1));
   if (!best || best.expectedPointsGained < threshold) {
+    const incomplete = !best && droppable.length > 0 && availablePlayers.some(player => player.available === true
+      && !player.locked && !player.gameStarted && !unavailable.has(player.injuryStatus) && player[valueField] == null);
     return {
-      action: best ? 'HOLD' : 'INSUFFICIENT_DATA',
+      action: incomplete ? 'INSUFFICIENT_DATA' : 'HOLD',
       gainBasis,
       expectedPointsGained: best?.expectedPointsGained || 0,
-      confidence: best?.confidence || 0,
+      confidence: best?.confidence ?? (incomplete ? 0 : 0.6),
       confidenceLabel: best?.confidence >= 0.8 ? 'high' : best?.confidence >= 0.6 ? 'medium' : 'low',
       faab: { recommended: 0, percent: 0, budgetRemaining: finite(waiver.budgetRemaining) },
-      priorityGuidance: best ? 'Preserve waiver priority this week.' : 'No evaluable moves; refresh projection and availability coverage.',
+      priorityGuidance: incomplete ? 'No evaluable moves; refresh projection and availability coverage.' : 'Preserve waiver priority this week.',
       claimPlan: [],
       consideredAlternatives: evaluated.slice(0, 3).map((item, index) => ({
         priority: index + 1,
@@ -416,7 +418,8 @@ function waiverRecommendation({ roster, availablePlayers, league, waiver = {}, h
       })),
       reasons: [best
         ? `The best reviewed move gains only ${best.expectedPointsGained} projected points, below the ${threshold}-point claim threshold.`
-        : 'No available player has enough league-scored projection evidence and a valid drop candidate.']
+        : incomplete ? 'No available player has enough league-scored projection evidence and a valid drop candidate.'
+          : 'No legal unlocked add/drop improves the lineup; locked roster spots are retained.']
     };
   }
   const primary = move(best, 1);
