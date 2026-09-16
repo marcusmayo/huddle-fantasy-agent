@@ -63,7 +63,8 @@ class WeeklyEvidenceService {
     const cachePath = path.join(this.tank.cacheDir, `weekly-${endpoint}-${season}-${week}.json`);
     let cached;
     try { cached = JSON.parse(fs.readFileSync(cachePath, 'utf8')); } catch {}
-    if (cached && this.now().getTime() - Date.parse(cached.observedAt) < 6 * 3600000) return cached;
+    const cacheAge = this.now().getTime() - Date.parse(cached?.observedAt);
+    if (cached && cacheAge >= -300000 && cacheAge < 6 * 3600000) return cached;
     this.tank.reserveRequest();
     const url = new URL(`${this.tank.baseUrl}/${endpoint}`);
     for (const [key, value] of Object.entries({ season, week, seasonType: 'reg' })) url.searchParams.set(key, value);
@@ -117,6 +118,8 @@ class WeeklyEvidenceService {
       const game = schedules.find(game => [game.home, game.away].includes(normalizeTeam(player.nflTeam)));
       const projections = [];
       for (const source of sources) {
+        const age = this.now().getTime() - Date.parse(source.observedAt);
+        if (!Number.isFinite(age) || age < -300000 || age > 86400000) continue;
         const row = findPlayer(player, source.players);
         if (!row) continue;
         if (player.position === 'K') {
@@ -126,7 +129,14 @@ class WeeklyEvidenceService {
           const pat = xp * Number(league.scoring.kicking.pointAfterAttemptMade || 0);
           projections.push({ source: source.source, points: round(fg * Math.min(...fields) + pat), upperPoints: round(fg * Math.max(...fields) + pat), updatedAt: source.observedAt,
             limitation: 'Field-goal distance splits unavailable; conservative lower bound with scoring range.' });
-        } else if (Object.keys(row.stats).length) projections.push({ source: source.source, points: scorePlayerStats(row.stats, league), updatedAt: source.observedAt });
+        } else if (Object.keys(row.stats).length) {
+          const stats = { ...row.stats };
+          // A projected mean is not a realized score distribution. Round only
+          // the points-allowed bucket and disclose that approximation.
+          if (stats.pointsAllowed != null) stats.pointsAllowed = Math.round(stats.pointsAllowed);
+          projections.push({ source: source.source, points: scorePlayerStats(stats, league), updatedAt: source.observedAt,
+            limitation: player.position === 'DEF' ? 'Points-allowed bonus uses rounded projected points allowed, not a full outcome distribution.' : null });
+        }
       }
       const fp = projections.find(row => row.source === 'fantasyPros'), tank = projections.find(row => row.source === 'tank01');
       const points = fp && tank ? round(fp.points * 0.675 + tank.points * 0.325) : projections[0]?.points ?? player.projectedPoints;

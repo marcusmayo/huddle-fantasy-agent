@@ -82,7 +82,7 @@ function normalizePlayer(player, league, poolByIdentity = new Map(), { preferSha
     actualPoints,
     projectedPoints,
     remainingProjectedPoints,
-    injuryStatus: String(player?.injuryStatus || player?.status || shared?.injuryStatus || '').trim().toUpperCase(),
+    injuryStatus: String(player?.injuryStatus ?? player?.status ?? shared?.injuryStatus ?? '').trim().toUpperCase(),
     byeWeek: player?.byeWeek == null ? shared?.byeWeek ?? null : Number(player.byeWeek),
     sleeperTrend: player?.sleeperTrend || shared?.sleeperTrend || null,
     sourceCoverage: {
@@ -286,7 +286,7 @@ function teamResults(teams) {
   return teams.map((team) => {
     const opponent = byId.get(String(team.opponentId));
     const score = team.score == null ? null : finite(team.score);
-    const opponentScore = opponent ? finite(opponent.score) : team.opponentScore == null ? null : finite(team.opponentScore);
+    const opponentScore = opponent ? opponent.score == null ? null : finite(opponent.score) : team.opponentScore == null ? null : finite(team.opponentScore);
     const completed = team.matchupStatus == null || ['postevent', 'completed', 'final'].includes(team.matchupStatus);
     const result = completed ? team.result || (score == null || opponentScore == null ? null : score > opponentScore ? 'W' : score < opponentScore ? 'L' : 'T') : null;
     const rank = team.standingRank == null ? null : Number(team.standingRank);
