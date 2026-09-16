@@ -142,6 +142,43 @@ test('Yahoo weekly adapter paginates the complete available-player pool up to it
   assert.deepEqual(result.provenance.availablePlayers, { pages: 2, retrieved: 3, pageSize: 2, maximum: 10, complete: true, capped: false });
 });
 
+test('opponent rosters follow the weekly scoreboard, survive saved history, and tolerate an unavailable roster', async () => {
+  const drafts = new DraftService({ league, playerPool: structuredClone(pool), store: new MemoryStateStore() });
+  const weekly = new WeeklyManagementService({ league, playerPool: structuredClone(pool), draftService: drafts });
+  const raw = yahooWeeklyBundle(), requests = [];
+  let fail = false;
+  const client = {
+    scoreboard: async () => raw.scoreboard, standings: async () => raw.standings, transactions: async () => raw.transactions,
+    availablePlayers: async () => ({ players: [] }),
+    roster: async (key, week) => {
+      requests.push([key, week]);
+      if (key === '999.l.1.t.1') return raw.roster;
+      if (fail) throw new Error('private provider response');
+      return { players: [player('999.p.80', `Opponent QB week ${week}`, 'QB', 'QB', 17, 25),
+        player('999.p.81', 'Opponent bench', 'RB', 'BN', 11, 40)] };
+    }
+  };
+  const adapter = new YahooTransientWeeklyAdapter({ client, normalizer: normalizeYahooWeeklyBundle });
+  const preview = week => adapter.preview({ leagueKey: '999.l.1', teamKey: '999.l.1.t.1', season: 2026, week, weeklyService: weekly });
+  const first = await preview(1);
+  assert.ok(requests.some(([key, week]) => key === '999.l.1.t.2' && week === 1));
+  assert.equal(first.review.opponent.name, 'Opponent');
+  assert.equal(first.review.opponent.roster.length, 2);
+  assert.equal(first.review.opponent.starterProjection.points, 25, 'bench projection is excluded');
+  weekly.importSnapshot(first.normalizedSnapshot);
+  const second = await preview(2); weekly.importSnapshot(second.normalizedSnapshot);
+  assert.equal(weekly.getWeek(1, 2026).opponent.roster[0].name, 'Opponent QB week 1');
+  assert.equal(weekly.getWeek(2, 2026).opponent.roster[0].name, 'Opponent QB week 2');
+  const wrong = structuredClone(second.normalizedSnapshot); wrong.opponent.teamId = '1';
+  assert.throws(() => weekly.previewSnapshot(wrong), /opponent roster must belong/);
+  fail = true;
+  const unavailable = await preview(3);
+  assert.equal(unavailable.review.opponent.rosterStatus, 'unavailable');
+  assert.equal(unavailable.review.opponent.starterProjection.points, null);
+  assert.equal(unavailable.review.roster.length, 2);
+  assert.doesNotMatch(JSON.stringify(drafts.state), /RAW_WEEKLY_YAHOO_MUST_NOT_PERSIST|private provider response/);
+});
+
 test('Yahoo operations readiness and one-shot draft sync are fail-loud and idempotent', async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'huddle-ops-'));
   const store = new MemoryStateStore();

@@ -2,6 +2,12 @@
 
 A read-only fantasy football assistant for Yahoo drafts and weekly team decisions across multiple leagues. **Huddle recommends; you make every pick, lineup change and waiver claim.**
 
+## First week of league management
+
+After Blitzkrieg's 57-point Week 1 win, Huddle entered weekly management for NFL Week 2. The [September 16 management record](docs/league-management-week-1-2026.md) compares the assistant's suggestions with the user's implemented Yahoo decisions, distinguishes the pending Stevenson claim from completed moves, and records the reconciliation repairs, automated news, defensive matchup ratings and reading controls.
+
+[Weekly management screenshots](docs/weekly-management-screenshots-2026-09-16.md) · [Reconciliation and data methodology](docs/weekly-reconciliation-2026-09-16.md)
+
 <!-- HUDDLE-LINKEDIN-VIDEOS:START -->
 ## Huddle in 60 seconds
 

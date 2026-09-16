@@ -121,7 +121,7 @@ class WeeklyEvidenceService {
       try { extra = await this.contextFeeds.load({ season: Number(snapshot.season), week: Number(snapshot.week), league }); }
       catch (error) { extra.warnings.push(`Weekly context feeds: ${error.message}`); }
     }
-    const players = [...snapshot.roster, ...snapshot.availablePlayers];
+    const players = [...snapshot.roster, ...snapshot.availablePlayers, ...(snapshot.opponent?.roster || [])];
     const enrich = player => {
       const game = schedules.find(game => [game.home, game.away].includes(normalizeTeam(player.nflTeam)));
       const projections = [];
@@ -166,10 +166,13 @@ class WeeklyEvidenceService {
     };
     snapshot.roster = snapshot.roster.map(enrich);
     snapshot.availablePlayers = snapshot.availablePlayers.map(enrich);
+    if (snapshot.opponent) snapshot.opponent.roster = (snapshot.opponent.roster || []).map(enrich);
     snapshot.reconciliation = { warnings: [...warnings, ...extra.warnings], projectionSources: [...new Set(sources.map(row => row.source))],
       newsArticles: extra.news.length, defensiveRatings: extra.ratings.length, newsObservedAt: extra.observedAt || null,
       statisticsObservedAt: extra.statisticsObservedAt || null,
       rosterProjected: snapshot.roster.filter(row => row.projectedPoints != null).length, rosterCount: snapshot.roster.length,
+      opponentProjected: (snapshot.opponent?.roster || []).filter(row => row.projectedPoints != null).length,
+      opponentRosterCount: snapshot.opponent?.roster?.length || 0,
       availableProjected: snapshot.availablePlayers.filter(row => row.projectedPoints != null).length,
       scheduleGames: schedules.length, method: 'League-scored weekly statistics; FantasyPros 67.5% / Tank01 32.5% when both match; otherwise single source. No preseason extrapolation.' };
     return snapshot;

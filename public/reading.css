@@ -1,0 +1,45 @@
+/* Text grows through rem units; content reflows instead of being scaled/clipped. */
+body { font-size: 1rem; }
+.topbar, .top-actions, .fleet-actions, .section-head { flex-wrap: wrap; gap: 1rem; }
+.topbar > *, .top-actions > *, .weekly-head > *, .weekly-controls > * { min-width: 0; }
+.top-actions { justify-content: flex-end; max-width: 100%; }
+.text-size-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; font-size: .8rem; }
+.text-size-controls > span { flex-basis: 100%; color: var(--muted); }
+.text-size-controls button { padding: .45rem .6rem; margin: 0; }
+.text-size-controls output { min-width: 3.2em; text-align: center; }
+.text-size-controls button:disabled { cursor: default; }
+.league-picker { min-width: min(15rem, 100%); max-width: 100%; }
+.weekly-head { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
+.weekly-controls { grid-template-columns: repeat(auto-fit, minmax(min(9rem, 100%), 1fr)); }
+.weekly-scorecards { grid-template-columns: repeat(auto-fit, minmax(min(13rem, 100%), 1fr)); }
+.weekly-grid { grid-template-columns: repeat(auto-fit, minmax(min(29rem, 100%), 1fr)); }
+.weekly-player-controls { max-width: 100%; grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr)); }
+.weekly-player-evidence { white-space: normal; min-width: 14rem; max-width: 26rem; }
+.weekly-list article, .weekly-list p, .weekly-list summary, .weekly-player-evidence, #weekly-roster td { overflow-wrap: anywhere; }
+.weekly-list p { font-size: .9rem; line-height: 1.5; margin-bottom: .65rem; }
+.matchup-label { margin: .5rem 0; }
+.matchup-details { margin: .4rem 0; font-size: .9rem; line-height: 1.5; }
+.matchup-details summary { cursor: pointer; color: var(--blue); padding: .25rem 0; }
+.matchup-details summary:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+.matchup-details[open] summary { margin-bottom: .5rem; }
+.matchup-details p:last-child { margin-bottom: .25rem; }
+.table-wrap { max-width: 100%; }
+.opponent-panel { margin-bottom: 1rem; }
+.opponent-panel th, .opponent-panel td { white-space: normal; overflow-wrap: anywhere; }
+.opponent-panel td:last-child { min-width: 14rem; max-width: 28rem; }
+.opponent-panel .roster-group th { color: var(--green); padding-top: 1rem; }
+html[data-large-text="true"] .weekly-head { grid-template-columns: 1fr; }
+html[data-large-text="true"] .weekly-player-controls { width: 100%; }
+html[data-large-text="true"] .fleet-actions button { white-space: normal; }
+@media (max-width: 800px) {
+  .weekly-head { grid-template-columns: 1fr; }
+  .top-actions { justify-content: flex-start; width: 100%; }
+}
+@media (max-width: 520px) {
+  .shell { width: calc(100% - 24px); }
+  .panel { padding: 1rem; }
+  .topbar, .top-actions, .section-head { align-items: flex-start; }
+  .league-picker { width: 100%; }
+  .weekly-player-controls { width: 100%; }
+  .mode-switch { display: flex; flex-wrap: wrap; }
+}

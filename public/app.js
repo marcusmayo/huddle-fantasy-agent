@@ -976,7 +976,8 @@ function weeklyContextMarkup(player) {
   const context = player?.weeklyEvidence;
   const defense = context?.defense;
   const description = weeklyMatchupDescription(player);
-  const matchup = description ? `<p><strong>${escapeHtml(description.label)}</strong></p><p>${escapeHtml(description.explanation)}</p><p>${escapeHtml(description.confidence)}</p><details><summary>How this matchup was rated</summary><p>${escapeHtml(description.standing)}</p><p>${escapeHtml(defense.pointsAllowedPerGame == null ? 'No completed games from this season are available yet.' : `This season, opposing ${description.position} have scored ${defense.pointsAllowedPerGame} fantasy points per game against ${description.opponent}, using your league’s scoring. This is the total for all players at that position, not a prediction for one player.`)}</p><p>${escapeHtml(`The estimate combines ${defense.currentGames ?? defense.sampleGames ?? 0} games this season with ${defense.priorGames ?? 0} games last season. It does not add or subtract points from the player’s projection.`)}</p></details>` : '';
+  const games = Number(defense?.currentGames ?? defense?.sampleGames ?? 0);
+  const matchup = description ? `<p class="matchup-label"><strong>${escapeHtml(description.label)}</strong></p><details class="matchup-details"><summary>Matchup explanation</summary><p>${escapeHtml(description.explanation)}</p><p>${escapeHtml(description.confidence)}</p></details><details class="matchup-details"><summary>How this matchup was rated</summary><p>${escapeHtml(description.standing)}</p><p>${escapeHtml(defense.pointsAllowedPerGame == null ? 'No completed games from this season are available yet.' : `This season, opposing ${description.position} have scored ${defense.pointsAllowedPerGame} fantasy points per game against ${description.opponent}, using your league’s scoring. This is the total for all players at that position, not a prediction for one player.`)}</p><p>${escapeHtml(`The estimate combines ${games} ${games === 1 ? 'game' : 'games'} this season with ${defense.priorGames ?? 0} games last season. It does not add or subtract points from the player’s projection.`)}</p></details>` : '';
   const news = (context?.news || []).map(item => {
     let url = null;
     try { const parsed = new URL(item.url); if (parsed.protocol === 'https:' && !parsed.username && !parsed.password) url = parsed.href; } catch {}
@@ -984,7 +985,7 @@ function weeklyContextMarkup(player) {
     const date = item.publishedAt ? `Published ${new Date(item.publishedAt).toLocaleString()}` : `Publication date unavailable; retrieved ${new Date(item.observedAt).toLocaleString()}`;
     return `<p>${url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${label}</a>` : label}<br><small>${escapeHtml(date)}</small></p>`;
   }).join('');
-  return `${matchup}${news ? `<details><summary>Player news</summary>${news}</details>` : ''}`;
+  return `${matchup}${news ? `<details class="matchup-details"><summary>Player news</summary>${news}</details>` : ''}`;
 }
 
 function renderWeeklyPlayerBoard(review = state.weeklyReview) {
@@ -1055,6 +1056,22 @@ function renderWeeklyPlayerBoard(review = state.weeklyReview) {
   }).join('') : '<tr><td colspan="7" class="empty-board">No available players match this search and position.</td></tr>';
 }
 
+function renderWeeklyOpponent(review) {
+  const opponent = review.opponent;
+  const heading = $('#weekly-opponent-heading'), summary = $('#weekly-opponent-summary'), body = $('#weekly-opponent-roster');
+  heading.textContent = opponent?.name ? `Week ${review.week} opponent: ${opponent.name}` : `Week ${review.week} opponent`;
+  if (!opponent?.roster?.length) {
+    summary.textContent = opponent?.rosterStatus === 'bye' ? 'Your team has a bye this week.'
+      : opponent?.rosterStatus === 'unavailable' ? 'Yahoo’s opponent roster could not be loaded. Update this week from Yahoo to retry.'
+        : 'This older saved review does not include the opponent’s roster. Update this week from Yahoo to add it.';
+    body.innerHTML = ''; return;
+  }
+  const mine = opponent.yourStarterProjection, theirs = opponent.starterProjection;
+  summary.textContent = `Current starting lineups: your team ${mine?.points ?? 'projection incomplete'}${mine?.points == null ? '' : ' projected points'}; ${opponent.name} ${theirs?.points ?? 'projection incomplete'}${theirs?.points == null ? '' : ' projected points'}. These are forecasts, not final scores. Roster captured ${new Date(opponent.observedAt || review.observedAt).toLocaleString()}. Saved weeks retain that week’s opponent and roster.`;
+  const reserve = player => ['BN', 'BENCH', 'IR', 'IR+', 'IL', 'NA'].includes(player.rosterSlot);
+  body.innerHTML = [['Starting lineup', opponent.roster.filter(p => !reserve(p))], ['Bench and reserve', opponent.roster.filter(reserve)]].map(([label, players]) => players.length ? `<tr class="roster-group"><th colspan="5" scope="rowgroup">${escapeHtml(label)}</th></tr>${players.map(player => `<tr><td><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.position)} · ${escapeHtml(player.nflTeam || '')}${player.injuryStatus && player.injuryStatus !== 'HEALTHY' ? ` · ${escapeHtml(player.injuryStatus)}` : ''}</small></td><td>${escapeHtml(player.rosterSlot)}</td><td>${player.actualPoints ?? '—'}</td><td>${player.adjustedWeeklyPoints ?? '—'}</td><td>${player.weeklyEvidence?.opponent ? `vs ${escapeHtml(player.weeklyEvidence.opponent)}` : 'NFL opponent unavailable'}${weeklyContextMarkup(player)}</td></tr>`).join('')}` : '').join('');
+}
+
 function renderWeekly(review) {
   state.weeklyReview = review;
   const savedSummary = review && state.weeklyWeeks.find((item) => weeklyKey(item) === weeklyKey(review));
@@ -1109,6 +1126,7 @@ function renderWeekly(review) {
       ? `<article><strong>Closest reviewed move</strong><span>${escapeHtml(considered[0].add.name)} for ${escapeHtml(considered[0].drop.name)} (+${considered[0].expectedPointsGained}; below threshold)</span></article>`
       : '';
   renderWeeklyPlayerBoard(review);
+  renderWeeklyOpponent(review);
 
   const upcoming = review.projectedLineup;
   $('#weekly-projected-summary').textContent = upcoming
@@ -1982,7 +2000,27 @@ async function resetSession() {
   await Promise.all([refreshFleetSummary(), loadDraftSessions()]);
 }
 
+function initializeTextSize() {
+  const key = 'huddle-page-text-size';
+  let size = 100;
+  try { const saved = Number(localStorage.getItem(key)); if (saved >= 80 && saved <= 200) size = saved; } catch {}
+  const apply = value => {
+    size = Math.max(80, Math.min(200, Math.round(value / 10) * 10));
+    document.documentElement.style.fontSize = `${size}%`;
+    document.documentElement.dataset.largeText = String(size >= 140);
+    $('#text-size-value').textContent = `${size}%`;
+    $('#text-smaller').disabled = size <= 80;
+    $('#text-larger').disabled = size >= 200;
+    try { localStorage.setItem(key, String(size)); } catch {}
+  };
+  $('#text-smaller').addEventListener('click', () => apply(size - 10));
+  $('#text-larger').addEventListener('click', () => apply(size + 10));
+  $('#text-reset').addEventListener('click', () => apply(100));
+  apply(size);
+}
+
 async function init() {
+  initializeTextSize();
   $('#draft-mode').addEventListener('click', () => showMode('draft'));
   $('#weekly-mode').addEventListener('click', () => showMode('weekly'));
   $('#weekly-template').addEventListener('click', () => { $('#weekly-json').value = JSON.stringify(weeklyTemplate(), null, 2); });

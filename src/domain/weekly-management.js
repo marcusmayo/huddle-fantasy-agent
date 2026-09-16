@@ -467,6 +467,14 @@ function validateWeeklySnapshot(snapshot, league, expectedWeek) {
   }
   const targetMatches = (snapshot?.teams || []).filter((team) => team.isTarget || team.name === league.targetTeam);
   if (targetMatches.length !== 1) details.push(`exactly one team must match target team ${league.targetTeam} or set isTarget=true`);
+  if (snapshot.opponent?.teamId && String(snapshot.opponent.teamId) !== String(targetMatches[0]?.opponentId)) {
+    details.push('opponent roster must belong to the target team’s opponent for this week');
+  }
+  for (const player of snapshot.opponent?.roster || []) {
+    if (!String(player?.name || '').trim() || !position(player?.position) || !canonicalSlot(player?.rosterSlot || player?.slot)) {
+      details.push('every opponent player requires name, position and roster slot'); break;
+    }
+  }
   const usedSlots = new Map();
   const configuredSlots = new Map();
   for (const [slot, count] of Object.entries(league.roster || {})) configuredSlots.set(canonicalSlot(slot), (configuredSlots.get(canonicalSlot(slot)) || 0) + Number(count));
@@ -508,6 +516,14 @@ function buildWeeklyReview({ snapshot, league, playerPool = { players: [] }, exp
   const availablePlayers = snapshot.availablePlayers.map(normalize);
   const teams = teamResults(snapshot.teams);
   const targetTeam = teams.find((team) => team.isTarget || team.name === league.targetTeam);
+  const opposingTeam = teams.find(team => String(team.teamId) === String(targetTeam.opponentId));
+  const opposingRoster = (snapshot.opponent?.roster || []).map(normalize);
+  const starterProjection = players => {
+    const starters = players.filter(player => !BENCH_SLOTS.has(player.rosterSlot));
+    const complete = starters.length > 0 && starters.every(player => player.adjustedWeeklyPoints != null);
+    return { points: complete ? round(starters.reduce((sum, player) => sum + player.adjustedWeeklyPoints, 0)) : null,
+      starterCount: starters.length, projectedCount: starters.filter(player => player.adjustedWeeklyPoints != null).length };
+  };
   const topScore = Math.max(...teams.map((team) => finite(team.score)));
   const completed = teams.every(team => team.matchupStatus == null || ['postevent', 'completed', 'final'].includes(team.matchupStatus));
   const winners = completed ? teams.filter((team) => team.score != null && finite(team.score) === topScore).map((team) => ({ teamId: team.teamId, name: team.name, score: team.score })) : [];
@@ -547,6 +563,13 @@ function buildWeeklyReview({ snapshot, league, playerPool = { players: [] }, exp
     weeklyWinners: winners,
     teams,
     targetResult: targetTeam,
+    opponent: {
+      teamId: opposingTeam?.teamId || null, name: opposingTeam?.name || null,
+      rosterStatus: targetTeam.bye ? 'bye' : snapshot.opponent?.rosterStatus || 'not-imported',
+      observedAt: snapshot.opponent?.observedAt || null, roster: opposingRoster,
+      score: opposingTeam?.score ?? null, starterProjection: starterProjection(opposingRoster),
+      yourStarterProjection: starterProjection(roster)
+    },
     standings: [...teams].sort((a, b) => (a.standingRank ?? 999) - (b.standingRank ?? 999)),
     lineup,
     projectedLineup: {

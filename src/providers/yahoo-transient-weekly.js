@@ -76,6 +76,20 @@ class YahooTransientWeeklyAdapter {
         previousReview: weeklyService.latest()
       }
     );
+    const target = snapshot.teams.find(team => team.isTarget);
+    const opponent = snapshot.teams.find(team => String(team.teamId) === String(target?.opponentId));
+    snapshot.opponent = { teamId: opponent?.teamId || null, name: opponent?.name || null, roster: [],
+      rosterStatus: target?.bye ? 'bye' : 'unavailable', observedAt: new Date().toISOString() };
+    if (opponent?.yahooTeamKey && !target?.bye) {
+      try {
+        const opponentPayload = await this.client.roster(opponent.yahooTeamKey, week);
+        snapshot.opponent.roster = extractPlayers(opponentPayload, { available: false, week });
+        snapshot.opponent.rosterStatus = snapshot.opponent.roster.length ? 'available' : 'unavailable';
+      } catch {
+        // A missing opponent roster must not prevent the owner's review or leak provider payloads.
+        snapshot.opponent.rosterStatus = 'unavailable';
+      }
+    }
     if (snapshot.availablePlayers.length > this.maximumAvailablePlayers) {
       snapshot.availablePlayers = snapshot.availablePlayers.slice(0, this.maximumAvailablePlayers);
       snapshot.normalization.availablePlayers = snapshot.availablePlayers.length;

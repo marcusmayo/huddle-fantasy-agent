@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Huddle Fantasy Manager</title>
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/reading.css">
 </head>
 <body>
   <header class="shell topbar">
@@ -13,6 +14,13 @@
       <h1 id="app-title">Make the next pick count.</h1>
     </div>
     <div class="top-actions">
+      <div class="text-size-controls" role="group" aria-label="Page text size">
+        <span>Text size</span>
+        <button id="text-smaller" type="button" class="ghost" aria-label="Decrease text size">A−</button>
+        <output id="text-size-value" aria-live="polite">100%</output>
+        <button id="text-larger" type="button" class="ghost" aria-label="Increase text size">A+</button>
+        <button id="text-reset" type="button" class="ghost" aria-label="Reset text size">Reset</button>
+      </div>
       <label id="league-picker" class="league-picker">League
         <select id="league-select" aria-label="Active league"></select>
       </label>
@@ -328,6 +336,18 @@
           <ul id="waiver-reasons"></ul>
           <p id="waiver-priority" class="explanation"></p>
           <div id="waiver-plan" class="weekly-list"></div>
+        </section>
+
+        <section class="panel opponent-panel" aria-labelledby="weekly-opponent-heading">
+          <p class="eyebrow">FANTASY MATCHUP</p>
+          <h2 id="weekly-opponent-heading">Your opponent this week</h2>
+          <p id="weekly-opponent-summary" aria-live="polite"></p>
+          <div class="table-wrap" tabindex="0" aria-label="Opponent roster, scroll horizontally if needed">
+            <table>
+              <thead><tr><th>Player</th><th>Lineup slot</th><th>Actual points</th><th>Projected points</th><th>NFL matchup and news</th></tr></thead>
+              <tbody id="weekly-opponent-roster"></tbody>
+            </table>
+          </div>
         </section>
 
         <section id="weekly-player-board" class="panel weekly-player-board">
