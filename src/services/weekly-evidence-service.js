@@ -122,6 +122,7 @@ class WeeklyEvidenceService {
       catch (error) { extra.warnings.push(`Weekly context feeds: ${error.message}`); }
     }
     const players = [...snapshot.roster, ...snapshot.availablePlayers, ...(snapshot.opponent?.roster || [])];
+    const completedMatchup = ['postevent', 'completed', 'final'].includes(snapshot.teams?.find(team => team.isTarget)?.matchupStatus);
     const enrich = player => {
       const game = schedules.find(game => [game.home, game.away].includes(normalizeTeam(player.nflTeam)));
       const projections = [];
@@ -160,7 +161,7 @@ class WeeklyEvidenceService {
         sourceCoverage: { fantasyPros: Boolean(fp), tank01: Boolean(tank), sleeper: Boolean(trend) },
         weeklyContext: { ...player.weeklyContext, season: snapshot.season, week: snapshot.week, source: 'weekly-provider-reconciliation', observedAt: this.now().toISOString(), opponent,
           defense: extra.ratings.find(r => r.opponent === opponent && r.position === player.position) || null,
-          news: newsForPlayer(player, extra.news, players),
+          news: completedMatchup ? [] : newsForPlayer(player, extra.news, players),
           projection: points == null ? null : { points, updatedAt, source: projections.map(row => row.source).join(' + ') || 'Yahoo import', includes: ['matchup'], contextNeutral: false } }
       };
     };

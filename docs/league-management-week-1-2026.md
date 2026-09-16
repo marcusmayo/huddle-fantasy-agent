@@ -54,4 +54,8 @@ The reconciliation and context-feed changes passed 64 relevant local tests. Ten 
 
 Screenshots of the updated board are recorded in [the screenshot gallery](weekly-management-screenshots-2026-09-16.md). They document Huddle's recommendations and interface, not proof that pending Yahoo claims have completed.
 
+Live verification added the actual Week 1 opponent roster to saved Week 1 revision 2 and the Week 2 opponent roster to saved Week 2 revision 4. Week 1 remains 245–188; the refreshed Week 2 current-starter projection comparison was 219.17 versus 207.15. Completed opponent views show actual final scores and hide retrospective projections. Fresh headlines are not attached to completed matchups as though they were historical news.
+
+The reading control was verified at 80% and 200%, including persistence across reload. The loaded weekly page had no page-level horizontal overflow at 200% on a narrow screen; data tables retain their own horizontal scrolling. Player explanation expansion/collapse was verified separately from rating details and news.
+
 Implementation details and data methodology: [weekly reconciliation repair](weekly-reconciliation-2026-09-16.md).
