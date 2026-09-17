@@ -1089,7 +1089,7 @@ function renderWeeklyLineup(review) {
     if (!player) return `<article><strong>${escapeHtml(slot)} · Unfilled</strong><span>No eligible player with a positive projection.</span></article>`;
     const yahooSlot = player.rosterSlot || '—';
     const label = completed ? `${slot} · ${player.name}`
-      : isBench ? `${reserve(player) ? 'Reserve' : 'Huddle bench'} · ${player.name}`
+      : isBench ? `${['IR', 'IR+', 'IL', 'NA'].includes(yahooSlot) ? 'Reserve' : 'Huddle bench'} · ${player.name}`
         : `${hasPlan ? 'Huddle ' : 'Yahoo '}${slot} · ${player.name}`;
     const forecast = weeklyProjection(player, 'adjustedWeeklyPoints') ?? weeklyProjection(player, 'projectedPoints');
     const context = player.weeklyEvidence;
