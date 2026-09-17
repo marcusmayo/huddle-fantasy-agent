@@ -2,6 +2,14 @@
 
 Actual captures of the running Huddle dashboard during the first management cycle after NFL Week 1. See [the management record](league-management-week-1-2026.md) for recommendations versus implemented moves. The screen shows recommendations, not automatic Yahoo transactions; the Stevenson claim is pending.
 
+## Current unified lineup
+
+The latest board lists each roster player once, with Huddle's suggested slot, Yahoo's slot when different, points, and expandable matchup evidence. The bench opens below the starters. Earlier captures in this gallery document the board before this consolidation.
+
+![One lineup with starters, projected and actual points, and matchup disclosures](assets/weekly-management-2026-09-16/07-unified-lineup.png)
+
+![Expanded bench below the same lineup, including Yahoo slot differences](assets/weekly-management-2026-09-16/08-lineup-bench.png)
+
 ## Weekly overview and reading controls
 
 ![Huddle weekly management overview with text-size controls](assets/weekly-management-2026-09-16/01-overview.png)
