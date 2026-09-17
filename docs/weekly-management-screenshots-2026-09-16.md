@@ -8,6 +8,8 @@ Actual captures of the running Huddle dashboard during the first management cycl
 
 ## This week's opponent
 
+The matchup summary remains visible. Open **View opponent team · starters and bench** only when you want the full reference roster; close it to return to your management board.
+
 ![Opponent starters, projections and expandable matchup information](assets/weekly-management-2026-09-16/02-opponent.png)
 
 ## Player matchup explanation

@@ -342,12 +342,15 @@
           <p class="eyebrow">FANTASY MATCHUP</p>
           <h2 id="weekly-opponent-heading">Your opponent this week</h2>
           <p id="weekly-opponent-summary" aria-live="polite"></p>
-          <div class="table-wrap" tabindex="0" aria-label="Opponent roster, scroll horizontally if needed">
-            <table>
-              <thead><tr><th>Player</th><th>Lineup slot</th><th>Actual points</th><th>Projected points</th><th>NFL matchup and news</th></tr></thead>
-              <tbody id="weekly-opponent-roster"></tbody>
-            </table>
-          </div>
+          <details class="opponent-roster-details">
+            <summary>View opponent team · starters and bench</summary>
+            <div class="table-wrap" tabindex="0" aria-label="Opponent roster, scroll horizontally if needed">
+              <table>
+                <thead><tr><th>Player</th><th>Lineup slot</th><th>Actual points</th><th>Projected points</th><th>NFL matchup and news</th></tr></thead>
+                <tbody id="weekly-opponent-roster"></tbody>
+              </table>
+            </div>
+          </details>
         </section>
 
         <section id="weekly-player-board" class="panel weekly-player-board">
