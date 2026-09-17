@@ -15,7 +15,7 @@ body { font-size: 1rem; }
 .weekly-grid { grid-template-columns: repeat(auto-fit, minmax(min(29rem, 100%), 1fr)); }
 .weekly-player-controls { max-width: 100%; grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr)); }
 .weekly-player-evidence { white-space: normal; min-width: 14rem; max-width: 26rem; }
-.weekly-list article, .weekly-list p, .weekly-list summary, .weekly-player-evidence, #weekly-roster td { overflow-wrap: anywhere; }
+.weekly-list article, .weekly-list p, .weekly-list summary, .weekly-player-evidence { overflow-wrap: anywhere; }
 .weekly-list p { font-size: .9rem; line-height: 1.5; margin-bottom: .65rem; }
 .matchup-label { margin: .5rem 0; }
 .matchup-details { margin: .4rem 0; font-size: .9rem; line-height: 1.5; }
@@ -24,6 +24,11 @@ body { font-size: 1rem; }
 .matchup-details[open] summary { margin-bottom: .5rem; }
 .matchup-details p:last-child { margin-bottom: .25rem; }
 .table-wrap { max-width: 100%; }
+.weekly-lineup-panel { margin-bottom: 1rem; }
+.weekly-bench-details { margin-top: .9rem; }
+.weekly-bench-details summary { cursor: pointer; color: var(--blue); padding: .4rem 0; }
+.weekly-bench-details summary:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+.weekly-bench-details[open] .weekly-list { margin-top: .6rem; }
 .opponent-panel { margin-bottom: 1rem; }
 .opponent-roster-details { margin-top: .75rem; }
 .opponent-roster-details summary { cursor: pointer; color: var(--blue); padding: .35rem 0; }

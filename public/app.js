@@ -1075,6 +1075,49 @@ function renderWeeklyOpponent(review) {
   body.innerHTML = [['Starting lineup', opponent.roster.filter(p => !reserve(p))], ['Bench and reserve', opponent.roster.filter(reserve)]].map(([label, players]) => players.length ? `<tr class="roster-group"><th colspan="5" scope="rowgroup">${escapeHtml(label)}</th></tr>${players.map(player => `<tr><td><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.position)} · ${escapeHtml(player.nflTeam || '')}${player.injuryStatus && player.injuryStatus !== 'HEALTHY' ? ` · ${escapeHtml(player.injuryStatus)}` : ''}</small></td><td>${escapeHtml(player.rosterSlot)}</td><td>${player.actualPoints ?? '—'}</td><td>${review.matchupComplete ? '—' : player.adjustedWeeklyPoints ?? '—'}</td><td>${player.weeklyEvidence?.opponent ? `vs ${escapeHtml(player.weeklyEvidence.opponent)}` : 'NFL opponent unavailable'}${weeklyContextMarkup(player)}</td></tr>`).join('')}` : '').join('');
 }
 
+function renderWeeklyLineup(review) {
+  const completed = review.matchupComplete === true;
+  const roster = review.roster || [];
+  const reserve = player => ['BN', 'BENCH', 'IR', 'IR+', 'IL', 'NA'].includes(player.rosterSlot);
+  const upcoming = review.projectedLineup;
+  const hasPlan = !completed && Boolean(upcoming?.assignments?.length);
+  const assignments = hasPlan ? upcoming.assignments
+    : roster.filter(player => !reserve(player)).map(player => ({ slot: player.rosterSlot, player }));
+  const included = new Set(assignments.filter(item => item.player).map(item => weeklyPlayerIdentity(item.player)));
+  const bench = roster.filter(player => !included.has(weeklyPlayerIdentity(player)));
+  const card = ({ slot, player, locked }, isBench = false) => {
+    if (!player) return `<article><strong>${escapeHtml(slot)} · Unfilled</strong><span>No eligible player with a positive projection.</span></article>`;
+    const yahooSlot = player.rosterSlot || '—';
+    const label = completed ? `${slot} · ${player.name}`
+      : isBench ? `${reserve(player) ? 'Reserve' : 'Huddle bench'} · ${player.name}`
+        : `${hasPlan ? 'Huddle ' : 'Yahoo '}${slot} · ${player.name}`;
+    const forecast = weeklyProjection(player, 'adjustedWeeklyPoints') ?? weeklyProjection(player, 'projectedPoints');
+    const context = player.weeklyEvidence;
+    const detail = [
+      `${player.position} · ${player.nflTeam || 'FA'}`,
+      completed ? `${player.actualPoints ?? '—'} actual points` : `${forecast ?? 'Missing'} projected points · ${player.actualPoints ?? '—'} actual`,
+      !completed && (isBench || yahooSlot !== slot || !hasPlan) ? `Yahoo slot ${yahooSlot}` : '',
+      locked && !completed ? 'Locked' : '',
+      context?.opponent ? `vs ${context.opponent}` : 'NFL opponent not supplied',
+      ...(!completed ? [
+        ...(context?.effects || []).filter(effect => !effect.startsWith('Defensive matchup shown as context')),
+        ...(context?.warnings || []),
+        ...(player.projectionLimitations || [])
+      ] : [])
+    ].filter(Boolean).join(' · ');
+    return `<article><strong>${escapeHtml(label)}</strong><span>${escapeHtml(detail)}</span>${weeklyContextMarkup(player)}</article>`;
+  };
+  $('#weekly-projected-summary').textContent = completed
+    ? `Final lineup: ${review.lineup.actualPoints} actual points. Yahoo slots show the completed week.`
+    : upcoming
+      ? `Huddle lineup: ${upcoming.total} projected points. ${upcoming.completeProjections ? 'Yahoo slots are shown when they differ from Huddle’s suggested lineup.' : 'Some weekly projections are missing; this lineup is incomplete.'} Suggestions are read-only.`
+      : 'Recalculate this saved week to evaluate the upcoming lineup. Yahoo slots are shown below.';
+  $('#weekly-projected-lineup').innerHTML = assignments.map(item => card(item)).join('');
+  $('#weekly-bench-summary').textContent = `Bench and reserve (${bench.length})`;
+  $('#weekly-bench-lineup').innerHTML = bench.map(player => card({ slot: player.rosterSlot, player }, true)).join('');
+  $('#weekly-bench-details').hidden = bench.length === 0;
+}
+
 function renderWeekly(review) {
   state.weeklyReview = review;
   const savedSummary = review && state.weeklyWeeks.find((item) => weeklyKey(item) === weeklyKey(review));
@@ -1131,29 +1174,13 @@ function renderWeekly(review) {
   renderWeeklyPlayerBoard(review);
   renderWeeklyOpponent(review);
 
-  const upcoming = review.projectedLineup;
-  $('#weekly-projected-summary').textContent = upcoming
-    ? `${upcoming.total} projected lineup points. ${upcoming.completeProjections ? upcoming.basis : 'Some weekly projections are missing; this lineup is incomplete.'}`
-    : 'Recalculate this saved week to evaluate the upcoming lineup.';
-  $('#weekly-projected-lineup').innerHTML = (upcoming?.assignments || []).map(({ slot, player, locked }) => {
-    const context = player?.weeklyEvidence;
-    const detail = player ? [
-      `${player.adjustedWeeklyPoints ?? 'Missing'} projected points`,
-      locked ? 'Locked' : '',
-      context?.opponent ? `vs ${context.opponent}` : 'NFL opponent not supplied',
-      ...(context?.effects || []).filter(effect => !effect.startsWith('Defensive matchup shown as context')),
-      ...(context?.warnings || []),
-      ...(player.projectionLimitations || [])
-    ].filter(Boolean).join(' · ') : 'No eligible player with a positive projection.';
-    return `<article><strong>${escapeHtml(slot)} · ${escapeHtml(player?.name || 'Unfilled')}</strong><span>${escapeHtml(detail)}</span>${weeklyContextMarkup(player)}</article>`;
-  }).join('');
+  renderWeeklyLineup(review);
 
   $('#weekly-standings').innerHTML = review.standings.map((team) => `<tr class="${team.teamId === target.teamId ? 'target-team-row' : ''}">
     <td>${team.standingRank ?? '—'}</td><td><strong>${escapeHtml(team.name)}</strong><small>${escapeHtml(team.result || 'pending')}</small></td>
     <td>${team.score}</td><td>${team.pointsFor ?? '—'}</td><td>${team.pointsAgainst ?? '—'}</td><td>${escapeHtml(movementLabel(team.positionMovement))}</td>
   </tr>`).join('');
-  $('#weekly-roster').innerHTML = review.roster.map((player) => `<tr><td><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.position)} · ${escapeHtml(player.nflTeam || 'FA')}</small>${weeklyContextMarkup(player)}</td><td>${escapeHtml(player.rosterSlot || '—')}</td><td>${player.actualPoints ?? '—'}</td><td>${player.projectedPoints ?? '—'}</td></tr>`).join('');
-  $('#weekly-switches').innerHTML = review.matchupComplete === false ? '<article><strong>Week is not complete</strong><span>Use the projected lineup above for upcoming decisions; final lineup hindsight is not available yet.</span></article>' : review.lineup.suggestedSwitches.length
+  $('#weekly-switches').innerHTML = review.matchupComplete === false ? '<article><strong>Week is not complete</strong><span>Use the lineup above for upcoming decisions; final lineup hindsight is not available yet.</span></article>' : review.lineup.suggestedSwitches.length
     ? review.lineup.suggestedSwitches.map((item) => `<article><strong>Start ${escapeHtml(item.start.name)}</strong><span>${item.start.actualPoints} pts${item.sit ? ` · sit ${escapeHtml(item.sit.name)} (${item.sit.actualPoints} pts)` : ''}</span></article>`).join('')
     : '<article><strong>Best lineup used</strong><span>No points were left on the bench.</span></article>';
   $('#weekly-risks').innerHTML = review.lineupRisks.length
